@@ -11,3 +11,4 @@
 - Chose a provisional v1 GPU direction: CPU reference backend plus a narrow Linux/NVIDIA CUDA backend, using FFmpeg hardware frames with NVDEC/NVENC and benchmarking primarily on cloud L4 hardware.
 - Adopted Chroma as the working project name and initialized a local Git repository on `main`.
 - Started Phase 2 and wrote the first architecture draft covering the frontend, immutable IR, compiler, execution plan, scheduler, CPU/CUDA backends, media boundary, color semantics, caching, public APIs, repository layout, and technical spike.
+- Began the implementation spike with a CMake/C++20 project, exact rational and frame timeline primitives, a dependency-free unit-test harness, and a minimal CLI target.

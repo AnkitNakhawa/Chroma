@@ -18,7 +18,7 @@ Design and validate an open-source, deterministic, agent-first video composition
 | 3 | Specify the composition DSL, timing model, and compatibility contract | pending |
 | 4 | Design the rendering, media, audio, preview, and caching pipelines | pending |
 | 5 | Define MVP milestones, benchmark corpus, tests, packaging, and governance | pending |
-| 6 | Build and benchmark a minimal technical spike | pending |
+| 6 | Build and benchmark a minimal technical spike | in_progress |
 
 ## Decision gates
 - Do not choose a renderer architecture until the MVP feature boundary is explicit.
@@ -46,8 +46,18 @@ Design and validate an open-source, deterministic, agent-first video composition
 - Cache identities include normalized inputs, referenced asset identities, engine/schema versions, and backend/kernel identity where output equivalence is not guaranteed.
 - Exact dependency selection, pixel storage formats, and effect-kernel strategy remain spike decisions rather than settled architecture.
 
+## Initial implementation milestones
+1. Build system, exact rational timeline primitives, and unit-test harness.
+2. Experimental versioned composition parser, structured diagnostics, and `validate`/`inspect` CLI commands.
+3. Minimal CPU surface and solid-layer frame renderer with golden tests.
+4. FFmpeg media probing and decode boundary behind an optional build feature.
+5. Execution-plan skeleton, profiling events, and a benchmark fixture.
+6. Linux CUDA spike for a narrow decode/effect/composite/encode chain.
+
 ## Errors Encountered
 | Error | Attempt | Resolution |
 |---|---|---|
 | Initial findings patch context mismatch | 1 | Inspected current headings and reapplied against the actual file structure. |
 | Initial repository scaffold patch used the wrong table separator context | 1 | Split the patch and applied it against the current file contents. |
+| Local CMake configure requested Ninja, but Ninja is not installed | 1 | Removed the incomplete generated build directory and used CMake's default generator. |
+| AppleClang rejected `[[nodiscard]]` before friend comparison declarations | 1 | Removed the non-essential attributes from the friend operators. |
