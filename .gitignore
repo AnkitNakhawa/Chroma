@@ -1,0 +1,30 @@
+# Build output
+/build/
+/out/
+/dist/
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+cmake-build-*/
+compile_commands.json
+
+# Generated media and benchmark artifacts
+/artifacts/
+/renders/
+/benchmarks/results/
+
+# Local caches
+/.chroma-cache/
+.cache/
+
+# Editors and operating systems
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Local configuration
+.env
+.env.*
+!.env.example
