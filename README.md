@@ -51,6 +51,12 @@ Inspect a media file without exposing FFmpeg types through Chroma's public API:
 ./build/chroma probe input.mp4
 ```
 
+Decode a source frame using the media stream's nominal frame rate:
+
+```sh
+./build/chroma decode input.mp4 --frame 120 --output frame-120.ppm
+```
+
 Render the current solid-layer example:
 
 ```sh

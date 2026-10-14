@@ -62,7 +62,7 @@ Milestones 1–4 now have working implementations and automated tests. The curre
 The current implementation session will complete and verify these checkpoints in order:
 
 1. [complete] Optional FFmpeg build integration plus a structured `probe` command.
-2. Exact rational mapping from composition frames to media timestamps and deterministic single-frame CPU decode.
+2. [complete] Exact rational mapping from composition frames to media timestamps and deterministic single-frame CPU decode.
 3. Versioned video assets/layers, typed decode/composite plan operations, and CPU video compositing.
 4. Direct encoded-video output without intermediate PPM files in the normal render path.
 5. Per-stage profiling, a reproducible media fixture, and benchmark commands/results suitable for establishing a CPU baseline.
@@ -79,3 +79,4 @@ CUDA remains explicitly out of scope for this track. The CPU/media baseline must
 | AppleClang rejected `[[nodiscard]]` before friend comparison declarations | 1 | Removed the non-essential attributes from the friend operators. |
 | A single patch attempted to delete and re-add the CLI file | 1 | Kept the existing file and applied a normal update in a separate patch. |
 | FFmpeg integration patch targeted `CMakeLists.txt` twice in one patch | 1 | No files changed; consolidated all CMake edits into one update operation. |
+| Decode test assumed generated `testsrc2` pixels changed at selected samples | 3 | Stopped sampling a non-guaranteed motion pattern; replaced it with deterministic one-second blue and red segments joined by FFmpeg. |

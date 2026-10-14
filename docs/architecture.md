@@ -133,6 +133,8 @@ FFmpeg libraries provide demuxing, decoding, encoding, audio resampling, and mux
 
 The first implemented media boundary discovers libavformat, libavcodec, libavutil, and libswscale through `pkg-config`. It can be disabled at configure time, and all public metadata uses Chroma-owned strings, integers, optionals, and exact rationals. No FFmpeg structs or enum types cross the public header boundary. The `probe` command currently exposes the selected video stream's dimensions, codec, pixel format, time base, frame rate, duration, and reported frame count as JSON.
 
+Single-frame decode accepts an exact rational time. The implementation seeks backward to a keyframe, decodes in presentation order, selects the latest frame presented at or before the request, and reports the actual presentation time. It converts through libswscale to RGBA and then into the CPU backend's linear premultiplied float surface. The current transfer conversion assumes sRGB-like RGB output; metadata-driven video color management remains a required follow-up before claiming broad fidelity.
+
 Audio remains CPU-side in v1 and is scheduled independently from video until muxing.
 
 ### 8. Color and alpha semantics
@@ -166,6 +168,7 @@ chroma validate composition.json
 chroma inspect composition.json
 chroma inspect-plan composition.json --frame 120
 chroma probe input.mp4
+chroma decode input.mp4 --frame 120 --output frame.ppm
 chroma render composition.json --output video.mp4
 chroma frame composition.json --frame 120 --output frame.png
 chroma benchmark composition.json

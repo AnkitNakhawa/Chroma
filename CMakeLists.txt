@@ -49,6 +49,7 @@ add_library(chroma_core
   src/core/rational.cpp
   src/core/render.cpp
   src/core/timeline.cpp
+  src/media/decode.cpp
   src/media/media.cpp
 )
 add_library(chroma::core ALIAS chroma_core)
@@ -97,7 +98,32 @@ if(CHROMA_BUILD_TESTS)
 
   add_executable(chroma_media_tests tests/media_tests.cpp)
   target_link_libraries(chroma_media_tests PRIVATE chroma::core)
-  add_test(NAME chroma_media_tests COMMAND chroma_media_tests)
+  if(CHROMA_HAS_FFMPEG)
+    find_program(CHROMA_FFMPEG_EXECUTABLE ffmpeg)
+  endif()
+  if(CHROMA_HAS_FFMPEG AND CHROMA_FFMPEG_EXECUTABLE)
+    set(CHROMA_MEDIA_FIXTURE ${CMAKE_CURRENT_BINARY_DIR}/fixtures/color-segments.mkv)
+    add_custom_command(
+      OUTPUT ${CHROMA_MEDIA_FIXTURE}
+      COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/fixtures
+      COMMAND ${CHROMA_FFMPEG_EXECUTABLE} -y -hide_banner -loglevel error
+              -f lavfi -i color=c=blue:size=64x36:rate=30:duration=1
+              -f lavfi -i color=c=red:size=64x36:rate=30:duration=1
+              -filter_complex [0:v][1:v]concat=n=2:v=1:a=0
+              -c:v ffv1 ${CHROMA_MEDIA_FIXTURE}
+      VERBATIM
+    )
+    add_custom_target(chroma_media_fixture DEPENDS ${CHROMA_MEDIA_FIXTURE})
+    add_dependencies(chroma_media_tests chroma_media_fixture)
+    add_test(NAME chroma_media_tests COMMAND chroma_media_tests ${CHROMA_MEDIA_FIXTURE})
+    add_test(NAME chroma_cli_probes_media_fixture
+             COMMAND chroma_cli probe ${CHROMA_MEDIA_FIXTURE})
+    set_tests_properties(chroma_cli_probes_media_fixture PROPERTIES
+      PASS_REGULAR_EXPRESSION "ffv1"
+    )
+  else()
+    add_test(NAME chroma_media_tests COMMAND chroma_media_tests)
+  endif()
 
   add_test(
     NAME chroma_cli_validates_example

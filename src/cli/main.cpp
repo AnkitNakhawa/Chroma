@@ -10,6 +10,7 @@
 #include "chroma/core/composition.hpp"
 #include "chroma/core/execution_plan.hpp"
 #include "chroma/core/render.hpp"
+#include "chroma/media/decode.hpp"
 #include "chroma/media/media.hpp"
 
 namespace {
@@ -37,6 +38,7 @@ void print_usage(std::ostream& output) {
          << "  chroma validate <composition.json> [--json]\n"
          << "  chroma inspect <composition.json>\n"
          << "  chroma probe <media-file>\n"
+         << "  chroma decode <media-file> --frame <index> --output <frame.ppm>\n"
          << "  chroma inspect-plan <composition.json> --frame <index>\n"
          << "  chroma frame <composition.json> --frame <index> --output <frame.ppm>\n";
 }
@@ -126,6 +128,37 @@ int main(int argc, char** argv) {
       return 0;
     } catch (const std::exception& error) {
       std::cerr << "probe failed: " << error.what() << '\n';
+      return input_error;
+    }
+  }
+
+  if (argc == 7 && std::string_view(argv[1]) == "decode" &&
+      std::string_view(argv[3]) == "--frame" && std::string_view(argv[5]) == "--output") {
+    const auto frame = parse_frame_index(argv[4]);
+    if (!frame) {
+      std::cerr << "invalid frame index: " << argv[4] << '\n';
+      return usage_error;
+    }
+    try {
+      const auto info = chroma::probe_media(argv[2]);
+      if (!info.frame_rate) {
+        std::cerr << "decode failed: media does not declare a usable frame rate\n";
+        return input_error;
+      }
+      const auto time = chroma::FrameRate(*info.frame_rate).time_at(*frame);
+      const auto decoded = chroma::decode_video_frame(argv[2], time);
+      std::ofstream output(argv[6], std::ios::binary);
+      if (!output) {
+        std::cerr << "unable to open output: " << argv[6] << '\n';
+        return input_error;
+      }
+      chroma::write_ppm(decoded.surface, output);
+      std::cout << "decoded frame " << frame->value() << " at "
+                << decoded.presentation_time.numerator() << '/'
+                << decoded.presentation_time.denominator() << " seconds to " << argv[6] << '\n';
+      return 0;
+    } catch (const std::exception& error) {
+      std::cerr << "decode failed: " << error.what() << '\n';
       return input_error;
     }
   }
