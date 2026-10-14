@@ -139,6 +139,8 @@ Single-frame decode accepts an exact rational time. The implementation seeks bac
 
 Audio remains CPU-side in v1 and is scheduled independently from video until muxing.
 
+The implemented CPU video writer renders surfaces in memory, converts linear premultiplied RGB over black to 8-bit RGB, converts to YUV420P with libswscale, encodes H.264, and muxes directly to the requested container. It assigns explicit frame and stream durations so rational frame rates survive muxing. The initial writer is sequential, requires even dimensions, and has no audio path yet.
+
 ### 8. Color and alpha semantics
 
 v1 targets SDR output. Composition operations use a defined linear-light working space and premultiplied alpha. Input interpretation, conversion, blending, and output transforms must be specified rather than inherited accidentally from individual libraries.

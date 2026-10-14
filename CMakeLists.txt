@@ -50,6 +50,7 @@ add_library(chroma_core
   src/core/render.cpp
   src/core/timeline.cpp
   src/media/decode.cpp
+  src/media/encode.cpp
   src/media/media.cpp
 )
 add_library(chroma::core ALIAS chroma_core)
@@ -132,6 +133,21 @@ if(CHROMA_BUILD_TESTS)
     add_test(NAME chroma_cli_renders_video_frame
              COMMAND chroma_cli frame ${CHROMA_VIDEO_COMPOSITION} --frame 30
                      --output ${CMAKE_CURRENT_BINARY_DIR}/fixtures/rendered-video-frame.ppm)
+    set(CHROMA_RENDERED_VIDEO ${CMAKE_CURRENT_BINARY_DIR}/fixtures/rendered-video.mp4)
+    add_test(NAME chroma_cli_renders_video
+             COMMAND chroma_cli render ${CHROMA_VIDEO_COMPOSITION}
+                     --output ${CHROMA_RENDERED_VIDEO})
+    add_test(NAME chroma_cli_probes_rendered_video
+             COMMAND chroma_cli probe ${CHROMA_RENDERED_VIDEO})
+    set_tests_properties(chroma_cli_probes_rendered_video PROPERTIES
+      DEPENDS chroma_cli_renders_video
+      PASS_REGULAR_EXPRESSION "h264"
+    )
+    add_test(NAME chroma_encoded_media_tests
+             COMMAND chroma_media_tests ${CHROMA_RENDERED_VIDEO})
+    set_tests_properties(chroma_encoded_media_tests PROPERTIES
+      DEPENDS chroma_cli_renders_video
+    )
   else()
     add_test(NAME chroma_render_tests COMMAND chroma_render_tests)
     add_test(NAME chroma_media_tests COMMAND chroma_media_tests)

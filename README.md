@@ -57,6 +57,14 @@ Decode a source frame using the media stream's nominal frame rate:
 ./build/chroma decode input.mp4 --frame 120 --output frame-120.ppm
 ```
 
+Render a complete composition directly to H.264/MP4 without intermediate image files:
+
+```sh
+./build/chroma render composition.json --output result.mp4
+```
+
+The current encoder path is CPU-only, uses 8-bit YUV420P, requires even canvas dimensions, and does not yet include audio.
+
 Render the current solid-layer example:
 
 ```sh

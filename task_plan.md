@@ -64,7 +64,7 @@ The current implementation session will complete and verify these checkpoints in
 1. [complete] Optional FFmpeg build integration plus a structured `probe` command.
 2. [complete] Exact rational mapping from composition frames to media timestamps and deterministic single-frame CPU decode.
 3. [complete] Versioned video assets/layers, typed decode/composite plan operations, and CPU video compositing.
-4. Direct encoded-video output without intermediate PPM files in the normal render path.
+4. [complete] Direct encoded-video output without intermediate PPM files in the normal render path.
 5. Per-stage profiling, a reproducible media fixture, and benchmark commands/results suitable for establishing a CPU baseline.
 6. Documentation, failure-path tests, builds with FFmpeg disabled, and a final focused review.
 
@@ -80,3 +80,4 @@ CUDA remains explicitly out of scope for this track. The CPU/media baseline must
 | A single patch attempted to delete and re-add the CLI file | 1 | Kept the existing file and applied a normal update in a separate patch. |
 | FFmpeg integration patch targeted `CMakeLists.txt` twice in one patch | 1 | No files changed; consolidated all CMake edits into one update operation. |
 | Decode test assumed generated `testsrc2` pixels changed at selected samples | 3 | Stopped sampling a non-guaranteed motion pattern; replaced it with deterministic one-second blue and red segments joined by FFmpeg. |
+| First directly encoded 60-frame MP4 probed at about 1.966 seconds instead of 2 seconds | 1 | Set frame and stream durations explicitly; added a regression test proving 60 frames at 30 fps probe as exactly 2 seconds. |

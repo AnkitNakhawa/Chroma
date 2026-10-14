@@ -59,6 +59,7 @@ void fixture_can_be_probed_and_decoded(const char* path) {
   CHECK(info.width == 64);
   CHECK(info.height == 36);
   CHECK(info.frame_rate == chroma::Rational(30));
+  CHECK(info.duration == chroma::Rational(2));
 
   const auto start = chroma::decode_video_frame(path, chroma::Rational(0));
   const auto middle = chroma::decode_video_frame(path, chroma::Rational(1));

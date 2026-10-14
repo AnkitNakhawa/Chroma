@@ -11,6 +11,7 @@
 #include "chroma/core/execution_plan.hpp"
 #include "chroma/core/render.hpp"
 #include "chroma/media/decode.hpp"
+#include "chroma/media/encode.hpp"
 #include "chroma/media/media.hpp"
 
 namespace {
@@ -39,6 +40,7 @@ void print_usage(std::ostream& output) {
          << "  chroma inspect <composition.json>\n"
          << "  chroma probe <media-file>\n"
          << "  chroma decode <media-file> --frame <index> --output <frame.ppm>\n"
+         << "  chroma render <composition.json> --output <video.mp4>\n"
          << "  chroma inspect-plan <composition.json> --frame <index>\n"
          << "  chroma frame <composition.json> --frame <index> --output <frame.ppm>\n";
 }
@@ -159,6 +161,26 @@ int main(int argc, char** argv) {
       return 0;
     } catch (const std::exception& error) {
       std::cerr << "decode failed: " << error.what() << '\n';
+      return input_error;
+    }
+  }
+
+  if (argc == 5 && std::string_view(argv[1]) == "render" &&
+      std::string_view(argv[3]) == "--output") {
+    chroma::CompositionParseResult result;
+    if (const auto parse_status = parse_file(argv[2], result); parse_status != 0) {
+      return parse_status;
+    }
+    if (!result.valid()) {
+      print_diagnostics(result.diagnostics, false);
+      return invalid_composition;
+    }
+    try {
+      const auto rendered = chroma::render_video_cpu(*result.composition, argv[4]);
+      std::cout << "rendered " << rendered.frames_encoded << " frames to " << argv[4] << '\n';
+      return 0;
+    } catch (const std::exception& error) {
+      std::cerr << "render failed: " << error.what() << '\n';
       return input_error;
     }
   }
