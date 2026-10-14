@@ -16,3 +16,5 @@
 - Added the initial CPU render path with linear premultiplied pixels, document-order source-over compositing, PPM serialization, and focused surface/render tests.
 - Rendered and visually inspected the 1920x1080 solid example; the generated frame matched the declared color and dimensions.
 - Reviewed the implementation and hardened it by enforcing composition invariants for direct C++ callers, bounding CPU surface allocations, documenting layer/color semantics, and adding regression tests.
+- Published the repository at https://github.com/AnkitNakhawa/Chroma and configured the local `main` branch to track `origin/main`.
+- Added an Apache-2.0 license, Linux/macOS GitHub Actions CI, and reproducible local build instructions.

@@ -30,3 +30,21 @@ Chroma is not intended to be a visual editor, preview platform, hosted rendering
 ## Status
 
 Early design. The next deliverable is a minimal technical spike that can render and benchmark a small composition through both the CPU and CUDA execution paths.
+
+## Build and test
+
+```sh
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
+cmake --build build --parallel
+ctest --test-dir build --output-on-failure
+```
+
+Render the current solid-layer example:
+
+```sh
+./build/chroma frame examples/solid.json --frame 0 --output frame.ppm
+```
+
+## License
+
+Apache-2.0.
