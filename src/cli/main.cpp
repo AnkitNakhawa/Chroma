@@ -46,6 +46,7 @@ void print_usage(std::ostream& output) {
          << "  chroma render <composition.json> --output <video.mp4>\n"
          << "  chroma benchmark <composition.json> --iterations <count> --output <report.json>\n"
          << "  chroma inspect-plan <composition.json> --frame <index>\n"
+         << "  chroma inspect-optimized-plan <composition.json> --frame <index>\n"
          << "  chroma frame <composition.json> --frame <index> --output <frame.ppm>\n";
 }
 
@@ -255,7 +256,9 @@ int main(int argc, char** argv) {
     }
   }
 
-  if (argc == 5 && std::string_view(argv[1]) == "inspect-plan" &&
+  if (argc == 5 &&
+      (std::string_view(argv[1]) == "inspect-plan" ||
+       std::string_view(argv[1]) == "inspect-optimized-plan") &&
       std::string_view(argv[3]) == "--frame") {
     chroma::CompositionParseResult result;
     if (const auto status = parse_file(argv[2], result); status != 0) {
@@ -271,8 +274,12 @@ int main(int argc, char** argv) {
       return usage_error;
     }
     try {
-      std::cout << chroma::execution_plan_json(chroma::compile_frame(*result.composition, *frame))
-                << '\n';
+      const auto plan = chroma::compile_frame(*result.composition, *frame);
+      if (std::string_view(argv[1]) == "inspect-optimized-plan") {
+        std::cout << chroma::optimized_execution_plan_json(plan) << '\n';
+      } else {
+        std::cout << chroma::execution_plan_json(plan) << '\n';
+      }
     } catch (const std::exception& error) {
       std::cerr << "plan compilation failed: " << error.what() << '\n';
       return input_error;

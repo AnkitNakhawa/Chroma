@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "chroma/core/composition.hpp"
+#include "chroma/core/effect.hpp"
 
 namespace chroma {
 
@@ -59,5 +60,6 @@ class ExecutionPlan {
 
 [[nodiscard]] ExecutionPlan compile_frame(const Composition& composition, FrameIndex frame);
 [[nodiscard]] std::string execution_plan_json(const ExecutionPlan& plan);
+[[nodiscard]] std::string optimized_execution_plan_json(const ExecutionPlan& plan);
 
 }  // namespace chroma

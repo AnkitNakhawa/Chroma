@@ -75,7 +75,11 @@ Initial passes:
 7. Resource lifetime and memory planning.
 8. Cache-key construction.
 
-Later passes may fuse compatible GPU operations, tile large surfaces, or select alternate algorithms based on device limits.
+The first effect-optimizer slice now represents transform, crop, opacity, color-matrix, blur, temporal-sampling, and external-effect nodes as an immutable typed program. Every effect declares its coordinate, pointwise, neighborhood, temporal, or external domain; spatial and temporal radii; GPU-fusion capability; and determinism. The optimizer removes identity transforms, opacity, color matrices, and zero-radius blur, combines adjacent transforms, opacity, and color matrices, and partitions the remaining program into contiguous fusion groups. Neighborhood, temporal, and external nodes are conservative barriers in this first model.
+
+Fusion planning is not execution yet. `inspect-optimized-plan` labels its output `planning_only` and shows how existing source sampling, opacity, and source-over compositing could form one GPU pass. This separation prevents proposed compiler behavior from changing the CPU reference renderer before effect semantics and conformance tests are complete.
+
+Later passes may propagate regions of interest, fuse compatible GPU operations, tile large surfaces, or select alternate algorithms based on device limits. Fusion remains cost-based rather than mandatory because oversized kernels can increase register pressure and reduce occupancy.
 
 ### 4. Execution plan
 
@@ -175,6 +179,7 @@ Proposed commands:
 chroma validate composition.json
 chroma inspect composition.json
 chroma inspect-plan composition.json --frame 120
+chroma inspect-optimized-plan composition.json --frame 120
 chroma probe input.mp4
 chroma decode input.mp4 --frame 120 --output frame.ppm
 chroma render composition.json --output video.mp4
@@ -182,7 +187,7 @@ chroma frame composition.json --frame 120 --output frame.png
 chroma benchmark composition.json
 ```
 
-`inspect-plan` is implemented in the current spike and prints deterministic JSON for agent and developer inspection. Its structure is internal rather than a version-stable public contract. The render, benchmark, and encoded-video commands remain proposed.
+`inspect-plan` prints the executable typed CPU plan. `inspect-optimized-plan` prints deterministic planning-only JSON containing algebraic rewrite counts and proposed fusion candidates. Both structures are internal rather than version-stable public contracts. Probe, decode, frame, render, and benchmark commands are also implemented for the current narrow feature set.
 
 ### C API
 

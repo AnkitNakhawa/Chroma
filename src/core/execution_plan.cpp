@@ -150,4 +150,63 @@ std::string execution_plan_json(const ExecutionPlan& plan) {
       .dump(2);
 }
 
+std::string optimized_execution_plan_json(const ExecutionPlan& plan) {
+  nlohmann::json passes = nlohmann::json::array();
+  std::size_t pass_index = 0;
+
+  for (const auto& operation : plan.operations()) {
+    if (std::holds_alternative<ClearOperation>(operation)) {
+      passes.push_back({{"pass", pass_index++},
+                        {"kind", "clear"},
+                        {"gpu_fusible", false},
+                        {"barrier", "surface_initialization"},
+                        {"nodes", nlohmann::json::array({"clear"})}});
+      continue;
+    }
+
+    std::string source_id;
+    std::string source_node;
+    std::vector<Effect> effects;
+    if (const auto* solid = std::get_if<CompositeSolidOperation>(&operation)) {
+      source_id = solid->source_id;
+      source_node = "solid_source";
+    } else {
+      const auto& video = std::get<CompositeVideoFrameOperation>(operation);
+      source_id = video.source_id;
+      source_node = "video_sample";
+      effects.emplace_back(OpacityEffect{.opacity = video.opacity});
+    }
+
+    const auto optimized = optimize_effect_program(EffectProgram(std::move(effects)));
+    nlohmann::json nodes = nlohmann::json::array({source_node});
+    for (const auto& effect : optimized.program().effects()) {
+      nodes.push_back(effect_name(effect));
+    }
+    nodes.push_back("source_over");
+
+    nlohmann::json effect_groups = nlohmann::json::array();
+    for (const auto& group : optimized.fusion_groups()) {
+      effect_groups.push_back({{"begin", group.begin},
+                               {"end", group.end},
+                               {"gpu_fusible", group.gpu_fusible}});
+    }
+
+    // Source sampling, simple effects, and source-over are one candidate pass until a
+    // non-fusible effect forces the future GPU compiler to split the chain.
+    passes.push_back({{"pass", pass_index++},
+                      {"kind", "fusion_candidate"},
+                      {"source_id", source_id},
+                      {"gpu_fusible", true},
+                      {"rewrite_count", optimized.rewrite_count()},
+                      {"nodes", std::move(nodes)},
+                      {"effect_groups", std::move(effect_groups)}});
+  }
+
+  return nlohmann::json{{"frame", plan.frame().value()},
+                        {"surface", {{"width", plan.width()}, {"height", plan.height()}}},
+                        {"status", "planning_only"},
+                        {"passes", std::move(passes)}}
+      .dump(2);
+}
+
 }  // namespace chroma

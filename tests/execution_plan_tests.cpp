@@ -153,6 +153,27 @@ void video_layers_compile_to_exact_source_times() {
   }
 }
 
+void optimized_plan_exposes_rewrites_without_changing_execution() {
+  const chroma::Composition composition(
+      1, 64, 36, chroma::FrameRate(chroma::Rational(30)),
+      chroma::FrameRange(chroma::FrameIndex(0), chroma::FrameIndex(10)),
+      {chroma::VideoAsset{.id = "clip", .path = "clip.mkv"}},
+      {chroma::VideoLayer{
+          .id = "video",
+          .range = chroma::FrameRange(chroma::FrameIndex(0), chroma::FrameIndex(10)),
+          .asset_id = "clip",
+          .source_start = chroma::FrameIndex(0),
+          .opacity = 1.0}});
+  const auto plan = chroma::compile_frame(composition, chroma::FrameIndex(0));
+  const auto json = chroma::optimized_execution_plan_json(plan);
+  CHECK(json.find("planning_only") != std::string::npos);
+  CHECK(json.find("fusion_candidate") != std::string::npos);
+  CHECK(json.find("video_sample") != std::string::npos);
+  CHECK(json.find("opacity") == std::string::npos);
+  CHECK(json.find("source_over") != std::string::npos);
+  CHECK(json.find("\"rewrite_count\": 1") != std::string::npos);
+}
+
 }  // namespace
 
 int main() {
@@ -164,6 +185,7 @@ int main() {
   plans_reject_unsafe_dimensions();
   plans_reject_invalid_operations();
   video_layers_compile_to_exact_source_times();
+  optimized_plan_exposes_rewrites_without_changing_execution();
 
   if (failures != 0) {
     std::cerr << failures << " test assertion(s) failed\n";

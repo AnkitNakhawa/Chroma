@@ -49,6 +49,7 @@ endif()
 
 add_library(chroma_core
   src/core/composition.cpp
+  src/core/effect.cpp
   src/core/execution_plan.cpp
   src/core/rational.cpp
   src/core/render.cpp
@@ -117,6 +118,10 @@ if(CHROMA_BUILD_TESTS)
   add_executable(chroma_execution_plan_tests tests/execution_plan_tests.cpp)
   target_link_libraries(chroma_execution_plan_tests PRIVATE chroma::core)
   add_test(NAME chroma_execution_plan_tests COMMAND chroma_execution_plan_tests)
+
+  add_executable(chroma_effect_tests tests/effect_tests.cpp)
+  target_link_libraries(chroma_effect_tests PRIVATE chroma::core)
+  add_test(NAME chroma_effect_tests COMMAND chroma_effect_tests)
 
   add_executable(chroma_media_tests tests/media_tests.cpp)
   target_link_libraries(chroma_media_tests PRIVATE chroma::core)
@@ -203,5 +208,13 @@ if(CHROMA_BUILD_TESTS)
   )
   set_tests_properties(chroma_cli_inspects_example_plan PROPERTIES
     PASS_REGULAR_EXPRESSION "composite_solid"
+  )
+
+  add_test(
+    NAME chroma_cli_inspects_optimized_plan
+    COMMAND chroma_cli inspect-optimized-plan ${CMAKE_CURRENT_SOURCE_DIR}/examples/video.json --frame 0
+  )
+  set_tests_properties(chroma_cli_inspects_optimized_plan PROPERTIES
+    PASS_REGULAR_EXPRESSION "fusion_candidate"
   )
 endif()

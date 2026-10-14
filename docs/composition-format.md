@@ -64,3 +64,4 @@ Video files are declared separately from their uses so future plans can share pr
 - Video layers sample source time using the composition's exact rational frame rate. `source_start_frame` defaults to 0 and `opacity` defaults to 1.
 - The current CPU spike requires decoded video dimensions to exactly match the canvas. Scaling and placement transforms have not landed yet.
 - Asset existence and decodability are checked when media is probed or rendered, not during syntax-only composition validation.
+- The internal effect IR is intentionally not exposed in this experimental JSON schema yet. Composition-level effect fields will be added only as their CPU reference semantics become executable and tested.

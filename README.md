@@ -29,7 +29,7 @@ Chroma is not intended to be a visual editor, preview platform, hosted rendering
 
 ## Status
 
-Pre-CUDA technical spike. Chroma can parse and validate solid/video compositions, resolve assets, probe and decode media at exact rational times, compile typed per-frame plans, render through a persistent CPU execution context, write PPM frames, encode H.264/MP4 directly, and emit per-stage benchmark JSON. Audio, text, transforms, scaling, effects, production color management, caching, parallel scheduling, language bindings, and CUDA execution are not implemented yet.
+Post-baseline compiler spike. Chroma can parse and validate solid/video compositions, resolve assets, probe and decode media at exact rational times, compile typed per-frame plans, render through a persistent CPU execution context, write PPM frames, encode H.264/MP4 directly, and emit per-stage benchmark JSON. The core now includes an immutable effect program, explicit effect traits, conservative algebraic rewrites, and fusion-group planning. These optimized groups are inspection-only until the CPU effect executor and CUDA code generator land. Audio, text, composition-level transforms/effects, production color management, caching, parallel scheduling, language bindings, and CUDA execution are not implemented yet.
 
 ## Build and test
 
@@ -79,11 +79,19 @@ Render the current solid-layer example:
 ./build/chroma frame examples/solid.json --frame 0 --output frame.ppm
 ```
 
-Inspect the optimized plan for a frame:
+Inspect the executable plan for a frame:
 
 ```sh
 ./build/chroma inspect-plan examples/solid.json --frame 0
 ```
+
+Inspect proposed rewrites and GPU fusion candidates separately:
+
+```sh
+./build/chroma inspect-optimized-plan examples/video.json --frame 0
+```
+
+Optimized-plan output currently reports `"status": "planning_only"`; rendering still executes the typed plan shown by `inspect-plan`.
 
 The layered example exercises frame ranges and alpha compositing. Its red overlay is inactive at frame 0, active over the blue background at frame 30, and inactive again at frame 50:
 

@@ -39,3 +39,6 @@
 - Narrowed the first useful output to template-style video with image/video backgrounds, animated text and graphics, simple transitions, audio, and direct encoding.
 - Prioritized the effect IR, optimizer traits, algebraic rewrites, fusion partitioner, and inspection diagnostics before CUDA code generation.
 - Adopted a conservative integration policy: retain FFmpeg at the media boundary, reuse specialized text/color primitives when needed, and defer broad effect/plugin integrations until Chroma's native optimizer is proven.
+- Added the first immutable effect IR with validated transform, crop, opacity, color-matrix, blur, temporal, and external nodes plus explicit optimization traits.
+- Added conservative identity removal, adjacent transform/opacity/color-matrix composition, fusion-barrier partitioning, stable effect JSON, and `inspect-optimized-plan`. The command is explicitly planning-only; the existing typed plan remains authoritative for execution.
+- Added focused effect and plan tests. Both FFmpeg-enabled and core-only builds remain green after the compiler slice.
