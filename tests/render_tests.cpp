@@ -101,6 +101,24 @@ void frames_outside_the_composition_are_rejected() {
                   std::out_of_range);
 }
 
+void compiled_plan_execution_matches_the_render_convenience_api() {
+  const auto composition = composition_with(
+      {chroma::SolidLayer{
+           .id = "blue",
+           .range = chroma::FrameRange(chroma::FrameIndex(0), chroma::FrameIndex(10)),
+           .color = chroma::Color{.red = 0.0, .green = 0.0, .blue = 1.0, .alpha = 1.0}},
+       chroma::SolidLayer{
+           .id = "red",
+           .range = chroma::FrameRange(chroma::FrameIndex(0), chroma::FrameIndex(10)),
+           .color = chroma::Color{.red = 1.0, .green = 0.0, .blue = 0.0, .alpha = 0.5}}});
+  const auto frame = chroma::FrameIndex(3);
+  const auto direct = chroma::render_frame_cpu(composition, frame);
+  const auto compiled = chroma::execute_cpu(chroma::compile_frame(composition, frame));
+  CHECK(direct.width() == compiled.width());
+  CHECK(direct.height() == compiled.height());
+  CHECK(direct.pixels() == compiled.pixels());
+}
+
 void direct_compositions_enforce_invariants() {
   CHECK_THROWS_AS(
       chroma::Composition(
@@ -121,6 +139,7 @@ int main() {
   layers_composite_in_document_order();
   ppm_output_is_stable();
   frames_outside_the_composition_are_rejected();
+  compiled_plan_execution_matches_the_render_convenience_api();
   direct_compositions_enforce_invariants();
 
   if (failures != 0) {

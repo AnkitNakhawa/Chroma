@@ -8,6 +8,7 @@
 #include <string_view>
 
 #include "chroma/core/composition.hpp"
+#include "chroma/core/execution_plan.hpp"
 #include "chroma/core/render.hpp"
 
 namespace {
@@ -34,6 +35,7 @@ void print_usage(std::ostream& output) {
          << "  chroma --version\n"
          << "  chroma validate <composition.json> [--json]\n"
          << "  chroma inspect <composition.json>\n"
+         << "  chroma inspect-plan <composition.json> --frame <index>\n"
          << "  chroma frame <composition.json> --frame <index> --output <frame.ppm>\n";
 }
 
@@ -56,6 +58,19 @@ int parse_file(const char* path, chroma::CompositionParseResult& result) {
   }
   result = chroma::parse_composition(*source);
   return 0;
+}
+
+std::optional<chroma::FrameIndex> parse_frame_index(const char* value) {
+  try {
+    std::size_t consumed = 0;
+    const auto frame = std::stoll(value, &consumed);
+    if (consumed != std::string_view(value).size()) {
+      return std::nullopt;
+    }
+    return chroma::FrameIndex(frame);
+  } catch (const std::exception&) {
+    return std::nullopt;
+  }
 }
 
 }  // namespace
@@ -103,6 +118,31 @@ int main(int argc, char** argv) {
     return 0;
   }
 
+  if (argc == 5 && std::string_view(argv[1]) == "inspect-plan" &&
+      std::string_view(argv[3]) == "--frame") {
+    chroma::CompositionParseResult result;
+    if (const auto status = parse_file(argv[2], result); status != 0) {
+      return status;
+    }
+    if (!result.valid()) {
+      print_diagnostics(result.diagnostics, false);
+      return invalid_composition;
+    }
+    const auto frame = parse_frame_index(argv[4]);
+    if (!frame) {
+      std::cerr << "invalid frame index: " << argv[4] << '\n';
+      return usage_error;
+    }
+    try {
+      std::cout << chroma::execution_plan_json(chroma::compile_frame(*result.composition, *frame))
+                << '\n';
+    } catch (const std::exception& error) {
+      std::cerr << "plan compilation failed: " << error.what() << '\n';
+      return input_error;
+    }
+    return 0;
+  }
+
   if (argc == 7 && std::string_view(argv[1]) == "frame" &&
       std::string_view(argv[3]) == "--frame" && std::string_view(argv[5]) == "--output") {
     chroma::CompositionParseResult result;
@@ -114,21 +154,14 @@ int main(int argc, char** argv) {
       return invalid_composition;
     }
 
-    std::int64_t frame_number = 0;
-    try {
-      std::size_t consumed = 0;
-      frame_number = std::stoll(argv[4], &consumed);
-      if (consumed != std::string_view(argv[4]).size()) {
-        throw std::invalid_argument("trailing characters");
-      }
-    } catch (const std::exception&) {
+    const auto frame = parse_frame_index(argv[4]);
+    if (!frame) {
       std::cerr << "invalid frame index: " << argv[4] << '\n';
       return usage_error;
     }
 
     try {
-      const auto surface =
-          chroma::render_frame_cpu(*result.composition, chroma::FrameIndex(frame_number));
+      const auto surface = chroma::render_frame_cpu(*result.composition, *frame);
       std::ofstream output(argv[6], std::ios::binary);
       if (!output) {
         std::cerr << "unable to open output: " << argv[6] << '\n';
@@ -139,7 +172,7 @@ int main(int argc, char** argv) {
       std::cerr << "render failed: " << error.what() << '\n';
       return input_error;
     }
-    std::cout << "rendered frame " << frame_number << " to " << argv[6] << '\n';
+    std::cout << "rendered frame " << frame->value() << " to " << argv[6] << '\n';
     return 0;
   }
 

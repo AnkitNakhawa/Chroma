@@ -5,6 +5,7 @@
 #include <limits>
 #include <ostream>
 #include <stdexcept>
+#include <variant>
 
 namespace chroma {
 namespace {
@@ -37,6 +38,14 @@ unsigned char to_byte(float value) noexcept {
   return static_cast<unsigned char>(std::lround(linear_to_srgb(value) * 255.0F));
 }
 
+Pixel premultiply(const Color& color) noexcept {
+  const auto alpha = static_cast<float>(color.alpha);
+  return Pixel{.red = static_cast<float>(color.red) * alpha,
+               .green = static_cast<float>(color.green) * alpha,
+               .blue = static_cast<float>(color.blue) * alpha,
+               .alpha = alpha};
+}
+
 }  // namespace
 
 Surface::Surface(std::int32_t width, std::int32_t height, Pixel fill)
@@ -66,24 +75,21 @@ Pixel composite_over(Pixel source, Pixel destination) noexcept {
                .alpha = source.alpha + destination.alpha * inverse_source_alpha};
 }
 
-Surface render_frame_cpu(const Composition& composition, FrameIndex frame) {
-  if (!composition.range().contains(frame)) {
-    throw std::out_of_range("requested frame is outside the composition");
-  }
-
+Surface execute_cpu(const ExecutionPlan& plan) {
   Pixel result{};
-  for (const auto& layer : composition.layers()) {
-    if (!layer.range.contains(frame)) {
+  for (const auto& operation : plan.operations()) {
+    if (const auto* clear = std::get_if<ClearOperation>(&operation)) {
+      result = premultiply(clear->color);
       continue;
     }
-    const auto alpha = static_cast<float>(layer.color.alpha);
-    const Pixel source{.red = static_cast<float>(layer.color.red) * alpha,
-                       .green = static_cast<float>(layer.color.green) * alpha,
-                       .blue = static_cast<float>(layer.color.blue) * alpha,
-                       .alpha = alpha};
-    result = composite_over(source, result);
+    const auto& solid = std::get<CompositeSolidOperation>(operation);
+    result = composite_over(premultiply(solid.color), result);
   }
-  return Surface(composition.width(), composition.height(), result);
+  return Surface(plan.width(), plan.height(), result);
+}
+
+Surface render_frame_cpu(const Composition& composition, FrameIndex frame) {
+  return execute_cpu(compile_frame(composition, frame));
 }
 
 void write_ppm(const Surface& surface, std::ostream& output) {

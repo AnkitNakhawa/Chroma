@@ -5,7 +5,7 @@
 #include <iosfwd>
 #include <vector>
 
-#include "chroma/core/composition.hpp"
+#include "chroma/core/execution_plan.hpp"
 
 namespace chroma {
 
@@ -38,6 +38,7 @@ class Surface {
 };
 
 [[nodiscard]] Pixel composite_over(Pixel source, Pixel destination) noexcept;
+[[nodiscard]] Surface execute_cpu(const ExecutionPlan& plan);
 [[nodiscard]] Surface render_frame_cpu(const Composition& composition, FrameIndex frame);
 void write_ppm(const Surface& surface, std::ostream& output);
 

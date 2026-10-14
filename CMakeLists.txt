@@ -72,4 +72,12 @@ if(CHROMA_BUILD_TESTS)
     NAME chroma_cli_validates_example
     COMMAND chroma_cli validate ${CMAKE_CURRENT_SOURCE_DIR}/examples/solid.json
   )
+
+  add_test(
+    NAME chroma_cli_inspects_example_plan
+    COMMAND chroma_cli inspect-plan ${CMAKE_CURRENT_SOURCE_DIR}/examples/solid.json --frame 0
+  )
+  set_tests_properties(chroma_cli_inspects_example_plan PROPERTIES
+    PASS_REGULAR_EXPRESSION "composite_solid"
+  )
 endif()

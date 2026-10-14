@@ -162,10 +162,13 @@ Proposed commands:
 ```text
 chroma validate composition.json
 chroma inspect composition.json
+chroma inspect-plan composition.json --frame 120
 chroma render composition.json --output video.mp4
 chroma frame composition.json --frame 120 --output frame.png
 chroma benchmark composition.json
 ```
+
+`inspect-plan` is implemented in the current spike and prints stable JSON for agent and developer inspection. The render, benchmark, and encoded-video commands remain proposed.
 
 ### C API
 

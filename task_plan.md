@@ -55,6 +55,8 @@ Design and validate an open-source, deterministic, agent-first video composition
 6. Profiling events and a benchmark fixture.
 7. Linux CUDA spike for a narrow decode/effect/composite/encode chain.
 
+Milestones 1–4 now have working implementations and automated tests. The current CPU renderer executes the same typed frame plan exposed by `inspect-plan`; the legacy convenience entry point compiles before executing.
+
 ## Errors Encountered
 | Error | Attempt | Resolution |
 |---|---|---|

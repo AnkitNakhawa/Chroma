@@ -29,7 +29,7 @@ Chroma is not intended to be a visual editor, preview platform, hosted rendering
 
 ## Status
 
-Early design. The next deliverable is a minimal technical spike that can render and benchmark a small composition through both the CPU and CUDA execution paths.
+Early technical spike. Chroma can currently parse and validate the experimental composition format, compile a requested frame into an explicit typed execution plan, render solid layers through the CPU reference backend, and write a PPM frame. Media, audio, text, effects, encoding, profiling, and CUDA execution are not implemented yet.
 
 ## Build and test
 
@@ -43,6 +43,12 @@ Render the current solid-layer example:
 
 ```sh
 ./build/chroma frame examples/solid.json --frame 0 --output frame.ppm
+```
+
+Inspect the optimized plan for a frame:
+
+```sh
+./build/chroma inspect-plan examples/solid.json --frame 0
 ```
 
 ## License
