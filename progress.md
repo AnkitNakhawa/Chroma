@@ -33,3 +33,9 @@
 - Added a reproducible 640x360, 120-frame benchmark corpus. Chroma measured ~182 fps versus an approximately equivalent FFmpeg pipeline's ~1,333 fps median on the same host, honestly establishing that the current per-frame decoder lifecycle is about 7.2x slower and must be fixed before CUDA work.
 - Added job-scoped persistent sequential decoders with lookahead and backward-seek reset. The 640x360 corpus improved to ~259 fps and reduced execution time by about 45%, though the full pipeline remains roughly 5.2x slower than the approximate FFmpeg baseline because of extra color conversions and float compositing.
 - Completed the pre-CUDA focused review. Cached pixel-conversion state, isolated decoder sessions per layer, rejected requests beyond known media duration, removed partial outputs after render failures, and added regression tests for backward seeking, media bounds, and cleanup. The final local CPU corpus measured ~261 fps versus the approximate FFmpeg baseline's ~1,333 fps.
+
+## 2026-10-14
+- Defined the post-baseline development strategy around vertical slices that pair user-visible MVP capabilities with explicit graph-compiler optimizations.
+- Narrowed the first useful output to template-style video with image/video backgrounds, animated text and graphics, simple transitions, audio, and direct encoding.
+- Prioritized the effect IR, optimizer traits, algebraic rewrites, fusion partitioner, and inspection diagnostics before CUDA code generation.
+- Adopted a conservative integration policy: retain FFmpeg at the media boundary, reuse specialized text/color primitives when needed, and defer broad effect/plugin integrations until Chroma's native optimizer is proven.

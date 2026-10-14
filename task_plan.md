@@ -72,6 +72,40 @@ CUDA remains explicitly out of scope for this track. The CPU/media baseline must
 
 The pre-CUDA track is complete. CUDA work should not begin by assuming compositing alone is the bottleneck: the measured CPU pipeline spends comparable time in execution/decode/conversion and RGB-to-YUV/encode, while plan compilation is negligible. The next design must target conversion/copy boundaries and codec-surface residency as first-class metrics.
 
+## Post-baseline implementation strategy
+
+Development now proceeds as vertical slices. Each slice must add a user-visible MVP capability, exercise a specific compiler optimization, retain a deterministic CPU reference implementation, and extend the benchmark corpus. This keeps the basic-video product and the graph-compiler differentiation advancing together.
+
+### Focused MVP output
+
+The first useful product target is template-style programmatic video: a background image or video, timed overlays, animated text and shapes, simple transitions, and an audio track, rendered directly to a common delivery format. Full VFX compatibility is not required for this gate.
+
+### Ordered implementation slices
+
+1. [next] Define an immutable effect IR and effect-trait contract covering identity, pointwise, coordinate-transform, neighborhood, temporal, and external/barrier operations. Add stable optimized-plan inspection.
+2. [pending] Implement transforms, crop/fit, opacity, color matrices, and blend modes in the CPU reference backend. Add algebraic simplification for identities, combined transforms, combined opacity/color operations, and dead nodes.
+3. [pending] Partition the optimized graph into fusible groups and explicit barriers. Add pass-count, intermediate-surface, estimated-byte-traffic, and cache-decision diagnostics; prove the planner with tests before GPU code generation.
+4. [pending] Add image layers plus text and basic shapes. Prefer a narrow text shaping/raster dependency, cache static raster results, and avoid adopting a general compositor dependency at this stage.
+5. [pending] Build the first Linux/NVIDIA CUDA vertical slice: retain decoded surfaces on the GPU where supported and fuse sample/transform/color/opacity/composite for the benchmark-critical path. Compare output against the CPU reference backend.
+6. [pending] Add keyframes/easing, simple masks, blur, and transitions. Use blur as the first neighborhood-effect barrier and validate fusion on both sides of it.
+7. [pending] Add audio input, trim, gain, simple mixing, and muxing through FFmpeg to complete the useful basic-video path.
+8. [pending] Publish benchmark comparisons against equivalent FFmpeg and GPU-configured Remotion workloads. Report end-to-end time, GPU/CPU transfer bytes, peak memory, kernel/pass count, and warm/cold behavior.
+
+### Dependency policy for these slices
+
+- Keep FFmpeg as the media decode, encode, mux, and initial audio boundary.
+- Use a specialized text shaping/raster stack when text work begins; do not reimplement font shaping.
+- Defer OpenFX, frei0r, OpenCV, Skia-as-general-compositor, and broad FFmpeg-filter compatibility until the native effect IR and fusion boundary are proven.
+- Evaluate libplacebo for reusable GPU color/scaling primitives, but do not let its internal graph replace Chroma's optimizer or introduce avoidable surface transfers.
+- Treat any external effect invocation as an explicit optimizer barrier unless its semantics can be expressed in Chroma's native IR.
+
+### Gates before broadening scope
+
+- Usefulness: render a representative template video with video/image, animated text/graphics, transitions, and audio.
+- Correctness: CPU reference and accelerated output agree within documented pixel/audio tolerances and timing remains deterministic.
+- Optimizer: inspection proves fewer passes/intermediates for representative chains, with regression tests for illegal fusion.
+- Performance: demonstrate a measured end-to-end advantage on at least one published representative workload before claiming the architecture is faster.
+
 ## Errors Encountered
 | Error | Attempt | Resolution |
 |---|---|---|
