@@ -97,6 +97,38 @@ void plans_require_an_initial_clear() {
                   std::invalid_argument);
 }
 
+void plans_reject_unsafe_dimensions() {
+  const std::vector<chroma::RenderOperation> operations = {
+      chroma::ClearOperation{.color = chroma::Color{0.0, 0.0, 0.0, 0.0}}};
+  CHECK_THROWS_AS(chroma::ExecutionPlan(0, 1, chroma::FrameIndex(0), operations),
+                  std::invalid_argument);
+  CHECK_THROWS_AS(chroma::ExecutionPlan(32768, 32768, chroma::FrameIndex(0), operations),
+                  std::invalid_argument);
+}
+
+void plans_reject_invalid_operations() {
+  CHECK_THROWS_AS(
+      chroma::ExecutionPlan(
+          1, 1, chroma::FrameIndex(0),
+          {chroma::ClearOperation{.color = chroma::Color{0.0, 0.0, 0.0, 0.0}},
+           chroma::ClearOperation{.color = chroma::Color{0.0, 0.0, 0.0, 0.0}}}),
+      std::invalid_argument);
+  CHECK_THROWS_AS(
+      chroma::ExecutionPlan(
+          1, 1, chroma::FrameIndex(0),
+          {chroma::ClearOperation{.color = chroma::Color{0.0, 0.0, 0.0, 0.0}},
+           chroma::CompositeSolidOperation{
+               .source_id = "", .color = chroma::Color{1.0, 0.0, 0.0, 1.0}}}),
+      std::invalid_argument);
+  CHECK_THROWS_AS(
+      chroma::ExecutionPlan(
+          1, 1, chroma::FrameIndex(0),
+          {chroma::ClearOperation{.color = chroma::Color{0.0, 0.0, 0.0, 0.0}},
+           chroma::CompositeSolidOperation{
+               .source_id = "bad-color", .color = chroma::Color{2.0, 0.0, 0.0, 1.0}}}),
+      std::invalid_argument);
+}
+
 }  // namespace
 
 int main() {
@@ -105,6 +137,8 @@ int main() {
   invalid_frames_fail_during_compilation();
   plan_json_retains_source_identity();
   plans_require_an_initial_clear();
+  plans_reject_unsafe_dimensions();
+  plans_reject_invalid_operations();
 
   if (failures != 0) {
     std::cerr << failures << " test assertion(s) failed\n";

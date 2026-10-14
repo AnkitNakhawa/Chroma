@@ -19,6 +19,7 @@
 - Published the repository at https://github.com/AnkitNakhawa/Chroma and configured the local `main` branch to track `origin/main`.
 - Added an Apache-2.0 license, Linux/macOS GitHub Actions CI, and reproducible local build instructions.
 - Verified the first remote CI run passed on Ubuntu and macOS, then updated the checkout action from v4 to v7 to remove GitHub's Node 20 deprecation warning.
-- Added the first typed execution-plan compiler boundary. It validates the requested frame, emits an explicit clear, removes inactive layers, preserves document-order compositing, retains source IDs for diagnostics, and has stable JSON inspection output.
+- Added the first typed execution-plan compiler boundary. It validates the requested frame, emits an explicit clear, removes inactive layers, preserves document-order compositing, retains source IDs for diagnostics, and has deterministic JSON inspection output.
 - Migrated the CPU reference renderer onto the execution-plan boundary and retained `render_frame_cpu` as a compile-and-execute convenience API.
-- Added `chroma inspect-plan <composition> --frame <index>` so agents and developers can inspect the exact optimized operations as stable JSON.
+- Added `chroma inspect-plan <composition> --frame <index>` so agents and developers can inspect the exact optimized operations as deterministic JSON.
+- Hardened direct execution-plan construction so invalid dimensions, colors, source IDs, and repeated clear operations fail before reaching a backend.

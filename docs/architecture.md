@@ -91,7 +91,7 @@ The compiler emits an explicit plan rather than letting graph nodes recursively 
 
 Plans are internal and may change between engine versions. The public composition format is versioned separately.
 
-The current spike implements the first narrow form of this boundary. Compiling a frame emits a typed, ordered list beginning with a transparent clear followed by one `CompositeSolid` operation for each active layer. Inactive layers are removed during compilation, and every emitted operation retains its composition layer ID. Surface lifetimes, backend placement, media operations, and dependencies will extend this representation as those features land.
+The current spike implements the first narrow form of this boundary. Compiling a frame emits a typed, ordered list beginning with a transparent clear followed by one `CompositeSolid` operation for each active layer. Inactive layers are removed during compilation, and every emitted operation retains its composition layer ID. Plan construction enforces bounded surface dimensions, normalized colors, valid source IDs, and a single initial clear so malformed plans fail before execution. Surface lifetimes, backend placement, media operations, and dependencies will extend this representation as those features land.
 
 ### 5. Runtime and scheduler
 
@@ -168,7 +168,7 @@ chroma frame composition.json --frame 120 --output frame.png
 chroma benchmark composition.json
 ```
 
-`inspect-plan` is implemented in the current spike and prints stable JSON for agent and developer inspection. The render, benchmark, and encoded-video commands remain proposed.
+`inspect-plan` is implemented in the current spike and prints deterministic JSON for agent and developer inspection. Its structure is internal rather than a version-stable public contract. The render, benchmark, and encoded-video commands remain proposed.
 
 ### C API
 

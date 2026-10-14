@@ -1,5 +1,6 @@
 #include "chroma/core/execution_plan.hpp"
 
+#include <cmath>
 #include <stdexcept>
 #include <utility>
 
@@ -12,16 +13,48 @@ nlohmann::json color_json(const Color& color) {
   return nlohmann::json::array({color.red, color.green, color.blue, color.alpha});
 }
 
+bool valid_color(const Color& color) noexcept {
+  const double components[] = {color.red, color.green, color.blue, color.alpha};
+  for (const auto component : components) {
+    if (!std::isfinite(component) || component < 0.0 || component > 1.0) {
+      return false;
+    }
+  }
+  return true;
+}
+
 }  // namespace
 
 ExecutionPlan::ExecutionPlan(std::int32_t width, std::int32_t height, FrameIndex frame,
                              std::vector<RenderOperation> operations)
     : width_(width), height_(height), frame_(frame), operations_(std::move(operations)) {
-  if (width <= 0 || height <= 0) {
-    throw std::invalid_argument("execution plan dimensions must be positive");
+  if (width <= 0 || height <= 0 || width > 32768 || height > 32768 ||
+      static_cast<std::uint64_t>(width) * static_cast<std::uint64_t>(height) >
+          max_canvas_pixels) {
+    throw std::invalid_argument("execution plan dimensions are invalid or too large");
   }
   if (operations_.empty() || !std::holds_alternative<ClearOperation>(operations_.front())) {
     throw std::invalid_argument("execution plan must begin with a clear operation");
+  }
+  for (std::size_t index = 0; index < operations_.size(); ++index) {
+    const auto& operation = operations_[index];
+    if (const auto* clear = std::get_if<ClearOperation>(&operation)) {
+      if (index != 0) {
+        throw std::invalid_argument("execution plan may only clear as its first operation");
+      }
+      if (!valid_color(clear->color)) {
+        throw std::invalid_argument("execution plan clear color is invalid");
+      }
+      continue;
+    }
+
+    const auto& solid = std::get<CompositeSolidOperation>(operation);
+    if (solid.source_id.empty() || solid.source_id.size() > 128) {
+      throw std::invalid_argument("execution plan source id is invalid");
+    }
+    if (!valid_color(solid.color)) {
+      throw std::invalid_argument("execution plan solid color is invalid");
+    }
   }
 }
 
