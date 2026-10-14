@@ -141,6 +141,8 @@ Audio remains CPU-side in v1 and is scheduled independently from video until mux
 
 The implemented CPU video writer renders surfaces in memory, converts linear premultiplied RGB over black to 8-bit RGB, converts to YUV420P with libswscale, encodes H.264, and muxes directly to the requested container. It assigns explicit frame and stream durations so rational frame rates survive muxing. The initial writer is sequential, requires even dimensions, and has no audio path yet.
 
+During sequential renders, a CPU execution context owns one persistent decoder per asset path. Monotonically increasing requests retain demux, codec, decoded-frame lookahead, and conversion state; backward requests trigger an explicit seek and codec flush. The context lifetime is scoped to one render job, so it contains no shared mutable global cache.
+
 ### 8. Color and alpha semantics
 
 v1 targets SDR output. Composition operations use a defined linear-light working space and premultiplied alpha. Input interpretation, conversion, blending, and output transforms must be specified rather than inherited accidentally from individual libraries.

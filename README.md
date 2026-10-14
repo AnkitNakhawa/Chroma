@@ -65,6 +65,14 @@ Render a complete composition directly to H.264/MP4 without intermediate image f
 
 The current encoder path is CPU-only, uses 8-bit YUV420P, requires even canvas dimensions, and does not yet include audio.
 
+Run the reproducible Release CPU benchmark:
+
+```sh
+./benchmarks/run_cpu.sh build 5
+```
+
+The report separates setup, plan compilation, execution/decode/compositing, encoding/muxing, and total throughput. Results are machine-specific and are not presented as general performance claims.
+
 Render the current solid-layer example:
 
 ```sh

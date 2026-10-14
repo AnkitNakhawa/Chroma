@@ -1,6 +1,7 @@
 #include "chroma/media/encode.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <limits>
@@ -10,6 +11,8 @@
 #include <vector>
 
 #include "chroma/core/render.hpp"
+
+#include <nlohmann/json.hpp>
 
 #ifndef CHROMA_HAS_FFMPEG
 #define CHROMA_HAS_FFMPEG 0
@@ -27,6 +30,38 @@ extern "C" {
 
 namespace chroma {
 namespace {
+
+#if CHROMA_HAS_FFMPEG
+using Clock = std::chrono::steady_clock;
+
+std::int64_t elapsed_nanoseconds(Clock::time_point start, Clock::time_point end) {
+  return std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count();
+}
+#endif
+
+double milliseconds(std::int64_t nanoseconds) {
+  return static_cast<double>(nanoseconds) / 1'000'000.0;
+}
+
+double frames_per_second(std::int64_t frames, std::int64_t nanoseconds) {
+  if (nanoseconds <= 0) {
+    return 0.0;
+  }
+  return static_cast<double>(frames) * 1'000'000'000.0 /
+         static_cast<double>(nanoseconds);
+}
+
+nlohmann::json profile_json(const VideoRenderResult& result) {
+  return {{"frames_encoded", result.frames_encoded},
+          {"frames_per_second",
+           frames_per_second(result.frames_encoded, result.total_nanoseconds)},
+          {"milliseconds",
+           {{"setup", milliseconds(result.setup_nanoseconds)},
+            {"compile", milliseconds(result.compile_nanoseconds)},
+            {"execute", milliseconds(result.execute_nanoseconds)},
+            {"encode", milliseconds(result.encode_nanoseconds)},
+            {"total", milliseconds(result.total_nanoseconds)}}}};
+}
 
 #if CHROMA_HAS_FFMPEG
 std::string ffmpeg_error(int status) {
@@ -120,6 +155,7 @@ void submit_frame(AVCodecContext* codec, AVFormatContext* format, AVStream* stre
 VideoRenderResult render_video_cpu(const Composition& composition,
                                    const std::filesystem::path& output_path) {
 #if CHROMA_HAS_FFMPEG
+  const auto total_start = Clock::now();
   if (output_path.empty()) {
     throw std::invalid_argument("video output path must not be empty");
   }
@@ -220,11 +256,24 @@ VideoRenderResult render_video_cpu(const Composition& composition,
   }
   const auto row_bytes = static_cast<std::size_t>(codec->width) * 3U;
   std::vector<std::uint8_t> rgb(row_bytes * static_cast<std::size_t>(codec->height));
+  const auto setup_end = Clock::now();
 
   std::int64_t encoded = 0;
+  std::int64_t compile_nanoseconds = 0;
+  std::int64_t execute_nanoseconds = 0;
+  std::int64_t encode_nanoseconds = 0;
+  CpuRenderContext render_context;
   for (auto index = composition.range().start().value();
        index < composition.range().end().value(); ++index) {
-    const auto surface = render_frame_cpu(composition, FrameIndex(index));
+    const auto compile_start = Clock::now();
+    const auto plan = compile_frame(composition, FrameIndex(index));
+    const auto compile_end = Clock::now();
+    const auto surface = render_context.execute(plan);
+    const auto execute_end = Clock::now();
+    compile_nanoseconds += elapsed_nanoseconds(compile_start, compile_end);
+    execute_nanoseconds += elapsed_nanoseconds(compile_end, execute_end);
+
+    const auto encode_start = Clock::now();
     for (std::size_t pixel_index = 0; pixel_index < surface.size(); ++pixel_index) {
       const auto& pixel = surface.pixels()[pixel_index];
       rgb[pixel_index * 3U] = linear_to_byte(pixel.red);
@@ -248,20 +297,76 @@ VideoRenderResult render_video_cpu(const Composition& composition,
     frame->duration = 1;
     submit_frame(codec.get(), format.get(), stream, packet.get(), frame.get());
     ++encoded;
+    encode_nanoseconds += elapsed_nanoseconds(encode_start, Clock::now());
   }
 
+  const auto finalize_start = Clock::now();
   submit_frame(codec.get(), format.get(), stream, packet.get(), nullptr);
   stream->duration = av_rescale_q(encoded, codec->time_base, stream->time_base);
   status = av_write_trailer(format.get());
   if (status < 0) {
     throw std::runtime_error("unable to finalize video output: " + ffmpeg_error(status));
   }
-  return VideoRenderResult{.frames_encoded = encoded};
+  const auto total_end = Clock::now();
+  encode_nanoseconds += elapsed_nanoseconds(finalize_start, total_end);
+  return VideoRenderResult{.frames_encoded = encoded,
+                           .setup_nanoseconds = elapsed_nanoseconds(total_start, setup_end),
+                           .compile_nanoseconds = compile_nanoseconds,
+                           .execute_nanoseconds = execute_nanoseconds,
+                           .encode_nanoseconds = encode_nanoseconds,
+                           .total_nanoseconds = elapsed_nanoseconds(total_start, total_end)};
 #else
   static_cast<void>(composition);
   static_cast<void>(output_path);
   throw std::runtime_error("Chroma was built without FFmpeg media support");
 #endif
+}
+
+std::string video_render_profile_json(const VideoRenderResult& result) {
+  return profile_json(result).dump(2);
+}
+
+std::string video_benchmark_json(const std::vector<VideoRenderResult>& iterations) {
+  if (iterations.empty()) {
+    throw std::invalid_argument("benchmark requires at least one iteration");
+  }
+
+  std::vector<std::int64_t> totals;
+  totals.reserve(iterations.size());
+  std::int64_t total_frames = 0;
+  std::int64_t total_time = 0;
+  std::int64_t total_setup = 0;
+  std::int64_t total_compile = 0;
+  std::int64_t total_execute = 0;
+  std::int64_t total_encode = 0;
+  nlohmann::json runs = nlohmann::json::array();
+  for (const auto& iteration : iterations) {
+    totals.push_back(iteration.total_nanoseconds);
+    total_frames += iteration.frames_encoded;
+    total_time += iteration.total_nanoseconds;
+    total_setup += iteration.setup_nanoseconds;
+    total_compile += iteration.compile_nanoseconds;
+    total_execute += iteration.execute_nanoseconds;
+    total_encode += iteration.encode_nanoseconds;
+    runs.push_back(profile_json(iteration));
+  }
+  std::sort(totals.begin(), totals.end());
+  const auto count = static_cast<double>(iterations.size());
+  return nlohmann::json{
+      {"backend", "cpu"},
+      {"iteration_count", iterations.size()},
+      {"summary",
+       {{"frames_per_second", frames_per_second(total_frames, total_time)},
+        {"milliseconds",
+         {{"setup_mean", milliseconds(static_cast<std::int64_t>(total_setup / count))},
+          {"compile_mean", milliseconds(static_cast<std::int64_t>(total_compile / count))},
+          {"execute_mean", milliseconds(static_cast<std::int64_t>(total_execute / count))},
+          {"encode_mean", milliseconds(static_cast<std::int64_t>(total_encode / count))},
+          {"total_mean", milliseconds(static_cast<std::int64_t>(total_time / count))},
+          {"total_min", milliseconds(totals.front())},
+          {"total_median", milliseconds(totals[totals.size() / 2])}}}}},
+      {"iterations", std::move(runs)}}
+      .dump(2);
 }
 
 }  // namespace chroma

@@ -6,6 +6,7 @@
 
 #include "chroma/media/media.hpp"
 #include "chroma/media/decode.hpp"
+#include "chroma/media/encode.hpp"
 
 namespace {
 
@@ -70,6 +71,29 @@ void fixture_can_be_probed_and_decoded(const char* path) {
   CHECK(middle.presentation_time == chroma::Rational(1));
   CHECK(start.surface.pixels() != middle.surface.pixels());
   CHECK(middle.surface.pixels() == middle_again.surface.pixels());
+
+  chroma::VideoDecoder decoder(path);
+  const auto sequential_start = decoder.frame_at(chroma::Rational(0));
+  const auto sequential_middle = decoder.frame_at(chroma::Rational(1));
+  const auto rewound = decoder.frame_at(chroma::Rational(0));
+  CHECK(sequential_start.surface.pixels() == start.surface.pixels());
+  CHECK(sequential_middle.surface.pixels() == middle.surface.pixels());
+  CHECK(rewound.surface.pixels() == start.surface.pixels());
+}
+
+void render_profiles_are_machine_readable() {
+  const chroma::VideoRenderResult result{.frames_encoded = 60,
+                                         .setup_nanoseconds = 1'000'000,
+                                         .compile_nanoseconds = 2'000'000,
+                                         .execute_nanoseconds = 3'000'000,
+                                         .encode_nanoseconds = 4'000'000,
+                                         .total_nanoseconds = 10'000'000};
+  const auto profile = chroma::video_render_profile_json(result);
+  const auto benchmark = chroma::video_benchmark_json({result, result});
+  CHECK(profile.find("frames_per_second") != std::string::npos);
+  CHECK(profile.find("\"total\": 10.0") != std::string::npos);
+  CHECK(benchmark.find("\"iteration_count\": 2") != std::string::npos);
+  CHECK(benchmark.find("total_median") != std::string::npos);
 }
 
 }  // namespace
@@ -77,6 +101,7 @@ void fixture_can_be_probed_and_decoded(const char* path) {
 int main(int argc, char** argv) {
   metadata_json_is_machine_readable();
   missing_media_is_rejected();
+  render_profiles_are_machine_readable();
   if (chroma::media_available() && argc == 2) {
     fixture_can_be_probed_and_decoded(argv[1]);
   }

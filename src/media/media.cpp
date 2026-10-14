@@ -14,6 +14,7 @@ extern "C" {
 #include <libavcodec/avcodec.h>
 #include <libavformat/avformat.h>
 #include <libavutil/error.h>
+#include <libavutil/log.h>
 #include <libavutil/pixdesc.h>
 }
 #endif
@@ -57,6 +58,27 @@ Rational from_av_rational(AVRational value) {
 
 bool media_available() noexcept {
   return CHROMA_HAS_FFMPEG != 0;
+}
+
+void configure_media_logging(MediaLogLevel level) noexcept {
+#if CHROMA_HAS_FFMPEG
+  switch (level) {
+    case MediaLogLevel::quiet:
+      av_log_set_level(AV_LOG_QUIET);
+      break;
+    case MediaLogLevel::error:
+      av_log_set_level(AV_LOG_ERROR);
+      break;
+    case MediaLogLevel::warning:
+      av_log_set_level(AV_LOG_WARNING);
+      break;
+    case MediaLogLevel::info:
+      av_log_set_level(AV_LOG_INFO);
+      break;
+  }
+#else
+  static_cast<void>(level);
+#endif
 }
 
 MediaInfo probe_media(const std::filesystem::path& path) {

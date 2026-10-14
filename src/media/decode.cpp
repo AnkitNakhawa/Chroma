@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <limits>
 #include <memory>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -140,133 +141,197 @@ Rational timestamp_time(std::int64_t timestamp, AVRational time_base,
 
 }  // namespace
 
-DecodedVideoFrame decode_video_frame(const std::filesystem::path& path, Rational time) {
+struct VideoDecoder::Impl {
 #if CHROMA_HAS_FFMPEG
-  if (time < Rational(0)) {
-    throw std::invalid_argument("requested media time must be non-negative");
+  explicit Impl(const std::filesystem::path& path) : path_string(path.string()) {
+    AVFormatContext* raw_format = nullptr;
+    auto status = avformat_open_input(&raw_format, path_string.c_str(), nullptr, nullptr);
+    if (status < 0) {
+      throw std::runtime_error("unable to open media '" + path_string + "': " +
+                               ffmpeg_error(status));
+    }
+    format.reset(raw_format);
+    status = avformat_find_stream_info(format.get(), nullptr);
+    if (status < 0) {
+      throw std::runtime_error("unable to read media streams: " + ffmpeg_error(status));
+    }
+
+    stream_index = av_find_best_stream(format.get(), AVMEDIA_TYPE_VIDEO, -1, -1, nullptr, 0);
+    if (stream_index < 0) {
+      throw std::runtime_error("media does not contain a decodable video stream");
+    }
+    stream = format->streams[stream_index];
+    const auto* decoder = avcodec_find_decoder(stream->codecpar->codec_id);
+    if (decoder == nullptr) {
+      throw std::runtime_error("no decoder is available for the selected video stream");
+    }
+    codec.reset(avcodec_alloc_context3(decoder));
+    if (!codec) {
+      throw std::runtime_error("unable to allocate FFmpeg decoder context");
+    }
+    status = avcodec_parameters_to_context(codec.get(), stream->codecpar);
+    if (status < 0) {
+      throw std::runtime_error("unable to initialize decoder parameters: " +
+                               ffmpeg_error(status));
+    }
+    status = avcodec_open2(codec.get(), decoder, nullptr);
+    if (status < 0) {
+      throw std::runtime_error("unable to open video decoder: " + ffmpeg_error(status));
+    }
+    packet.reset(av_packet_alloc());
+    receive_frame.reset(av_frame_alloc());
+    if (!packet || !receive_frame) {
+      throw std::runtime_error("unable to allocate FFmpeg decode buffers");
+    }
+    stream_start = stream->start_time != AV_NOPTS_VALUE ? stream->start_time : 0;
   }
 
-  AVFormatContext* raw_format = nullptr;
-  const auto path_string = path.string();
-  auto status = avformat_open_input(&raw_format, path_string.c_str(), nullptr, nullptr);
-  if (status < 0) {
-    throw std::runtime_error("unable to open media '" + path_string + "': " +
-                             ffmpeg_error(status));
-  }
-  FormatPointer format(raw_format);
-  status = avformat_find_stream_info(format.get(), nullptr);
-  if (status < 0) {
-    throw std::runtime_error("unable to read media streams: " + ffmpeg_error(status));
-  }
-
-  const auto stream_index =
-      av_find_best_stream(format.get(), AVMEDIA_TYPE_VIDEO, -1, -1, nullptr, 0);
-  if (stream_index < 0) {
-    throw std::runtime_error("media does not contain a decodable video stream");
-  }
-  auto* stream = format->streams[stream_index];
-  const auto* decoder = avcodec_find_decoder(stream->codecpar->codec_id);
-  if (decoder == nullptr) {
-    throw std::runtime_error("no decoder is available for the selected video stream");
+  void seek(std::int64_t target) {
+    const auto status =
+        av_seek_frame(format.get(), stream_index, target, AVSEEK_FLAG_BACKWARD);
+    if (status < 0) {
+      throw std::runtime_error("unable to seek video stream: " + ffmpeg_error(status));
+    }
+    avcodec_flush_buffers(codec.get());
+    av_packet_unref(packet.get());
+    av_frame_unref(receive_frame.get());
+    current.reset();
+    pending.reset();
+    demux_eof = false;
+    flush_sent = false;
   }
 
-  CodecPointer codec(avcodec_alloc_context3(decoder));
-  if (!codec) {
-    throw std::runtime_error("unable to allocate FFmpeg decoder context");
-  }
-  status = avcodec_parameters_to_context(codec.get(), stream->codecpar);
-  if (status < 0) {
-    throw std::runtime_error("unable to initialize decoder parameters: " +
-                             ffmpeg_error(status));
-  }
-  status = avcodec_open2(codec.get(), decoder, nullptr);
-  if (status < 0) {
-    throw std::runtime_error("unable to open video decoder: " + ffmpeg_error(status));
-  }
-
-  const auto stream_start = stream->start_time != AV_NOPTS_VALUE ? stream->start_time : 0;
-  const auto target = checked_add(stream_start, floor_rescale(time, stream->time_base));
-  status = av_seek_frame(format.get(), stream_index, target, AVSEEK_FLAG_BACKWARD);
-  if (status < 0) {
-    throw std::runtime_error("unable to seek video stream: " + ffmpeg_error(status));
-  }
-  avcodec_flush_buffers(codec.get());
-
-  PacketPointer packet(av_packet_alloc());
-  FramePointer frame(av_frame_alloc());
-  if (!packet || !frame) {
-    throw std::runtime_error("unable to allocate FFmpeg decode buffers");
-  }
-
-  FramePointer selected;
-  bool finished = false;
-  const auto receive_frames = [&] {
-    while (!finished) {
-      const auto receive_status = avcodec_receive_frame(codec.get(), frame.get());
-      if (receive_status == AVERROR(EAGAIN) || receive_status == AVERROR_EOF) {
-        return;
-      }
-      if (receive_status < 0) {
-        throw std::runtime_error("video decode failed: " + ffmpeg_error(receive_status));
-      }
-      const auto timestamp = frame->best_effort_timestamp;
-      if (timestamp == AV_NOPTS_VALUE || timestamp <= target || !selected) {
-        selected.reset(av_frame_clone(frame.get()));
-        if (!selected) {
+  FramePointer next_frame() {
+    while (true) {
+      const auto receive_status = avcodec_receive_frame(codec.get(), receive_frame.get());
+      if (receive_status >= 0) {
+        FramePointer output(av_frame_clone(receive_frame.get()));
+        av_frame_unref(receive_frame.get());
+        if (!output) {
           throw std::runtime_error("unable to retain decoded video frame");
         }
+        return output;
       }
-      if (timestamp != AV_NOPTS_VALUE && timestamp > target) {
-        finished = true;
+      if (receive_status == AVERROR_EOF) {
+        return {};
       }
-      av_frame_unref(frame.get());
-    }
-  };
+      if (receive_status != AVERROR(EAGAIN)) {
+        throw std::runtime_error("video decode failed: " + ffmpeg_error(receive_status));
+      }
 
-  while (!finished && (status = av_read_frame(format.get(), packet.get())) >= 0) {
-    if (packet->stream_index == stream_index) {
-      auto send_status = avcodec_send_packet(codec.get(), packet.get());
-      if (send_status == AVERROR(EAGAIN)) {
-        receive_frames();
-        send_status = avcodec_send_packet(codec.get(), packet.get());
+      if (demux_eof) {
+        if (flush_sent) {
+          return {};
+        }
+        const auto flush_status = avcodec_send_packet(codec.get(), nullptr);
+        if (flush_status < 0 && flush_status != AVERROR_EOF) {
+          throw std::runtime_error("unable to flush video decoder: " +
+                                   ffmpeg_error(flush_status));
+        }
+        flush_sent = true;
+        continue;
       }
-      if (send_status < 0) {
-        throw std::runtime_error("unable to submit video packet: " + ffmpeg_error(send_status));
+
+      while (true) {
+        const auto read_status = av_read_frame(format.get(), packet.get());
+        if (read_status == AVERROR_EOF) {
+          demux_eof = true;
+          break;
+        }
+        if (read_status < 0) {
+          throw std::runtime_error("unable to read video packet: " +
+                                   ffmpeg_error(read_status));
+        }
+        if (packet->stream_index != stream_index) {
+          av_packet_unref(packet.get());
+          continue;
+        }
+        const auto send_status = avcodec_send_packet(codec.get(), packet.get());
+        av_packet_unref(packet.get());
+        if (send_status < 0) {
+          throw std::runtime_error("unable to submit video packet: " +
+                                   ffmpeg_error(send_status));
+        }
+        break;
       }
-      receive_frames();
     }
-    av_packet_unref(packet.get());
-  }
-  if (!finished) {
-    if (status != AVERROR_EOF) {
-      throw std::runtime_error("unable to read video packet: " + ffmpeg_error(status));
-    }
-    auto flush_status = avcodec_send_packet(codec.get(), nullptr);
-    if (flush_status == AVERROR(EAGAIN)) {
-      receive_frames();
-      flush_status = avcodec_send_packet(codec.get(), nullptr);
-    }
-    if (flush_status < 0 && flush_status != AVERROR_EOF) {
-      throw std::runtime_error("unable to flush video decoder: " + ffmpeg_error(flush_status));
-    }
-    receive_frames();
-  }
-  if (!selected) {
-    throw std::out_of_range("requested time is outside the decodable video range");
   }
 
-  const auto selected_timestamp = selected->best_effort_timestamp;
-  return DecodedVideoFrame{
-      .surface = convert_frame(*selected),
-      .presentation_time = selected_timestamp == AV_NOPTS_VALUE
-                               ? time
-                               : timestamp_time(selected_timestamp, stream->time_base,
-                                                stream_start)};
+  DecodedVideoFrame frame_at(Rational time) {
+    if (time < Rational(0)) {
+      throw std::invalid_argument("requested media time must be non-negative");
+    }
+    const auto target = checked_add(stream_start, floor_rescale(time, stream->time_base));
+    if (!last_target || target < *last_target) {
+      seek(target);
+    }
+    last_target = target;
+
+    if (pending) {
+      const auto timestamp = pending->best_effort_timestamp;
+      if (timestamp == AV_NOPTS_VALUE || timestamp <= target || !current) {
+        current = std::move(pending);
+      }
+    }
+    while (!pending) {
+      auto decoded = next_frame();
+      if (!decoded) {
+        break;
+      }
+      const auto timestamp = decoded->best_effort_timestamp;
+      if (timestamp == AV_NOPTS_VALUE || timestamp <= target || !current) {
+        current = std::move(decoded);
+        continue;
+      }
+      pending = std::move(decoded);
+    }
+    if (!current) {
+      throw std::out_of_range("requested time is outside the decodable video range");
+    }
+    const auto timestamp = current->best_effort_timestamp;
+    return DecodedVideoFrame{
+        .surface = convert_frame(*current),
+        .presentation_time = timestamp == AV_NOPTS_VALUE
+                                 ? time
+                                 : timestamp_time(timestamp, stream->time_base, stream_start)};
+  }
+
+  std::string path_string;
+  FormatPointer format;
+  AVStream* stream = nullptr;
+  int stream_index = -1;
+  CodecPointer codec;
+  PacketPointer packet;
+  FramePointer receive_frame;
+  FramePointer current;
+  FramePointer pending;
+  std::int64_t stream_start = 0;
+  std::optional<std::int64_t> last_target;
+  bool demux_eof = false;
+  bool flush_sent = false;
 #else
-  static_cast<void>(path);
-  static_cast<void>(time);
-  throw std::runtime_error("Chroma was built without FFmpeg media support");
+  explicit Impl(const std::filesystem::path&) {}
+
+  DecodedVideoFrame frame_at(Rational) {
+    throw std::runtime_error("Chroma was built without FFmpeg media support");
+  }
 #endif
+};
+
+VideoDecoder::VideoDecoder(const std::filesystem::path& path)
+    : impl_(std::make_unique<Impl>(path)) {}
+
+VideoDecoder::~VideoDecoder() = default;
+VideoDecoder::VideoDecoder(VideoDecoder&&) noexcept = default;
+VideoDecoder& VideoDecoder::operator=(VideoDecoder&&) noexcept = default;
+
+DecodedVideoFrame VideoDecoder::frame_at(Rational time) {
+  return impl_->frame_at(time);
+}
+
+DecodedVideoFrame decode_video_frame(const std::filesystem::path& path, Rational time) {
+  VideoDecoder decoder(path);
+  return decoder.frame_at(time);
 }
 
 }  // namespace chroma

@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <iosfwd>
+#include <memory>
 #include <vector>
 
 #include "chroma/core/execution_plan.hpp"
@@ -36,6 +37,23 @@ class Surface {
   std::int32_t width_;
   std::int32_t height_;
   std::vector<Pixel> pixels_;
+};
+
+class CpuRenderContext {
+ public:
+  CpuRenderContext();
+  ~CpuRenderContext();
+
+  CpuRenderContext(CpuRenderContext&&) noexcept;
+  CpuRenderContext& operator=(CpuRenderContext&&) noexcept;
+  CpuRenderContext(const CpuRenderContext&) = delete;
+  CpuRenderContext& operator=(const CpuRenderContext&) = delete;
+
+  [[nodiscard]] Surface execute(const ExecutionPlan& plan);
+
+ private:
+  struct Impl;
+  std::unique_ptr<Impl> impl_;
 };
 
 [[nodiscard]] Pixel composite_over(Pixel source, Pixel destination) noexcept;

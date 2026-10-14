@@ -5,6 +5,9 @@
 #include <limits>
 #include <ostream>
 #include <stdexcept>
+#include <memory>
+#include <string>
+#include <unordered_map>
 #include <variant>
 
 #include "chroma/media/decode.hpp"
@@ -77,7 +80,16 @@ Pixel composite_over(Pixel source, Pixel destination) noexcept {
                .alpha = source.alpha + destination.alpha * inverse_source_alpha};
 }
 
-Surface execute_cpu(const ExecutionPlan& plan) {
+struct CpuRenderContext::Impl {
+  std::unordered_map<std::string, std::unique_ptr<VideoDecoder>> decoders;
+};
+
+CpuRenderContext::CpuRenderContext() : impl_(std::make_unique<Impl>()) {}
+CpuRenderContext::~CpuRenderContext() = default;
+CpuRenderContext::CpuRenderContext(CpuRenderContext&&) noexcept = default;
+CpuRenderContext& CpuRenderContext::operator=(CpuRenderContext&&) noexcept = default;
+
+Surface CpuRenderContext::execute(const ExecutionPlan& plan) {
   Surface result(plan.width(), plan.height());
   for (const auto& operation : plan.operations()) {
     if (const auto* clear = std::get_if<ClearOperation>(&operation)) {
@@ -93,7 +105,12 @@ Surface execute_cpu(const ExecutionPlan& plan) {
     }
 
     const auto& video = std::get<CompositeVideoFrameOperation>(operation);
-    const auto decoded = decode_video_frame(video.asset_path, video.source_time);
+    const auto key = video.asset_path.generic_string();
+    auto& decoder = impl_->decoders[key];
+    if (!decoder) {
+      decoder = std::make_unique<VideoDecoder>(video.asset_path);
+    }
+    const auto decoded = decoder->frame_at(video.source_time);
     if (decoded.surface.width() != result.width() ||
         decoded.surface.height() != result.height()) {
       throw std::runtime_error("video layer dimensions must match the composition canvas");
@@ -109,6 +126,11 @@ Surface execute_cpu(const ExecutionPlan& plan) {
     }
   }
   return result;
+}
+
+Surface execute_cpu(const ExecutionPlan& plan) {
+  CpuRenderContext context;
+  return context.execute(plan);
 }
 
 Surface render_frame_cpu(const Composition& composition, FrameIndex frame) {

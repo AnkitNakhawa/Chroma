@@ -43,6 +43,10 @@ else()
   message(STATUS "Chroma FFmpeg media support: disabled by configuration")
 endif()
 
+if(CHROMA_HAS_FFMPEG)
+  find_program(CHROMA_FFMPEG_EXECUTABLE ffmpeg)
+endif()
+
 add_library(chroma_core
   src/core/composition.cpp
   src/core/execution_plan.cpp
@@ -77,6 +81,24 @@ add_executable(chroma_cli src/cli/main.cpp)
 set_target_properties(chroma_cli PROPERTIES OUTPUT_NAME chroma)
 target_link_libraries(chroma_cli PRIVATE chroma::core)
 
+if(CHROMA_HAS_FFMPEG AND CHROMA_FFMPEG_EXECUTABLE)
+  set(CHROMA_BENCHMARK_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/benchmarks)
+  set(CHROMA_BENCHMARK_MEDIA ${CHROMA_BENCHMARK_DIRECTORY}/color-segments-640x360.mkv)
+  add_custom_command(
+    OUTPUT ${CHROMA_BENCHMARK_MEDIA}
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${CHROMA_BENCHMARK_DIRECTORY}
+    COMMAND ${CHROMA_FFMPEG_EXECUTABLE} -y -hide_banner -loglevel error
+            -f lavfi -i color=c=blue:size=640x360:rate=30:duration=2
+            -f lavfi -i color=c=red:size=640x360:rate=30:duration=2
+            -filter_complex [0:v][1:v]concat=n=2:v=1:a=0
+            -c:v ffv1 ${CHROMA_BENCHMARK_MEDIA}
+    VERBATIM
+  )
+  add_custom_target(chroma_benchmark_fixture DEPENDS ${CHROMA_BENCHMARK_MEDIA})
+  configure_file(benchmarks/video-composition.json.in
+                 ${CHROMA_BENCHMARK_DIRECTORY}/video-composition.json @ONLY)
+endif()
+
 if(CHROMA_BUILD_TESTS)
   include(CTest)
   enable_testing()
@@ -98,9 +120,6 @@ if(CHROMA_BUILD_TESTS)
 
   add_executable(chroma_media_tests tests/media_tests.cpp)
   target_link_libraries(chroma_media_tests PRIVATE chroma::core)
-  if(CHROMA_HAS_FFMPEG)
-    find_program(CHROMA_FFMPEG_EXECUTABLE ffmpeg)
-  endif()
   if(CHROMA_HAS_FFMPEG AND CHROMA_FFMPEG_EXECUTABLE)
     set(CHROMA_MEDIA_FIXTURE ${CMAKE_CURRENT_BINARY_DIR}/fixtures/color-segments.mkv)
     add_custom_command(
@@ -147,6 +166,16 @@ if(CHROMA_BUILD_TESTS)
              COMMAND chroma_media_tests ${CHROMA_RENDERED_VIDEO})
     set_tests_properties(chroma_encoded_media_tests PROPERTIES
       DEPENDS chroma_cli_renders_video
+    )
+    set(CHROMA_BENCHMARK_REPORT ${CMAKE_CURRENT_BINARY_DIR}/fixtures/benchmark.json)
+    add_test(NAME chroma_cli_benchmarks_video
+             COMMAND chroma_cli benchmark ${CHROMA_VIDEO_COMPOSITION}
+                     --iterations 1 --output ${CHROMA_BENCHMARK_REPORT})
+    add_test(NAME chroma_cli_benchmark_report
+             COMMAND ${CMAKE_COMMAND} -E cat ${CHROMA_BENCHMARK_REPORT})
+    set_tests_properties(chroma_cli_benchmark_report PROPERTIES
+      DEPENDS chroma_cli_benchmarks_video
+      PASS_REGULAR_EXPRESSION "frames_per_second"
     )
   else()
     add_test(NAME chroma_render_tests COMMAND chroma_render_tests)

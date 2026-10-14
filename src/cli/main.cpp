@@ -1,4 +1,6 @@
+#include <chrono>
 #include <cstdint>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <optional>
@@ -6,6 +8,7 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include "chroma/core/composition.hpp"
 #include "chroma/core/execution_plan.hpp"
@@ -41,6 +44,7 @@ void print_usage(std::ostream& output) {
          << "  chroma probe <media-file>\n"
          << "  chroma decode <media-file> --frame <index> --output <frame.ppm>\n"
          << "  chroma render <composition.json> --output <video.mp4>\n"
+         << "  chroma benchmark <composition.json> --iterations <count> --output <report.json>\n"
          << "  chroma inspect-plan <composition.json> --frame <index>\n"
          << "  chroma frame <composition.json> --frame <index> --output <frame.ppm>\n";
 }
@@ -82,6 +86,8 @@ std::optional<chroma::FrameIndex> parse_frame_index(const char* value) {
 }  // namespace
 
 int main(int argc, char** argv) {
+  chroma::configure_media_logging(chroma::MediaLogLevel::error);
+
   if (argc == 2 && std::string_view(argv[1]) == "--version") {
     std::cout << "chroma 0.1.0\n";
     return 0;
@@ -181,6 +187,70 @@ int main(int argc, char** argv) {
       return 0;
     } catch (const std::exception& error) {
       std::cerr << "render failed: " << error.what() << '\n';
+      return input_error;
+    }
+  }
+
+  if (argc == 7 && std::string_view(argv[1]) == "benchmark" &&
+      std::string_view(argv[3]) == "--iterations" &&
+      std::string_view(argv[5]) == "--output") {
+    chroma::CompositionParseResult result;
+    if (const auto parse_status = parse_file(argv[2], result); parse_status != 0) {
+      return parse_status;
+    }
+    if (!result.valid()) {
+      print_diagnostics(result.diagnostics, false);
+      return invalid_composition;
+    }
+
+    std::int64_t iteration_count = 0;
+    try {
+      std::size_t consumed = 0;
+      iteration_count = std::stoll(argv[4], &consumed);
+      if (consumed != std::string_view(argv[4]).size() || iteration_count <= 0 ||
+          iteration_count > 100) {
+        throw std::invalid_argument("iteration count outside supported range");
+      }
+    } catch (const std::exception&) {
+      std::cerr << "invalid iteration count: " << argv[4] << " (expected 1-100)\n";
+      return usage_error;
+    }
+
+    try {
+      std::vector<chroma::VideoRenderResult> iterations;
+      iterations.reserve(static_cast<std::size_t>(iteration_count));
+      const auto unique = std::chrono::steady_clock::now().time_since_epoch().count();
+      for (std::int64_t index = 0; index < iteration_count; ++index) {
+        const auto temporary =
+            std::filesystem::temp_directory_path() /
+            ("chroma-benchmark-" + std::to_string(unique) + "-" + std::to_string(index) +
+             ".mp4");
+        try {
+          iterations.push_back(chroma::render_video_cpu(*result.composition, temporary));
+        } catch (...) {
+          std::error_code cleanup_error;
+          std::filesystem::remove(temporary, cleanup_error);
+          throw;
+        }
+        std::error_code cleanup_error;
+        std::filesystem::remove(temporary, cleanup_error);
+      }
+
+      std::ofstream output(argv[6], std::ios::binary);
+      if (!output) {
+        std::cerr << "unable to open benchmark report: " << argv[6] << '\n';
+        return input_error;
+      }
+      output << chroma::video_benchmark_json(iterations) << '\n';
+      if (!output) {
+        std::cerr << "unable to write benchmark report: " << argv[6] << '\n';
+        return input_error;
+      }
+      std::cout << "completed " << iteration_count << " benchmark iteration(s); report: "
+                << argv[6] << '\n';
+      return 0;
+    } catch (const std::exception& error) {
+      std::cerr << "benchmark failed: " << error.what() << '\n';
       return input_error;
     }
   }

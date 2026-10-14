@@ -20,7 +20,15 @@ struct MediaInfo {
   std::string pixel_format;
 };
 
+enum class MediaLogLevel {
+  quiet,
+  error,
+  warning,
+  info,
+};
+
 [[nodiscard]] bool media_available() noexcept;
+void configure_media_logging(MediaLogLevel level) noexcept;
 [[nodiscard]] MediaInfo probe_media(const std::filesystem::path& path);
 [[nodiscard]] std::string media_info_json(const MediaInfo& info);
 

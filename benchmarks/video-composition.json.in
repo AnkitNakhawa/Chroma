@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "canvas": {
+    "width": 640,
+    "height": 360,
+    "frame_rate": {"numerator": 30, "denominator": 1},
+    "duration_frames": 120
+  },
+  "assets": [
+    {"id": "fixture", "type": "video", "path": "@CHROMA_BENCHMARK_MEDIA@"}
+  ],
+  "layers": [
+    {
+      "id": "video",
+      "type": "video",
+      "asset": "fixture",
+      "start_frame": 0,
+      "end_frame": 120,
+      "source_start_frame": 0,
+      "opacity": 1.0
+    },
+    {
+      "id": "overlay",
+      "type": "solid",
+      "start_frame": 30,
+      "end_frame": 90,
+      "color": [0.0, 1.0, 0.0, 0.2]
+    }
+  ]
+}
