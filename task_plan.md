@@ -15,8 +15,8 @@ Design and validate an open-source, deterministic, agent-first video composition
 |---|---|---|
 | 1 | Establish product goals, user workflows, scope, and measurable requirements | complete |
 | 2 | Define system architecture and technology choices | in_progress |
-| 3 | Specify the composition DSL, timing model, and compatibility contract | pending |
-| 4 | Design the rendering, media, audio, preview, and caching pipelines | pending |
+| 3 | Specify the composition DSL, timing model, and compatibility contract | in_progress |
+| 4 | Design the rendering, media, audio, preview, and caching pipelines | in_progress |
 | 5 | Define MVP milestones, benchmark corpus, tests, packaging, and governance | pending |
 | 6 | Build and benchmark a minimal technical spike | in_progress |
 
@@ -57,6 +57,19 @@ Design and validate an open-source, deterministic, agent-first video composition
 
 Milestones 1–4 now have working implementations and automated tests. The current CPU renderer executes the same typed frame plan exposed by `inspect-plan`; the legacy convenience entry point compiles before executing.
 
+## Pre-CUDA implementation track
+
+The current implementation session will complete and verify these checkpoints in order:
+
+1. [complete] Optional FFmpeg build integration plus a structured `probe` command.
+2. Exact rational mapping from composition frames to media timestamps and deterministic single-frame CPU decode.
+3. Versioned video assets/layers, typed decode/composite plan operations, and CPU video compositing.
+4. Direct encoded-video output without intermediate PPM files in the normal render path.
+5. Per-stage profiling, a reproducible media fixture, and benchmark commands/results suitable for establishing a CPU baseline.
+6. Documentation, failure-path tests, builds with FFmpeg disabled, and a final focused review.
+
+CUDA remains explicitly out of scope for this track. The CPU/media baseline must be measured before GPU work begins.
+
 ## Errors Encountered
 | Error | Attempt | Resolution |
 |---|---|---|
@@ -65,3 +78,4 @@ Milestones 1–4 now have working implementations and automated tests. The curre
 | Local CMake configure requested Ninja, but Ninja is not installed | 1 | Removed the incomplete generated build directory and used CMake's default generator. |
 | AppleClang rejected `[[nodiscard]]` before friend comparison declarations | 1 | Removed the non-essential attributes from the friend operators. |
 | A single patch attempted to delete and re-add the CLI file | 1 | Kept the existing file and applied a normal update in a separate patch. |
+| FFmpeg integration patch targeted `CMakeLists.txt` twice in one patch | 1 | No files changed; consolidated all CMake edits into one update operation. |

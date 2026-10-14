@@ -13,14 +13,22 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        include:
+          - os: ubuntu-latest
+            ffmpeg: ON
+          - os: macos-latest
+            ffmpeg: OFF
     runs-on: ${{ matrix.os }}
 
     steps:
       - uses: actions/checkout@v7
 
+      - name: Install FFmpeg development libraries
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libavformat-dev libavcodec-dev libavutil-dev libswscale-dev
+
       - name: Configure
-        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -DCHROMA_ENABLE_FFMPEG=${{ matrix.ffmpeg }}
 
       - name: Build
         run: cmake --build build --parallel

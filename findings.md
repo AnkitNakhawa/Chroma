@@ -81,3 +81,4 @@ The project should be a headless native motion-graphics runtime for AI-generated
 
 ## Repository implementation notes
 - The first GitHub Actions run passed on both Ubuntu and macOS. GitHub warned that `actions/checkout@v4` used deprecated Node 20; the current upstream release discovered through the GitHub API was v7.0.1, so the workflow moved to the v7 major line.
+- The current macOS development host exposes FFmpeg 8.0.1 through `pkg-config`: libavformat 62.3.100, libavcodec 62.11.100, libavutil 60.8.100, and libswscale 9.1.100. The implementation must remain compatible with CI environments that do not install these development libraries by keeping media support optional.

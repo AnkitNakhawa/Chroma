@@ -131,6 +131,8 @@ Backend selection is capability-based. Unsupported operations may create a trans
 
 FFmpeg libraries provide demuxing, decoding, encoding, audio resampling, and muxing. The CUDA path should use FFmpeg hardware frames so supported videos can travel through NVDEC, CUDA effects, and NVENC without unnecessary CPU readback.
 
+The first implemented media boundary discovers libavformat, libavcodec, libavutil, and libswscale through `pkg-config`. It can be disabled at configure time, and all public metadata uses Chroma-owned strings, integers, optionals, and exact rationals. No FFmpeg structs or enum types cross the public header boundary. The `probe` command currently exposes the selected video stream's dimensions, codec, pixel format, time base, frame rate, duration, and reported frame count as JSON.
+
 Audio remains CPU-side in v1 and is scheduled independently from video until muxing.
 
 ### 8. Color and alpha semantics
@@ -163,6 +165,7 @@ Proposed commands:
 chroma validate composition.json
 chroma inspect composition.json
 chroma inspect-plan composition.json --frame 120
+chroma probe input.mp4
 chroma render composition.json --output video.mp4
 chroma frame composition.json --frame 120 --output frame.png
 chroma benchmark composition.json

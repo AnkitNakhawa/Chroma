@@ -10,6 +10,7 @@
 #include "chroma/core/composition.hpp"
 #include "chroma/core/execution_plan.hpp"
 #include "chroma/core/render.hpp"
+#include "chroma/media/media.hpp"
 
 namespace {
 
@@ -35,6 +36,7 @@ void print_usage(std::ostream& output) {
          << "  chroma --version\n"
          << "  chroma validate <composition.json> [--json]\n"
          << "  chroma inspect <composition.json>\n"
+         << "  chroma probe <media-file>\n"
          << "  chroma inspect-plan <composition.json> --frame <index>\n"
          << "  chroma frame <composition.json> --frame <index> --output <frame.ppm>\n";
 }
@@ -116,6 +118,16 @@ int main(int argc, char** argv) {
               << "duration: " << composition.range().length() << " frames\n"
               << "layers: " << composition.layers().size() << '\n';
     return 0;
+  }
+
+  if (argc == 3 && std::string_view(argv[1]) == "probe") {
+    try {
+      std::cout << chroma::media_info_json(chroma::probe_media(argv[2])) << '\n';
+      return 0;
+    } catch (const std::exception& error) {
+      std::cerr << "probe failed: " << error.what() << '\n';
+      return input_error;
+    }
   }
 
   if (argc == 5 && std::string_view(argv[1]) == "inspect-plan" &&

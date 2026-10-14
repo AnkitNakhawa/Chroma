@@ -39,6 +39,18 @@ cmake --build build --parallel
 ctest --test-dir build --output-on-failure
 ```
 
+FFmpeg media support is enabled automatically when its development libraries are discoverable through `pkg-config`. A core-only build remains supported:
+
+```sh
+cmake -S . -B build -DCHROMA_ENABLE_FFMPEG=OFF
+```
+
+Inspect a media file without exposing FFmpeg types through Chroma's public API:
+
+```sh
+./build/chroma probe input.mp4
+```
+
 Render the current solid-layer example:
 
 ```sh

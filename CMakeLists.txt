@@ -8,6 +8,7 @@ project(
 )
 
 option(CHROMA_BUILD_TESTS "Build Chroma tests" ON)
+option(CHROMA_ENABLE_FFMPEG "Enable FFmpeg media support when development libraries are available" ON)
 
 include(FetchContent)
 find_package(nlohmann_json 3.11.3 QUIET)
@@ -21,12 +22,34 @@ if(NOT nlohmann_json_FOUND)
   FetchContent_MakeAvailable(nlohmann_json)
 endif()
 
+set(CHROMA_HAS_FFMPEG 0)
+if(CHROMA_ENABLE_FFMPEG)
+  find_package(PkgConfig QUIET)
+  if(PkgConfig_FOUND)
+    pkg_check_modules(CHROMA_FFMPEG QUIET IMPORTED_TARGET
+      libavformat
+      libavcodec
+      libavutil
+      libswscale
+    )
+  endif()
+  if(TARGET PkgConfig::CHROMA_FFMPEG)
+    set(CHROMA_HAS_FFMPEG 1)
+    message(STATUS "Chroma FFmpeg media support: enabled")
+  else()
+    message(WARNING "FFmpeg development libraries were not found; media support is disabled")
+  endif()
+else()
+  message(STATUS "Chroma FFmpeg media support: disabled by configuration")
+endif()
+
 add_library(chroma_core
   src/core/composition.cpp
   src/core/execution_plan.cpp
   src/core/rational.cpp
   src/core/render.cpp
   src/core/timeline.cpp
+  src/media/media.cpp
 )
 add_library(chroma::core ALIAS chroma_core)
 
@@ -37,6 +60,10 @@ target_include_directories(chroma_core
     $<INSTALL_INTERFACE:include>
 )
 target_link_libraries(chroma_core PRIVATE nlohmann_json::nlohmann_json)
+target_compile_definitions(chroma_core PRIVATE CHROMA_HAS_FFMPEG=${CHROMA_HAS_FFMPEG})
+if(CHROMA_HAS_FFMPEG)
+  target_link_libraries(chroma_core PRIVATE PkgConfig::CHROMA_FFMPEG)
+endif()
 
 if(MSVC)
   target_compile_options(chroma_core PRIVATE /W4 /permissive-)
@@ -67,6 +94,10 @@ if(CHROMA_BUILD_TESTS)
   add_executable(chroma_execution_plan_tests tests/execution_plan_tests.cpp)
   target_link_libraries(chroma_execution_plan_tests PRIVATE chroma::core)
   add_test(NAME chroma_execution_plan_tests COMMAND chroma_execution_plan_tests)
+
+  add_executable(chroma_media_tests tests/media_tests.cpp)
+  target_link_libraries(chroma_media_tests PRIVATE chroma::core)
+  add_test(NAME chroma_media_tests COMMAND chroma_media_tests)
 
   add_test(
     NAME chroma_cli_validates_example
