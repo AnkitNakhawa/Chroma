@@ -24,6 +24,7 @@ endif()
 add_library(chroma_core
   src/core/composition.cpp
   src/core/rational.cpp
+  src/core/render.cpp
   src/core/timeline.cpp
 )
 add_library(chroma::core ALIAS chroma_core)
@@ -57,6 +58,10 @@ if(CHROMA_BUILD_TESTS)
   add_executable(chroma_composition_tests tests/composition_tests.cpp)
   target_link_libraries(chroma_composition_tests PRIVATE chroma::core)
   add_test(NAME chroma_composition_tests COMMAND chroma_composition_tests)
+
+  add_executable(chroma_render_tests tests/render_tests.cpp)
+  target_link_libraries(chroma_render_tests PRIVATE chroma::core)
+  add_test(NAME chroma_render_tests COMMAND chroma_render_tests)
 
   add_test(
     NAME chroma_cli_validates_example

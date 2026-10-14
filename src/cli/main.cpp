@@ -1,11 +1,14 @@
+#include <cstdint>
 #include <fstream>
 #include <iostream>
 #include <optional>
 #include <sstream>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 
 #include "chroma/core/composition.hpp"
+#include "chroma/core/render.hpp"
 
 namespace {
 
@@ -30,7 +33,8 @@ void print_usage(std::ostream& output) {
   output << "Usage:\n"
          << "  chroma --version\n"
          << "  chroma validate <composition.json> [--json]\n"
-         << "  chroma inspect <composition.json>\n";
+         << "  chroma inspect <composition.json>\n"
+         << "  chroma frame <composition.json> --frame <index> --output <frame.ppm>\n";
 }
 
 void print_diagnostics(const std::vector<chroma::Diagnostic>& diagnostics, bool json) {
@@ -96,6 +100,46 @@ int main(int argc, char** argv) {
               << composition.frame_rate().value().denominator() << '\n'
               << "duration: " << composition.range().length() << " frames\n"
               << "layers: " << composition.layers().size() << '\n';
+    return 0;
+  }
+
+  if (argc == 7 && std::string_view(argv[1]) == "frame" &&
+      std::string_view(argv[3]) == "--frame" && std::string_view(argv[5]) == "--output") {
+    chroma::CompositionParseResult result;
+    if (const auto status = parse_file(argv[2], result); status != 0) {
+      return status;
+    }
+    if (!result.valid()) {
+      print_diagnostics(result.diagnostics, false);
+      return invalid_composition;
+    }
+
+    std::int64_t frame_number = 0;
+    try {
+      std::size_t consumed = 0;
+      frame_number = std::stoll(argv[4], &consumed);
+      if (consumed != std::string_view(argv[4]).size()) {
+        throw std::invalid_argument("trailing characters");
+      }
+    } catch (const std::exception&) {
+      std::cerr << "invalid frame index: " << argv[4] << '\n';
+      return usage_error;
+    }
+
+    try {
+      const auto surface =
+          chroma::render_frame_cpu(*result.composition, chroma::FrameIndex(frame_number));
+      std::ofstream output(argv[6], std::ios::binary);
+      if (!output) {
+        std::cerr << "unable to open output: " << argv[6] << '\n';
+        return input_error;
+      }
+      chroma::write_ppm(surface, output);
+    } catch (const std::exception& error) {
+      std::cerr << "render failed: " << error.what() << '\n';
+      return input_error;
+    }
+    std::cout << "rendered frame " << frame_number << " to " << argv[6] << '\n';
     return 0;
   }
 
