@@ -23,3 +23,4 @@
 - Migrated the CPU reference renderer onto the execution-plan boundary and retained `render_frame_cpu` as a compile-and-execute convenience API.
 - Added `chroma inspect-plan <composition> --frame <index>` so agents and developers can inspect the exact optimized operations as deterministic JSON.
 - Hardened direct execution-plan construction so invalid dimensions, colors, source IDs, and repeated clear operations fail before reaching a backend.
+- Added and exercised a 60-frame layered demo composition. Chroma rendered every frame, the plan correctly activated the overlay only for frames 15–44, and FFmpeg assembled the output into a verified 2-second 320x180 H.264 demo at 30 fps.

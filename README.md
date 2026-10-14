@@ -51,6 +51,13 @@ Inspect the optimized plan for a frame:
 ./build/chroma inspect-plan examples/solid.json --frame 0
 ```
 
+The layered example exercises frame ranges and alpha compositing. Its red overlay is inactive at frame 0, active over the blue background at frame 30, and inactive again at frame 50:
+
+```sh
+./build/chroma inspect-plan examples/layered.json --frame 30
+./build/chroma frame examples/layered.json --frame 30 --output frame-30.ppm
+```
+
 ## License
 
 Apache-2.0.

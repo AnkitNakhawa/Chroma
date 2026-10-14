@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "canvas": {
+    "width": 320,
+    "height": 180,
+    "frame_rate": {
+      "numerator": 30,
+      "denominator": 1
+    },
+    "duration_frames": 60
+  },
+  "layers": [
+    {
+      "id": "blue-background",
+      "type": "solid",
+      "start_frame": 0,
+      "end_frame": 60,
+      "color": [0, 0, 1, 1]
+    },
+    {
+      "id": "red-overlay",
+      "type": "solid",
+      "start_frame": 15,
+      "end_frame": 45,
+      "color": [1, 0, 0, 0.5]
+    }
+  ]
+}
