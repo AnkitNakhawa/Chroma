@@ -93,6 +93,8 @@ Plans are internal and may change between engine versions. The public compositio
 
 The current spike implements the first narrow form of this boundary. Compiling a frame emits a typed, ordered list beginning with a transparent clear followed by one `CompositeSolid` operation for each active layer. Inactive layers are removed during compilation, and every emitted operation retains its composition layer ID. Plan construction enforces bounded surface dimensions, normalized colors, valid source IDs, and a single initial clear so malformed plans fail before execution. Surface lifetimes, backend placement, media operations, and dependencies will extend this representation as those features land.
 
+Video layers now compile to `CompositeVideoFrame` operations containing the resolved asset path, exact source time, opacity, and diagnostic source ID. These operations remain in document order with solid layers. The CPU executor decodes and composites them; for now it rejects source dimensions that differ from the canvas rather than applying an implicit scaling policy.
+
 ### 5. Runtime and scheduler
 
 The runtime owns:

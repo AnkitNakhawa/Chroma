@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "canvas": {
+    "width": 64,
+    "height": 36,
+    "frame_rate": {"numerator": 30, "denominator": 1},
+    "duration_frames": 60
+  },
+  "assets": [
+    {
+      "id": "fixture",
+      "type": "video",
+      "path": "@CHROMA_MEDIA_FIXTURE@"
+    }
+  ],
+  "layers": [
+    {
+      "id": "video",
+      "type": "video",
+      "asset": "fixture",
+      "start_frame": 0,
+      "end_frame": 60,
+      "source_start_frame": 0,
+      "opacity": 1.0
+    }
+  ]
+}

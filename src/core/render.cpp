@@ -7,6 +7,8 @@
 #include <stdexcept>
 #include <variant>
 
+#include "chroma/media/decode.hpp"
+
 namespace chroma {
 namespace {
 
@@ -76,16 +78,37 @@ Pixel composite_over(Pixel source, Pixel destination) noexcept {
 }
 
 Surface execute_cpu(const ExecutionPlan& plan) {
-  Pixel result{};
+  Surface result(plan.width(), plan.height());
   for (const auto& operation : plan.operations()) {
     if (const auto* clear = std::get_if<ClearOperation>(&operation)) {
-      result = premultiply(clear->color);
+      std::fill(result.pixels().begin(), result.pixels().end(), premultiply(clear->color));
       continue;
     }
-    const auto& solid = std::get<CompositeSolidOperation>(operation);
-    result = composite_over(premultiply(solid.color), result);
+    if (const auto* solid = std::get_if<CompositeSolidOperation>(&operation)) {
+      const auto source = premultiply(solid->color);
+      for (auto& destination : result.pixels()) {
+        destination = composite_over(source, destination);
+      }
+      continue;
+    }
+
+    const auto& video = std::get<CompositeVideoFrameOperation>(operation);
+    const auto decoded = decode_video_frame(video.asset_path, video.source_time);
+    if (decoded.surface.width() != result.width() ||
+        decoded.surface.height() != result.height()) {
+      throw std::runtime_error("video layer dimensions must match the composition canvas");
+    }
+    const auto opacity = static_cast<float>(video.opacity);
+    for (std::size_t index = 0; index < result.size(); ++index) {
+      auto source = decoded.surface.pixels()[index];
+      source.red *= opacity;
+      source.green *= opacity;
+      source.blue *= opacity;
+      source.alpha *= opacity;
+      result.pixels()[index] = composite_over(source, result.pixels()[index]);
+    }
   }
-  return Surface(plan.width(), plan.height(), result);
+  return result;
 }
 
 Surface render_frame_cpu(const Composition& composition, FrameIndex frame) {

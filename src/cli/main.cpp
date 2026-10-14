@@ -60,7 +60,7 @@ int parse_file(const char* path, chroma::CompositionParseResult& result) {
     std::cerr << "unable to read composition: " << path << '\n';
     return input_error;
   }
-  result = chroma::parse_composition(*source);
+  result = chroma::parse_composition(*source, std::filesystem::path(path).parent_path());
   return 0;
 }
 

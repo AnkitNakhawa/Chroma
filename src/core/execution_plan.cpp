@@ -3,6 +3,7 @@
 #include <cmath>
 #include <stdexcept>
 #include <utility>
+#include <limits>
 
 #include <nlohmann/json.hpp>
 
@@ -11,6 +12,17 @@ namespace {
 
 nlohmann::json color_json(const Color& color) {
   return nlohmann::json::array({color.red, color.green, color.blue, color.alpha});
+}
+
+std::int64_t checked_source_frame(const VideoLayer& layer, FrameIndex frame) {
+  using Wide = __int128_t;
+  const auto value = static_cast<Wide>(layer.source_start.value()) +
+                     static_cast<Wide>(frame.value()) -
+                     static_cast<Wide>(layer.range.start().value());
+  if (value < 0 || value > static_cast<Wide>(std::numeric_limits<std::int64_t>::max())) {
+    throw std::overflow_error("video source frame is outside the supported range");
+  }
+  return static_cast<std::int64_t>(value);
 }
 
 bool valid_color(const Color& color) noexcept {
@@ -48,12 +60,28 @@ ExecutionPlan::ExecutionPlan(std::int32_t width, std::int32_t height, FrameIndex
       continue;
     }
 
-    const auto& solid = std::get<CompositeSolidOperation>(operation);
-    if (solid.source_id.empty() || solid.source_id.size() > 128) {
+    const auto& source_id = std::visit(
+        [](const auto& typed_operation) -> const std::string& {
+          if constexpr (requires { typed_operation.source_id; }) {
+            return typed_operation.source_id;
+          } else {
+            throw std::logic_error("clear operation was handled before source validation");
+          }
+        },
+        operation);
+    if (source_id.empty() || source_id.size() > 128) {
       throw std::invalid_argument("execution plan source id is invalid");
     }
-    if (!valid_color(solid.color)) {
-      throw std::invalid_argument("execution plan solid color is invalid");
+    if (const auto* solid = std::get_if<CompositeSolidOperation>(&operation)) {
+      if (!valid_color(solid->color)) {
+        throw std::invalid_argument("execution plan solid color is invalid");
+      }
+      continue;
+    }
+    const auto& video = std::get<CompositeVideoFrameOperation>(operation);
+    if (video.asset_path.empty() || video.source_time < Rational(0) ||
+        !std::isfinite(video.opacity) || video.opacity < 0.0 || video.opacity > 1.0) {
+      throw std::invalid_argument("execution plan video operation is invalid");
     }
   }
 }
@@ -66,10 +94,27 @@ ExecutionPlan compile_frame(const Composition& composition, FrameIndex frame) {
   std::vector<RenderOperation> operations;
   operations.reserve(composition.layers().size() + 1);
   operations.emplace_back(ClearOperation{.color = Color{0.0, 0.0, 0.0, 0.0}});
-  for (const auto& layer : composition.layers()) {
-    if (layer.range.contains(frame)) {
-      operations.emplace_back(
-          CompositeSolidOperation{.source_id = layer.id, .color = layer.color});
+  for (const auto& layer_variant : composition.layers()) {
+    if (const auto* solid = std::get_if<SolidLayer>(&layer_variant)) {
+      if (solid->range.contains(frame)) {
+        operations.emplace_back(
+            CompositeSolidOperation{.source_id = solid->id, .color = solid->color});
+      }
+      continue;
+    }
+
+    const auto& video = std::get<VideoLayer>(layer_variant);
+    if (video.range.contains(frame)) {
+      const auto* asset = composition.find_video_asset(video.asset_id);
+      if (asset == nullptr) {
+        throw std::logic_error("validated video layer references a missing asset");
+      }
+      const auto source_frame = checked_source_frame(video, frame);
+      operations.emplace_back(CompositeVideoFrameOperation{
+          .source_id = video.id,
+          .asset_path = asset->path,
+          .source_time = composition.frame_rate().time_at(FrameIndex(source_frame)),
+          .opacity = video.opacity});
     }
   }
 
@@ -83,10 +128,20 @@ std::string execution_plan_json(const ExecutionPlan& plan) {
       operations.push_back({{"op", "clear"}, {"color", color_json(clear->color)}});
       continue;
     }
-    const auto& solid = std::get<CompositeSolidOperation>(operation);
-    operations.push_back({{"op", "composite_solid"},
-                          {"source_id", solid.source_id},
-                          {"color", color_json(solid.color)}});
+    if (const auto* solid = std::get_if<CompositeSolidOperation>(&operation)) {
+      operations.push_back({{"op", "composite_solid"},
+                            {"source_id", solid->source_id},
+                            {"color", color_json(solid->color)}});
+      continue;
+    }
+    const auto& video = std::get<CompositeVideoFrameOperation>(operation);
+    operations.push_back(
+        {{"op", "composite_video_frame"},
+         {"source_id", video.source_id},
+         {"asset_path", video.asset_path.string()},
+         {"source_time", {{"numerator", video.source_time.numerator()},
+                          {"denominator", video.source_time.denominator()}}},
+         {"opacity", video.opacity}});
   }
 
   return nlohmann::json{{"frame", plan.frame().value()},

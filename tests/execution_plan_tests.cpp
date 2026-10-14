@@ -129,6 +129,30 @@ void plans_reject_invalid_operations() {
       std::invalid_argument);
 }
 
+void video_layers_compile_to_exact_source_times() {
+  const chroma::Composition composition(
+      1, 64, 36, chroma::FrameRate(chroma::Rational(30)),
+      chroma::FrameRange(chroma::FrameIndex(0), chroma::FrameIndex(60)),
+      {chroma::VideoAsset{.id = "clip", .path = "clip.mkv"}},
+      {chroma::VideoLayer{
+          .id = "video",
+          .range = chroma::FrameRange(chroma::FrameIndex(10), chroma::FrameIndex(40)),
+          .asset_id = "clip",
+          .source_start = chroma::FrameIndex(3),
+          .opacity = 0.75}});
+  const auto plan = chroma::compile_frame(composition, chroma::FrameIndex(13));
+  CHECK(plan.operations().size() == 2);
+  const auto* video =
+      std::get_if<chroma::CompositeVideoFrameOperation>(&plan.operations().back());
+  CHECK(video != nullptr);
+  if (video != nullptr) {
+    CHECK(video->source_id == "video");
+    CHECK(video->asset_path == "clip.mkv");
+    CHECK(video->source_time == chroma::Rational(1, 5));
+    CHECK(video->opacity == 0.75);
+  }
+}
+
 }  // namespace
 
 int main() {
@@ -139,6 +163,7 @@ int main() {
   plans_require_an_initial_clear();
   plans_reject_unsafe_dimensions();
   plans_reject_invalid_operations();
+  video_layers_compile_to_exact_source_times();
 
   if (failures != 0) {
     std::cerr << failures << " test assertion(s) failed\n";

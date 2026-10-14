@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <filesystem>
 #include <string>
 #include <variant>
 #include <vector>
@@ -22,7 +23,18 @@ struct CompositeSolidOperation {
   friend bool operator==(const CompositeSolidOperation&, const CompositeSolidOperation&) = default;
 };
 
-using RenderOperation = std::variant<ClearOperation, CompositeSolidOperation>;
+struct CompositeVideoFrameOperation {
+  std::string source_id;
+  std::filesystem::path asset_path;
+  Rational source_time;
+  double opacity;
+
+  friend bool operator==(const CompositeVideoFrameOperation&,
+                         const CompositeVideoFrameOperation&) = default;
+};
+
+using RenderOperation =
+    std::variant<ClearOperation, CompositeSolidOperation, CompositeVideoFrameOperation>;
 
 class ExecutionPlan {
  public:

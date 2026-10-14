@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "canvas": {
+    "width": 1920,
+    "height": 1080,
+    "frame_rate": {"numerator": 30, "denominator": 1},
+    "duration_frames": 60
+  },
+  "assets": [
+    {"id": "clip", "type": "video", "path": "input.mp4"}
+  ],
+  "layers": [
+    {
+      "id": "video",
+      "type": "video",
+      "asset": "clip",
+      "start_frame": 0,
+      "end_frame": 60,
+      "source_start_frame": 0,
+      "opacity": 1.0
+    }
+  ]
+}

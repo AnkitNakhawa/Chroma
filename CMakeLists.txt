@@ -90,7 +90,6 @@ if(CHROMA_BUILD_TESTS)
 
   add_executable(chroma_render_tests tests/render_tests.cpp)
   target_link_libraries(chroma_render_tests PRIVATE chroma::core)
-  add_test(NAME chroma_render_tests COMMAND chroma_render_tests)
 
   add_executable(chroma_execution_plan_tests tests/execution_plan_tests.cpp)
   target_link_libraries(chroma_execution_plan_tests PRIVATE chroma::core)
@@ -114,14 +113,27 @@ if(CHROMA_BUILD_TESTS)
       VERBATIM
     )
     add_custom_target(chroma_media_fixture DEPENDS ${CHROMA_MEDIA_FIXTURE})
+    set(CHROMA_VIDEO_COMPOSITION ${CMAKE_CURRENT_BINARY_DIR}/fixtures/video-composition.json)
+    configure_file(tests/fixtures/video-composition.json.in ${CHROMA_VIDEO_COMPOSITION} @ONLY)
     add_dependencies(chroma_media_tests chroma_media_fixture)
+    add_dependencies(chroma_render_tests chroma_media_fixture)
+    add_test(NAME chroma_render_tests COMMAND chroma_render_tests ${CHROMA_MEDIA_FIXTURE})
     add_test(NAME chroma_media_tests COMMAND chroma_media_tests ${CHROMA_MEDIA_FIXTURE})
     add_test(NAME chroma_cli_probes_media_fixture
              COMMAND chroma_cli probe ${CHROMA_MEDIA_FIXTURE})
     set_tests_properties(chroma_cli_probes_media_fixture PROPERTIES
       PASS_REGULAR_EXPRESSION "ffv1"
     )
+    add_test(NAME chroma_cli_inspects_video_plan
+             COMMAND chroma_cli inspect-plan ${CHROMA_VIDEO_COMPOSITION} --frame 30)
+    set_tests_properties(chroma_cli_inspects_video_plan PROPERTIES
+      PASS_REGULAR_EXPRESSION "composite_video_frame"
+    )
+    add_test(NAME chroma_cli_renders_video_frame
+             COMMAND chroma_cli frame ${CHROMA_VIDEO_COMPOSITION} --frame 30
+                     --output ${CMAKE_CURRENT_BINARY_DIR}/fixtures/rendered-video-frame.ppm)
   else()
+    add_test(NAME chroma_render_tests COMMAND chroma_render_tests)
     add_test(NAME chroma_media_tests COMMAND chroma_media_tests)
   endif()
 
@@ -133,6 +145,11 @@ if(CHROMA_BUILD_TESTS)
   add_test(
     NAME chroma_cli_validates_layered_example
     COMMAND chroma_cli validate ${CMAKE_CURRENT_SOURCE_DIR}/examples/layered.json
+  )
+
+  add_test(
+    NAME chroma_cli_validates_video_example
+    COMMAND chroma_cli validate ${CMAKE_CURRENT_SOURCE_DIR}/examples/video.json
   )
 
   add_test(

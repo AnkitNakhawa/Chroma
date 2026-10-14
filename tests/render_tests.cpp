@@ -131,9 +131,28 @@ void direct_compositions_enforce_invariants() {
       std::invalid_argument);
 }
 
+void video_layers_decode_into_the_cpu_plan(const char* path) {
+  const chroma::Composition composition(
+      1, 64, 36, chroma::FrameRate(chroma::Rational(30)),
+      chroma::FrameRange(chroma::FrameIndex(0), chroma::FrameIndex(60)),
+      {chroma::VideoAsset{.id = "clip", .path = path}},
+      {chroma::VideoLayer{
+          .id = "video",
+          .range = chroma::FrameRange(chroma::FrameIndex(0), chroma::FrameIndex(60)),
+          .asset_id = "clip",
+          .source_start = chroma::FrameIndex(0),
+          .opacity = 1.0}});
+  const auto blue = chroma::render_frame_cpu(composition, chroma::FrameIndex(0)).pixel(0, 0);
+  const auto red = chroma::render_frame_cpu(composition, chroma::FrameIndex(30)).pixel(0, 0);
+  CHECK(blue.blue > 0.8F);
+  CHECK(blue.red < 0.05F);
+  CHECK(red.red > 0.8F);
+  CHECK(red.blue < 0.05F);
+}
+
 }  // namespace
 
-int main() {
+int main(int argc, char** argv) {
   surface_checks_coordinates();
   inactive_layers_are_transparent();
   layers_composite_in_document_order();
@@ -141,6 +160,9 @@ int main() {
   frames_outside_the_composition_are_rejected();
   compiled_plan_execution_matches_the_render_convenience_api();
   direct_compositions_enforce_invariants();
+  if (argc == 2) {
+    video_layers_decode_into_the_cpu_plan(argv[1]);
+  }
 
   if (failures != 0) {
     std::cerr << failures << " test assertion(s) failed\n";

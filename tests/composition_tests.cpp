@@ -1,6 +1,7 @@
 #include <cstdlib>
 #include <iostream>
 #include <string_view>
+#include <variant>
 
 #include "chroma/core/composition.hpp"
 
@@ -59,7 +60,64 @@ void valid_composition_is_normalized() {
   CHECK(result.composition->frame_rate().value() == chroma::Rational(30000, 1001));
   CHECK(result.composition->range().length() == 300);
   CHECK(result.composition->layers().size() == 1);
-  CHECK(result.composition->layers().front().id == "background");
+  CHECK(std::get<chroma::SolidLayer>(result.composition->layers().front()).id == "background");
+}
+
+void video_assets_and_layers_are_normalized() {
+  constexpr std::string_view source = R"json(
+  {
+    "schema_version": 1,
+    "canvas": {
+      "width": 64,
+      "height": 36,
+      "frame_rate": {"numerator": 30, "denominator": 1},
+      "duration_frames": 60
+    },
+    "assets": [
+      {"id": "clip", "type": "video", "path": "media/clip.mkv"}
+    ],
+    "layers": [
+      {"id": "video", "type": "video", "asset": "clip", "start_frame": 10,
+       "end_frame": 40, "source_start_frame": 3, "opacity": 0.75}
+    ]
+  }
+  )json";
+  const auto result = chroma::parse_composition(source, "/project");
+  CHECK(result.valid());
+  if (!result.composition) {
+    return;
+  }
+  CHECK(result.composition->assets().size() == 1);
+  CHECK(result.composition->assets().front().path == "/project/media/clip.mkv");
+  const auto* video = std::get_if<chroma::VideoLayer>(&result.composition->layers().front());
+  CHECK(video != nullptr);
+  if (video != nullptr) {
+    CHECK(video->asset_id == "clip");
+    CHECK(video->source_start == chroma::FrameIndex(3));
+    CHECK(video->opacity == 0.75);
+  }
+}
+
+void invalid_video_references_are_reported() {
+  constexpr std::string_view source = R"json(
+  {
+    "schema_version": 1,
+    "canvas": {
+      "width": 64,
+      "height": 36,
+      "frame_rate": {"numerator": 30, "denominator": 1},
+      "duration_frames": 10
+    },
+    "layers": [
+      {"id": "video", "type": "video", "asset": "missing", "start_frame": 0,
+       "end_frame": 10, "opacity": 2}
+    ]
+  }
+  )json";
+  const auto result = chroma::parse_composition(source);
+  CHECK(!result.valid());
+  CHECK(has_code(result, "layer.unknown_asset"));
+  CHECK(has_code(result, "layer.invalid_opacity"));
 }
 
 void invalid_json_is_reported() {
@@ -145,6 +203,8 @@ int main() {
   duplicate_and_out_of_bounds_layers_are_reported();
   diagnostics_are_machine_readable();
   oversized_canvases_are_rejected_before_rendering();
+  video_assets_and_layers_are_normalized();
+  invalid_video_references_are_reported();
 
   if (failures != 0) {
     std::cerr << failures << " test assertion(s) failed\n";

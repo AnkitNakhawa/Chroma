@@ -63,7 +63,7 @@ The current implementation session will complete and verify these checkpoints in
 
 1. [complete] Optional FFmpeg build integration plus a structured `probe` command.
 2. [complete] Exact rational mapping from composition frames to media timestamps and deterministic single-frame CPU decode.
-3. Versioned video assets/layers, typed decode/composite plan operations, and CPU video compositing.
+3. [complete] Versioned video assets/layers, typed decode/composite plan operations, and CPU video compositing.
 4. Direct encoded-video output without intermediate PPM files in the normal render path.
 5. Per-stage profiling, a reproducible media fixture, and benchmark commands/results suitable for establishing a CPU baseline.
 6. Documentation, failure-path tests, builds with FFmpeg disabled, and a final focused review.

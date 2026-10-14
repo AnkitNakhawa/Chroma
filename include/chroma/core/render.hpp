@@ -28,6 +28,7 @@ class Surface {
   [[nodiscard]] const Pixel& pixel(std::int32_t x, std::int32_t y) const;
   [[nodiscard]] Pixel& pixel(std::int32_t x, std::int32_t y);
   [[nodiscard]] const std::vector<Pixel>& pixels() const noexcept { return pixels_; }
+  [[nodiscard]] std::vector<Pixel>& pixels() noexcept { return pixels_; }
 
  private:
   [[nodiscard]] std::size_t offset(std::int32_t x, std::int32_t y) const;
