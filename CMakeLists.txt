@@ -23,6 +23,7 @@ endif()
 
 add_library(chroma_core
   src/core/composition.cpp
+  src/core/execution_plan.cpp
   src/core/rational.cpp
   src/core/render.cpp
   src/core/timeline.cpp
@@ -62,6 +63,10 @@ if(CHROMA_BUILD_TESTS)
   add_executable(chroma_render_tests tests/render_tests.cpp)
   target_link_libraries(chroma_render_tests PRIVATE chroma::core)
   add_test(NAME chroma_render_tests COMMAND chroma_render_tests)
+
+  add_executable(chroma_execution_plan_tests tests/execution_plan_tests.cpp)
+  target_link_libraries(chroma_execution_plan_tests PRIVATE chroma::core)
+  add_test(NAME chroma_execution_plan_tests COMMAND chroma_execution_plan_tests)
 
   add_test(
     NAME chroma_cli_validates_example

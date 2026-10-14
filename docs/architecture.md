@@ -91,6 +91,8 @@ The compiler emits an explicit plan rather than letting graph nodes recursively 
 
 Plans are internal and may change between engine versions. The public composition format is versioned separately.
 
+The current spike implements the first narrow form of this boundary. Compiling a frame emits a typed, ordered list beginning with a transparent clear followed by one `CompositeSolid` operation for each active layer. Inactive layers are removed during compilation, and every emitted operation retains its composition layer ID. Surface lifetimes, backend placement, media operations, and dependencies will extend this representation as those features land.
+
 ### 5. Runtime and scheduler
 
 The runtime owns:

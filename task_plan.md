@@ -50,9 +50,10 @@ Design and validate an open-source, deterministic, agent-first video composition
 1. Build system, exact rational timeline primitives, and unit-test harness.
 2. Experimental versioned composition parser, structured diagnostics, and `validate`/`inspect` CLI commands.
 3. Minimal CPU surface and solid-layer frame renderer with golden tests.
-4. FFmpeg media probing and decode boundary behind an optional build feature.
-5. Execution-plan skeleton, profiling events, and a benchmark fixture.
-6. Linux CUDA spike for a narrow decode/effect/composite/encode chain.
+4. Typed per-frame execution-plan compiler with dead-layer elimination and stable inspection output.
+5. FFmpeg media probing and decode boundary behind an optional build feature.
+6. Profiling events and a benchmark fixture.
+7. Linux CUDA spike for a narrow decode/effect/composite/encode chain.
 
 ## Errors Encountered
 | Error | Attempt | Resolution |
