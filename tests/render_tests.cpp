@@ -131,6 +131,53 @@ void direct_compositions_enforce_invariants() {
       std::invalid_argument);
 }
 
+void cpu_effects_apply_in_program_order() {
+  chroma::Surface surface(3, 1);
+  surface.pixel(0, 0) =
+      chroma::Pixel{.red = 1.0F, .green = 0.0F, .blue = 0.0F, .alpha = 1.0F};
+  const auto shifted = chroma::apply_effect_program_cpu(
+      std::move(surface),
+      chroma::EffectProgram({chroma::Transform2DEffect{.m02 = 1.0},
+                             chroma::CropEffect{.x = 1, .y = 0, .width = 1, .height = 1},
+                             chroma::OpacityEffect{.opacity = 0.5}}));
+  CHECK(shifted.pixel(0, 0) == chroma::Pixel{});
+  CHECK(near(shifted.pixel(1, 0).red, 0.5F));
+  CHECK(near(shifted.pixel(1, 0).alpha, 0.5F));
+  CHECK(shifted.pixel(2, 0) == chroma::Pixel{});
+}
+
+void color_matrix_operates_on_straight_linear_rgba() {
+  const chroma::ColorMatrixEffect red_to_green{
+      .values = {0.0, 0.0, 0.0, 0.0, 0.0,
+                 1.0, 0.0, 0.0, 0.0, 0.0,
+                 0.0, 0.0, 0.0, 0.0, 0.0,
+                 0.0, 0.0, 0.0, 1.0, 0.0}};
+  const chroma::Surface surface(
+      1, 1, chroma::Pixel{.red = 0.5F, .green = 0.0F, .blue = 0.0F, .alpha = 0.5F});
+  const auto converted = chroma::apply_effect_program_cpu(
+      surface, chroma::EffectProgram({red_to_green}));
+  CHECK(near(converted.pixel(0, 0).red, 0.0F));
+  CHECK(near(converted.pixel(0, 0).green, 0.5F));
+  CHECK(near(converted.pixel(0, 0).blue, 0.0F));
+  CHECK(near(converted.pixel(0, 0).alpha, 0.5F));
+}
+
+void singular_transforms_produce_transparency() {
+  const chroma::Surface surface(
+      1, 1, chroma::Pixel{.red = 1.0F, .green = 1.0F, .blue = 1.0F, .alpha = 1.0F});
+  const auto transformed = chroma::apply_effect_program_cpu(
+      surface, chroma::EffectProgram({chroma::Transform2DEffect{.m00 = 0.0, .m11 = 0.0}}));
+  CHECK(transformed.pixel(0, 0) == chroma::Pixel{});
+}
+
+void unavailable_cpu_effects_fail_explicitly() {
+  CHECK_THROWS_AS(
+      chroma::apply_effect_program_cpu(
+          chroma::Surface(1, 1),
+          chroma::EffectProgram({chroma::GaussianBlurEffect{.radius = 1.0}})),
+      std::runtime_error);
+}
+
 void video_layers_decode_into_the_cpu_plan(const char* path) {
   const chroma::Composition composition(
       1, 64, 36, chroma::FrameRate(chroma::Rational(30)),
@@ -160,6 +207,10 @@ int main(int argc, char** argv) {
   frames_outside_the_composition_are_rejected();
   compiled_plan_execution_matches_the_render_convenience_api();
   direct_compositions_enforce_invariants();
+  cpu_effects_apply_in_program_order();
+  color_matrix_operates_on_straight_linear_rgba();
+  singular_transforms_produce_transparency();
+  unavailable_cpu_effects_fail_explicitly();
   if (argc == 2) {
     video_layers_decode_into_the_cpu_plan(argv[1]);
   }

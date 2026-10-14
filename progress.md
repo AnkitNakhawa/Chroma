@@ -42,3 +42,4 @@
 - Added the first immutable effect IR with validated transform, crop, opacity, color-matrix, blur, temporal, and external nodes plus explicit optimization traits.
 - Added conservative identity removal, adjacent transform/opacity/color-matrix composition, fusion-barrier partitioning, stable effect JSON, and `inspect-optimized-plan`. The command is explicitly planning-only; the existing typed plan remains authoritative for execution.
 - Added focused effect and plan tests. Both FFmpeg-enabled and core-only builds remain green after the compiler slice.
+- Added CPU reference execution for transform, crop, opacity, and color-matrix effect programs, including transparent-edge bilinear sampling, singular-transform behavior, straight-alpha color math, and explicit failures for unsupported effect classes.

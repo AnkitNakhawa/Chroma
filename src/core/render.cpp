@@ -7,6 +7,7 @@
 #include <stdexcept>
 #include <memory>
 #include <string>
+#include <type_traits>
 #include <unordered_map>
 #include <variant>
 
@@ -51,6 +52,130 @@ Pixel premultiply(const Color& color) noexcept {
                .alpha = alpha};
 }
 
+float clamp_unit(double value) noexcept {
+  if (std::isnan(value) || value <= 0.0) {
+    return 0.0F;
+  }
+  if (value >= 1.0) {
+    return 1.0F;
+  }
+  return static_cast<float>(value);
+}
+
+Pixel sample_bilinear(const Surface& surface, double x, double y) noexcept {
+  // x/y address pixel centers: (0, 0) is the center of the first pixel.
+  if (!std::isfinite(x) || !std::isfinite(y) || x <= -1.0 || y <= -1.0 ||
+      x >= static_cast<double>(surface.width()) ||
+      y >= static_cast<double>(surface.height())) {
+    return {};
+  }
+  const auto x0 = static_cast<std::int64_t>(std::floor(x));
+  const auto y0 = static_cast<std::int64_t>(std::floor(y));
+  const auto x_fraction = static_cast<float>(x - static_cast<double>(x0));
+  const auto y_fraction = static_cast<float>(y - static_cast<double>(y0));
+
+  const auto read = [&surface](std::int64_t sample_x, std::int64_t sample_y) noexcept {
+    if (sample_x < 0 || sample_y < 0 || sample_x >= surface.width() ||
+        sample_y >= surface.height()) {
+      return Pixel{};
+    }
+    return surface.pixels()[static_cast<std::size_t>(sample_y) *
+                                static_cast<std::size_t>(surface.width()) +
+                            static_cast<std::size_t>(sample_x)];
+  };
+
+  const auto top_left = read(x0, y0);
+  const auto top_right = read(x0 + 1, y0);
+  const auto bottom_left = read(x0, y0 + 1);
+  const auto bottom_right = read(x0 + 1, y0 + 1);
+  const auto interpolate = [x_fraction, y_fraction](float top_left_value,
+                                                    float top_right_value,
+                                                    float bottom_left_value,
+                                                    float bottom_right_value) noexcept {
+    const auto top = top_left_value + (top_right_value - top_left_value) * x_fraction;
+    const auto bottom =
+        bottom_left_value + (bottom_right_value - bottom_left_value) * x_fraction;
+    return top + (bottom - top) * y_fraction;
+  };
+  return Pixel{.red = interpolate(top_left.red, top_right.red, bottom_left.red, bottom_right.red),
+               .green = interpolate(top_left.green, top_right.green, bottom_left.green,
+                                    bottom_right.green),
+               .blue = interpolate(top_left.blue, top_right.blue, bottom_left.blue,
+                                   bottom_right.blue),
+               .alpha = interpolate(top_left.alpha, top_right.alpha, bottom_left.alpha,
+                                    bottom_right.alpha)};
+}
+
+Surface apply_transform(Surface source, const Transform2DEffect& transform) {
+  Surface output(source.width(), source.height());
+  const auto determinant = transform.m00 * transform.m11 - transform.m01 * transform.m10;
+  if (std::abs(determinant) <= 1e-12) {
+    return output;
+  }
+
+  const auto inverse00 = transform.m11 / determinant;
+  const auto inverse01 = -transform.m01 / determinant;
+  const auto inverse10 = -transform.m10 / determinant;
+  const auto inverse11 = transform.m00 / determinant;
+  for (std::int32_t y = 0; y < output.height(); ++y) {
+    for (std::int32_t x = 0; x < output.width(); ++x) {
+      const auto destination_x = static_cast<double>(x) + 0.5;
+      const auto destination_y = static_cast<double>(y) + 0.5;
+      const auto translated_x = destination_x - transform.m02;
+      const auto translated_y = destination_y - transform.m12;
+      const auto source_x = inverse00 * translated_x + inverse01 * translated_y - 0.5;
+      const auto source_y = inverse10 * translated_x + inverse11 * translated_y - 0.5;
+      output.pixel(x, y) = sample_bilinear(source, source_x, source_y);
+    }
+  }
+  return output;
+}
+
+void apply_crop(Surface& surface, const CropEffect& crop) noexcept {
+  const auto right = static_cast<std::int64_t>(crop.x) + crop.width;
+  const auto bottom = static_cast<std::int64_t>(crop.y) + crop.height;
+  for (std::int32_t y = 0; y < surface.height(); ++y) {
+    for (std::int32_t x = 0; x < surface.width(); ++x) {
+      if (static_cast<std::int64_t>(x) < crop.x || static_cast<std::int64_t>(x) >= right ||
+          static_cast<std::int64_t>(y) < crop.y || static_cast<std::int64_t>(y) >= bottom) {
+        surface.pixel(x, y) = {};
+      }
+    }
+  }
+}
+
+void apply_opacity(Surface& surface, const OpacityEffect& opacity) noexcept {
+  const auto factor = static_cast<float>(opacity.opacity);
+  for (auto& pixel : surface.pixels()) {
+    pixel.red *= factor;
+    pixel.green *= factor;
+    pixel.blue *= factor;
+    pixel.alpha *= factor;
+  }
+}
+
+void apply_color_matrix(Surface& surface, const ColorMatrixEffect& matrix) noexcept {
+  for (auto& pixel : surface.pixels()) {
+    const auto alpha = static_cast<double>(pixel.alpha);
+    const auto reciprocal_alpha = alpha > 0.0 ? 1.0 / alpha : 0.0;
+    const double straight[] = {static_cast<double>(pixel.red) * reciprocal_alpha,
+                               static_cast<double>(pixel.green) * reciprocal_alpha,
+                               static_cast<double>(pixel.blue) * reciprocal_alpha, alpha};
+    double transformed[4]{};
+    for (std::size_t row = 0; row < 4; ++row) {
+      transformed[row] = matrix.values[row * 5 + 4];
+      for (std::size_t column = 0; column < 4; ++column) {
+        transformed[row] += matrix.values[row * 5 + column] * straight[column];
+      }
+    }
+    const auto transformed_alpha = clamp_unit(transformed[3]);
+    pixel = Pixel{.red = clamp_unit(transformed[0]) * transformed_alpha,
+                  .green = clamp_unit(transformed[1]) * transformed_alpha,
+                  .blue = clamp_unit(transformed[2]) * transformed_alpha,
+                  .alpha = transformed_alpha};
+  }
+}
+
 }  // namespace
 
 Surface::Surface(std::int32_t width, std::int32_t height, Pixel fill)
@@ -78,6 +203,29 @@ Pixel composite_over(Pixel source, Pixel destination) noexcept {
                .green = source.green + destination.green * inverse_source_alpha,
                .blue = source.blue + destination.blue * inverse_source_alpha,
                .alpha = source.alpha + destination.alpha * inverse_source_alpha};
+}
+
+Surface apply_effect_program_cpu(Surface source, const EffectProgram& program) {
+  for (const auto& effect : program.effects()) {
+    std::visit(
+        [&source](const auto& typed) {
+          using Type = std::decay_t<decltype(typed)>;
+          if constexpr (std::is_same_v<Type, Transform2DEffect>) {
+            source = apply_transform(std::move(source), typed);
+          } else if constexpr (std::is_same_v<Type, CropEffect>) {
+            apply_crop(source, typed);
+          } else if constexpr (std::is_same_v<Type, OpacityEffect>) {
+            apply_opacity(source, typed);
+          } else if constexpr (std::is_same_v<Type, ColorMatrixEffect>) {
+            apply_color_matrix(source, typed);
+          } else {
+            throw std::runtime_error(std::string(effect_name(Effect{typed})) +
+                                     " is not implemented by the CPU effect backend");
+          }
+        },
+        effect);
+  }
+  return source;
 }
 
 struct CpuRenderContext::Impl {

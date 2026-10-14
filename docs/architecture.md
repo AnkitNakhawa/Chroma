@@ -118,6 +118,8 @@ Parallelism is constrained by dependencies and memory budgets rather than an unb
 
 The CPU backend defines the reference behavior for every supported v1 node. It is used for correctness tests, ordinary CI, development without an NVIDIA GPU, and fallback.
 
+The first effect executor applies an immutable effect program sequentially to a fixed-size linear-premultiplied surface. Transform matrices map source pixel centers into the same-sized destination and use transparent-edge bilinear sampling; singular transforms produce a transparent result. Crop removes pixels outside its integer rectangle. Opacity scales all premultiplied channels. Color matrices operate on straight linear RGBA, clamp the result, and premultiply it again. Blur, temporal sampling, and external effects fail explicitly until their CPU semantics are implemented.
+
 #### CUDA backend
 
 The first accelerated backend targets 64-bit Linux and NVIDIA GPUs. Only selected operations need CUDA implementations in v1:
