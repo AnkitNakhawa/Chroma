@@ -14,7 +14,7 @@ Design and validate an open-source, deterministic, agent-first video composition
 | Phase | Description | Status |
 |---|---|---|
 | 1 | Establish product goals, user workflows, scope, and measurable requirements | complete |
-| 2 | Define system architecture and technology choices | in_progress |
+| 2 | Define system architecture and technology choices | complete |
 | 3 | Specify the composition DSL, timing model, and compatibility contract | in_progress |
 | 4 | Design the rendering, media, audio, preview, and caching pipelines | in_progress |
 | 5 | Define MVP milestones, benchmark corpus, tests, packaging, and governance | pending |
@@ -66,9 +66,11 @@ The current implementation session will complete and verify these checkpoints in
 3. [complete] Versioned video assets/layers, typed decode/composite plan operations, and CPU video compositing.
 4. [complete] Direct encoded-video output without intermediate PPM files in the normal render path.
 5. [complete] Per-stage profiling, a reproducible media fixture, and benchmark commands/results suitable for establishing a CPU baseline.
-6. Documentation, failure-path tests, builds with FFmpeg disabled, and a final focused review.
+6. [complete] Documentation, failure-path tests, builds with FFmpeg disabled, and a final focused review.
 
 CUDA remains explicitly out of scope for this track. The CPU/media baseline must be measured before GPU work begins.
+
+The pre-CUDA track is complete. CUDA work should not begin by assuming compositing alone is the bottleneck: the measured CPU pipeline spends comparable time in execution/decode/conversion and RGB-to-YUV/encode, while plan compilation is negligible. The next design must target conversion/copy boundaries and codec-surface residency as first-class metrics.
 
 ## Errors Encountered
 | Error | Attempt | Resolution |
@@ -82,3 +84,4 @@ CUDA remains explicitly out of scope for this track. The CPU/media baseline must
 | Decode test assumed generated `testsrc2` pixels changed at selected samples | 3 | Stopped sampling a non-guaranteed motion pattern; replaced it with deterministic one-second blue and red segments joined by FFmpeg. |
 | First directly encoded 60-frame MP4 probed at about 1.966 seconds instead of 2 seconds | 1 | Set frame and stream durations explicitly; added a regression test proving 60 frames at 30 fps probe as exactly 2 seconds. |
 | FFmpeg-disabled build warned about an unused timing helper | 1 | Compiled the steady-clock helper only when the FFmpeg render path is enabled. |
+| End-of-media test did not throw for Matroska fixture | 1 | Matroska exposed duration only at container level; rescaled the container duration into the selected stream time base as a fallback. |

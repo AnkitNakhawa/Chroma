@@ -1,4 +1,5 @@
 #include <cstdlib>
+#include <filesystem>
 #include <iostream>
 #include <stdexcept>
 #include <string>
@@ -79,6 +80,7 @@ void fixture_can_be_probed_and_decoded(const char* path) {
   CHECK(sequential_start.surface.pixels() == start.surface.pixels());
   CHECK(sequential_middle.surface.pixels() == middle.surface.pixels());
   CHECK(rewound.surface.pixels() == start.surface.pixels());
+  CHECK_THROWS_AS(decoder.frame_at(chroma::Rational(2)), std::out_of_range);
 }
 
 void render_profiles_are_machine_readable() {
@@ -96,6 +98,26 @@ void render_profiles_are_machine_readable() {
   CHECK(benchmark.find("total_median") != std::string::npos);
 }
 
+void failed_renders_remove_partial_outputs(const char* fixture_path) {
+  const auto directory = std::filesystem::path(fixture_path).parent_path();
+  const auto output = directory / "failed-render.mp4";
+  std::error_code cleanup_error;
+  std::filesystem::remove(output, cleanup_error);
+
+  const chroma::Composition composition(
+      1, 64, 36, chroma::FrameRate(chroma::Rational(30)),
+      chroma::FrameRange(chroma::FrameIndex(0), chroma::FrameIndex(1)),
+      {chroma::VideoAsset{.id = "missing", .path = directory / "missing-video.mkv"}},
+      {chroma::VideoLayer{
+          .id = "video",
+          .range = chroma::FrameRange(chroma::FrameIndex(0), chroma::FrameIndex(1)),
+          .asset_id = "missing",
+          .source_start = chroma::FrameIndex(0),
+          .opacity = 1.0}});
+  CHECK_THROWS_AS(chroma::render_video_cpu(composition, output), std::runtime_error);
+  CHECK(!std::filesystem::exists(output));
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -104,6 +126,7 @@ int main(int argc, char** argv) {
   render_profiles_are_machine_readable();
   if (chroma::media_available() && argc == 2) {
     fixture_can_be_probed_and_decoded(argv[1]);
+    failed_renders_remove_partial_outputs(argv[1]);
   }
   if (failures != 0) {
     std::cerr << failures << " test assertion(s) failed\n";

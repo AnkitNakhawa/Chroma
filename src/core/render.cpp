@@ -105,7 +105,7 @@ Surface CpuRenderContext::execute(const ExecutionPlan& plan) {
     }
 
     const auto& video = std::get<CompositeVideoFrameOperation>(operation);
-    const auto key = video.asset_path.generic_string();
+    const auto key = video.source_id + '\n' + video.asset_path.generic_string();
     auto& decoder = impl_->decoders[key];
     if (!decoder) {
       decoder = std::make_unique<VideoDecoder>(video.asset_path);

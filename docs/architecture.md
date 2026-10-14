@@ -141,7 +141,9 @@ Audio remains CPU-side in v1 and is scheduled independently from video until mux
 
 The implemented CPU video writer renders surfaces in memory, converts linear premultiplied RGB over black to 8-bit RGB, converts to YUV420P with libswscale, encodes H.264, and muxes directly to the requested container. It assigns explicit frame and stream durations so rational frame rates survive muxing. The initial writer is sequential, requires even dimensions, and has no audio path yet.
 
-During sequential renders, a CPU execution context owns one persistent decoder per asset path. Monotonically increasing requests retain demux, codec, decoded-frame lookahead, and conversion state; backward requests trigger an explicit seek and codec flush. The context lifetime is scoped to one render job, so it contains no shared mutable global cache.
+During sequential renders, a CPU execution context owns one persistent decoder per video layer and asset path. Monotonically increasing requests retain demux, codec, decoded-frame lookahead, and conversion state; backward requests trigger an explicit seek and codec flush. The context lifetime is scoped to one render job, so it contains no shared mutable global cache.
+
+Known-duration sources reject requests at or beyond their end rather than implicitly freezing the final frame. Failed encoded renders remove the partial destination after FFmpeg resources close. The CLI lowers FFmpeg logging globally to errors for readable automation output; embedders retain the library default unless they explicitly call Chroma's media-logging configuration function.
 
 ### 8. Color and alpha semantics
 

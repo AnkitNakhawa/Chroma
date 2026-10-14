@@ -29,7 +29,7 @@ Chroma is not intended to be a visual editor, preview platform, hosted rendering
 
 ## Status
 
-Early technical spike. Chroma can currently parse and validate the experimental composition format, compile a requested frame into an explicit typed execution plan, render solid layers through the CPU reference backend, and write a PPM frame. Media, audio, text, effects, encoding, profiling, and CUDA execution are not implemented yet.
+Pre-CUDA technical spike. Chroma can parse and validate solid/video compositions, resolve assets, probe and decode media at exact rational times, compile typed per-frame plans, render through a persistent CPU execution context, write PPM frames, encode H.264/MP4 directly, and emit per-stage benchmark JSON. Audio, text, transforms, scaling, effects, production color management, caching, parallel scheduling, language bindings, and CUDA execution are not implemented yet.
 
 ## Build and test
 

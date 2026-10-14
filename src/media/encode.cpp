@@ -100,6 +100,24 @@ struct ScaleDeleter {
   void operator()(SwsContext* value) const noexcept { sws_freeContext(value); }
 };
 
+class OutputFileGuard {
+ public:
+  explicit OutputFileGuard(std::filesystem::path path) : path_(std::move(path)) {}
+  ~OutputFileGuard() {
+    if (active_) {
+      std::error_code error;
+      std::filesystem::remove(path_, error);
+    }
+  }
+
+  void activate() noexcept { active_ = true; }
+  void commit() noexcept { active_ = false; }
+
+ private:
+  std::filesystem::path path_;
+  bool active_ = false;
+};
+
 using FormatPointer = std::unique_ptr<AVFormatContext, FormatDeleter>;
 using CodecPointer = std::unique_ptr<AVCodecContext, CodecDeleter>;
 using FramePointer = std::unique_ptr<AVFrame, FrameDeleter>;
@@ -170,6 +188,7 @@ VideoRenderResult render_video_cpu(const Composition& composition,
 
   AVFormatContext* raw_format = nullptr;
   const auto output_string = output_path.string();
+  OutputFileGuard output_guard(output_path);
   auto status =
       avformat_alloc_output_context2(&raw_format, nullptr, nullptr, output_string.c_str());
   if (status < 0 || raw_format == nullptr) {
@@ -228,6 +247,7 @@ VideoRenderResult render_video_cpu(const Composition& composition,
     if (status < 0) {
       throw std::runtime_error("unable to open video output: " + ffmpeg_error(status));
     }
+    output_guard.activate();
   }
   status = avformat_write_header(format.get(), nullptr);
   if (status < 0) {
@@ -307,6 +327,7 @@ VideoRenderResult render_video_cpu(const Composition& composition,
   if (status < 0) {
     throw std::runtime_error("unable to finalize video output: " + ffmpeg_error(status));
   }
+  output_guard.commit();
   const auto total_end = Clock::now();
   encode_nanoseconds += elapsed_nanoseconds(finalize_start, total_end);
   return VideoRenderResult{.frames_encoded = encoded,

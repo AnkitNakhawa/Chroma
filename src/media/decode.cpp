@@ -95,17 +95,17 @@ float srgb_to_linear(float value) noexcept {
   return std::pow((value + 0.055F) / 1.055F, 2.4F);
 }
 
-Surface convert_frame(const AVFrame& frame) {
+Surface convert_frame(const AVFrame& frame, ScalePointer& scale) {
   if (frame.width <= 0 || frame.height <= 0) {
     throw std::runtime_error("decoder produced a frame with invalid dimensions");
   }
-  auto* raw_scale = sws_getContext(
-      frame.width, frame.height, static_cast<AVPixelFormat>(frame.format), frame.width,
-      frame.height, AV_PIX_FMT_RGBA, SWS_BILINEAR, nullptr, nullptr, nullptr);
+  auto* raw_scale = sws_getCachedContext(
+      scale.release(), frame.width, frame.height, static_cast<AVPixelFormat>(frame.format),
+      frame.width, frame.height, AV_PIX_FMT_RGBA, SWS_BILINEAR, nullptr, nullptr, nullptr);
   if (raw_scale == nullptr) {
     throw std::runtime_error("unable to create FFmpeg pixel conversion context");
   }
-  ScalePointer scale(raw_scale);
+  scale.reset(raw_scale);
 
   const auto row_bytes = static_cast<std::size_t>(frame.width) * 4U;
   std::vector<std::uint8_t> rgba(row_bytes * static_cast<std::size_t>(frame.height));
@@ -184,6 +184,13 @@ struct VideoDecoder::Impl {
       throw std::runtime_error("unable to allocate FFmpeg decode buffers");
     }
     stream_start = stream->start_time != AV_NOPTS_VALUE ? stream->start_time : 0;
+    if (stream->duration != AV_NOPTS_VALUE && stream->duration > 0) {
+      stream_end = checked_add(stream_start, stream->duration);
+    } else if (format->duration != AV_NOPTS_VALUE && format->duration > 0) {
+      const auto duration = av_rescale_q(format->duration, AVRational{1, AV_TIME_BASE},
+                                         stream->time_base);
+      stream_end = checked_add(stream_start, duration);
+    }
   }
 
   void seek(std::int64_t target) {
@@ -262,6 +269,9 @@ struct VideoDecoder::Impl {
       throw std::invalid_argument("requested media time must be non-negative");
     }
     const auto target = checked_add(stream_start, floor_rescale(time, stream->time_base));
+    if (stream_end && target >= *stream_end) {
+      throw std::out_of_range("requested time is outside the decodable video range");
+    }
     if (!last_target || target < *last_target) {
       seek(target);
     }
@@ -290,7 +300,7 @@ struct VideoDecoder::Impl {
     }
     const auto timestamp = current->best_effort_timestamp;
     return DecodedVideoFrame{
-        .surface = convert_frame(*current),
+        .surface = convert_frame(*current, scale),
         .presentation_time = timestamp == AV_NOPTS_VALUE
                                  ? time
                                  : timestamp_time(timestamp, stream->time_base, stream_start)};
@@ -305,7 +315,9 @@ struct VideoDecoder::Impl {
   FramePointer receive_frame;
   FramePointer current;
   FramePointer pending;
+  ScalePointer scale;
   std::int64_t stream_start = 0;
+  std::optional<std::int64_t> stream_end;
   std::optional<std::int64_t> last_target;
   bool demux_eof = false;
   bool flush_sent = false;
