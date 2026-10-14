@@ -78,3 +78,6 @@ The project should be a headless native motion-graphics runtime for AI-generated
 - Vulkan compute is a plausible future portable backend: compute support is mandatory in Vulkan and supports headless compute. However, Vulkan plus cross-vendor video decode/encode interoperability would add substantial v1 engineering risk. Source: https://docs.vulkan.org/tutorial/latest/11_Compute_Shader.html
 - Dawn/WebGPU Native could eventually provide D3D12, Metal, Vulkan, and OpenGL backends from one API, but it does not by itself solve native codec-surface interoperability or guarantee equivalent backend performance. Source: https://github.com/google/dawn
 - Avoid hand-writing direct NVDEC/NVENC integrations initially. Use FFmpeg hardware frames and CUDA interop for the spike, then replace narrow pieces only if profiling justifies it.
+
+## Repository implementation notes
+- The first GitHub Actions run passed on both Ubuntu and macOS. GitHub warned that `actions/checkout@v4` used deprecated Node 20; the current upstream release discovered through the GitHub API was v7.0.1, so the workflow moved to the v7 major line.

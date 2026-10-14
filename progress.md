@@ -18,3 +18,4 @@
 - Reviewed the implementation and hardened it by enforcing composition invariants for direct C++ callers, bounding CPU surface allocations, documenting layer/color semantics, and adding regression tests.
 - Published the repository at https://github.com/AnkitNakhawa/Chroma and configured the local `main` branch to track `origin/main`.
 - Added an Apache-2.0 license, Linux/macOS GitHub Actions CI, and reproducible local build instructions.
+- Verified the first remote CI run passed on Ubuntu and macOS, then updated the checkout action from v4 to v7 to remove GitHub's Node 20 deprecation warning.
