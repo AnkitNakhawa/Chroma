@@ -61,3 +61,4 @@ Design and validate an open-source, deterministic, agent-first video composition
 | Initial repository scaffold patch used the wrong table separator context | 1 | Split the patch and applied it against the current file contents. |
 | Local CMake configure requested Ninja, but Ninja is not installed | 1 | Removed the incomplete generated build directory and used CMake's default generator. |
 | AppleClang rejected `[[nodiscard]]` before friend comparison declarations | 1 | Removed the non-essential attributes from the friend operators. |
+| A single patch attempted to delete and re-add the CLI file | 1 | Kept the existing file and applied a normal update in a separate patch. |

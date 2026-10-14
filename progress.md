@@ -12,3 +12,4 @@
 - Adopted Chroma as the working project name and initialized a local Git repository on `main`.
 - Started Phase 2 and wrote the first architecture draft covering the frontend, immutable IR, compiler, execution plan, scheduler, CPU/CUDA backends, media boundary, color semantics, caching, public APIs, repository layout, and technical spike.
 - Began the implementation spike with a CMake/C++20 project, exact rational and frame timeline primitives, a dependency-free unit-test harness, and a minimal CLI target.
+- Added an experimental v1 composition parser for canvas and solid-layer documents, structured diagnostics, example input, and agent-facing validation support.

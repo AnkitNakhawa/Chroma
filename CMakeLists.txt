@@ -9,7 +9,20 @@ project(
 
 option(CHROMA_BUILD_TESTS "Build Chroma tests" ON)
 
+include(FetchContent)
+find_package(nlohmann_json 3.11.3 QUIET)
+if(NOT nlohmann_json_FOUND)
+  FetchContent_Declare(
+    nlohmann_json
+    GIT_REPOSITORY https://github.com/nlohmann/json.git
+    GIT_TAG v3.11.3
+    GIT_SHALLOW TRUE
+  )
+  FetchContent_MakeAvailable(nlohmann_json)
+endif()
+
 add_library(chroma_core
+  src/core/composition.cpp
   src/core/rational.cpp
   src/core/timeline.cpp
 )
@@ -21,6 +34,7 @@ target_include_directories(chroma_core
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include>
 )
+target_link_libraries(chroma_core PRIVATE nlohmann_json::nlohmann_json)
 
 if(MSVC)
   target_compile_options(chroma_core PRIVATE /W4 /permissive-)
@@ -39,4 +53,13 @@ if(CHROMA_BUILD_TESTS)
   add_executable(chroma_timeline_tests tests/timeline_tests.cpp)
   target_link_libraries(chroma_timeline_tests PRIVATE chroma::core)
   add_test(NAME chroma_timeline_tests COMMAND chroma_timeline_tests)
+
+  add_executable(chroma_composition_tests tests/composition_tests.cpp)
+  target_link_libraries(chroma_composition_tests PRIVATE chroma::core)
+  add_test(NAME chroma_composition_tests COMMAND chroma_composition_tests)
+
+  add_test(
+    NAME chroma_cli_validates_example
+    COMMAND chroma_cli validate ${CMAKE_CURRENT_SOURCE_DIR}/examples/solid.json
+  )
 endif()

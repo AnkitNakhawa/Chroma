@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "canvas": {
+    "width": 1920,
+    "height": 1080,
+    "frame_rate": {
+      "numerator": 30000,
+      "denominator": 1001
+    },
+    "duration_frames": 300
+  },
+  "layers": [
+    {
+      "id": "background",
+      "type": "solid",
+      "start_frame": 0,
+      "end_frame": 300,
+      "color": [0.08, 0.12, 0.2, 1.0]
+    }
+  ]
+}
