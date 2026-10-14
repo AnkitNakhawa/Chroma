@@ -22,6 +22,7 @@ Chroma is not intended to be a visual editor, preview platform, hosted rendering
 ## Current documents
 
 - [Architecture](docs/architecture.md)
+- [Experimental composition format](docs/composition-format.md)
 - [Product and implementation plan](task_plan.md)
 - [Research findings](findings.md)
 - [Progress log](progress.md)

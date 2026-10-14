@@ -118,6 +118,24 @@ void diagnostics_are_machine_readable() {
   CHECK(json.find("path") != std::string::npos);
 }
 
+void oversized_canvases_are_rejected_before_rendering() {
+  constexpr std::string_view source = R"json(
+  {
+    "schema_version": 1,
+    "canvas": {
+      "width": 32768,
+      "height": 32768,
+      "frame_rate": {"numerator": 30, "denominator": 1},
+      "duration_frames": 1
+    },
+    "layers": []
+  }
+  )json";
+  const auto result = chroma::parse_composition(source);
+  CHECK(!result.valid());
+  CHECK(has_code(result, "canvas.too_large"));
+}
+
 }  // namespace
 
 int main() {
@@ -126,6 +144,7 @@ int main() {
   invalid_timeline_is_reported();
   duplicate_and_out_of_bounds_layers_are_reported();
   diagnostics_are_machine_readable();
+  oversized_canvases_are_rejected_before_rendering();
 
   if (failures != 0) {
     std::cerr << failures << " test assertion(s) failed\n";

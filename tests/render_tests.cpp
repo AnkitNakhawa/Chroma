@@ -54,6 +54,7 @@ void surface_checks_coordinates() {
   CHECK(surface.pixel(1, 2).red == 1.0F);
   CHECK_THROWS_AS(surface.pixel(2, 0), std::out_of_range);
   CHECK_THROWS_AS(chroma::Surface(0, 1), std::invalid_argument);
+  CHECK_THROWS_AS(chroma::Surface(32768, 32768), std::length_error);
 }
 
 void inactive_layers_are_transparent() {
@@ -100,6 +101,18 @@ void frames_outside_the_composition_are_rejected() {
                   std::out_of_range);
 }
 
+void direct_compositions_enforce_invariants() {
+  CHECK_THROWS_AS(
+      chroma::Composition(
+          1, 2, 1, chroma::FrameRate(chroma::Rational(30)),
+          chroma::FrameRange(chroma::FrameIndex(0), chroma::FrameIndex(10)),
+          {chroma::SolidLayer{
+              .id = "bad-color",
+              .range = chroma::FrameRange(chroma::FrameIndex(0), chroma::FrameIndex(10)),
+              .color = chroma::Color{.red = 2.0, .green = 0.0, .blue = 0.0, .alpha = 1.0}}}),
+      std::invalid_argument);
+}
+
 }  // namespace
 
 int main() {
@@ -108,6 +121,7 @@ int main() {
   layers_composite_in_document_order();
   ppm_output_is_stable();
   frames_outside_the_composition_are_rejected();
+  direct_compositions_enforce_invariants();
 
   if (failures != 0) {
     std::cerr << failures << " test assertion(s) failed\n";

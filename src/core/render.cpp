@@ -16,6 +16,9 @@ std::size_t checked_pixel_count(std::int32_t width, std::int32_t height) {
   const auto unsigned_width = static_cast<std::uint64_t>(width);
   const auto unsigned_height = static_cast<std::uint64_t>(height);
   const auto count = unsigned_width * unsigned_height;
+  if (count > max_canvas_pixels) {
+    throw std::length_error("surface exceeds the configured pixel budget");
+  }
   if (count > static_cast<std::uint64_t>(std::numeric_limits<std::size_t>::max() / sizeof(Pixel))) {
     throw std::overflow_error("surface dimensions exceed addressable memory");
   }

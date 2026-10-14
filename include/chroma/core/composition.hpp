@@ -10,6 +10,8 @@
 
 namespace chroma {
 
+inline constexpr std::uint64_t max_canvas_pixels = 67'108'864;
+
 struct Diagnostic {
   std::string code;
   std::string path;

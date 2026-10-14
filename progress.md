@@ -15,3 +15,4 @@
 - Added an experimental v1 composition parser for canvas and solid-layer documents, structured diagnostics, example input, and agent-facing validation support.
 - Added the initial CPU render path with linear premultiplied pixels, document-order source-over compositing, PPM serialization, and focused surface/render tests.
 - Rendered and visually inspected the 1920x1080 solid example; the generated frame matched the declared color and dimensions.
+- Reviewed the implementation and hardened it by enforcing composition invariants for direct C++ callers, bounding CPU surface allocations, documenting layer/color semantics, and adding regression tests.

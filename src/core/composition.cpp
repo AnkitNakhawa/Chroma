@@ -105,7 +105,37 @@ Composition::Composition(std::int32_t schema_version, std::int32_t width, std::i
       height_(height),
       frame_rate_(std::move(frame_rate)),
       range_(range),
-      layers_(std::move(layers)) {}
+      layers_(std::move(layers)) {
+  if (schema_version_ != 1) {
+    throw std::invalid_argument("unsupported composition schema version");
+  }
+  if (width_ <= 0 || height_ <= 0 || width_ > 32768 || height_ > 32768 ||
+      static_cast<std::uint64_t>(width_) * static_cast<std::uint64_t>(height_) >
+          max_canvas_pixels) {
+    throw std::invalid_argument("composition canvas dimensions are invalid or too large");
+  }
+  if (range_.empty()) {
+    throw std::invalid_argument("composition range must not be empty");
+  }
+
+  std::unordered_set<std::string> ids;
+  for (const auto& layer : layers_) {
+    if (layer.id.empty() || layer.id.size() > 128 || !ids.insert(layer.id).second) {
+      throw std::invalid_argument("composition layer ids must be non-empty and unique");
+    }
+    if (layer.range.empty() || layer.range.start() < range_.start() ||
+        layer.range.end() > range_.end()) {
+      throw std::invalid_argument("composition layer range is outside the composition");
+    }
+    const double components[] = {layer.color.red, layer.color.green, layer.color.blue,
+                                 layer.color.alpha};
+    for (const auto component : components) {
+      if (!std::isfinite(component) || component < 0.0 || component > 1.0) {
+        throw std::invalid_argument("composition layer color components must be between 0 and 1");
+      }
+    }
+  }
+}
 
 CompositionParseResult parse_composition(std::string_view source) {
   CompositionParseResult result;
@@ -170,6 +200,12 @@ CompositionParseResult parse_composition(std::string_view source) {
   if (height && (*height <= 0 || *height > 32768)) {
     add_diagnostic(result.diagnostics, "canvas.invalid_height", "/canvas/height",
                    "height must be between 1 and 32768 pixels");
+  }
+  if (width && height && *width > 0 && *height > 0 &&
+      static_cast<std::uint64_t>(*width) * static_cast<std::uint64_t>(*height) >
+          max_canvas_pixels) {
+    add_diagnostic(result.diagnostics, "canvas.too_large", "/canvas",
+                   "canvas exceeds the initial CPU pixel budget");
   }
   if (duration && *duration <= 0) {
     add_diagnostic(result.diagnostics, "timeline.invalid_duration", "/canvas/duration_frames",
