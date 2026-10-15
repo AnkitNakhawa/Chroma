@@ -45,7 +45,9 @@ Video files are declared separately from their uses so future plans can share pr
       "start_frame": 0,
       "end_frame": 60,
       "source_start_frame": 0,
-      "opacity": 1.0
+      "opacity": 1.0,
+      "fit": "cover",
+      "position": [0.5, 0.5]
     }
   ]
 }
@@ -62,7 +64,8 @@ Video files are declared separately from their uses so future plans can share pr
 - PPM output has no alpha channel; premultiplied RGB is therefore effectively displayed over black.
 - Asset paths are resolved relative to the composition file by the CLI. Parsing from memory accepts an explicit base directory.
 - Video layers sample source time using the composition's exact rational frame rate. `source_start_frame` defaults to 0 and `opacity` defaults to 1.
-- The current CPU spike requires decoded video dimensions to exactly match the canvas. Scaling and placement transforms have not landed yet.
+- Video `fit` supports `none` (default), `contain`, `cover`, and `fill`. `position` is a normalized `[x, y]` alignment from `[0, 0]` (top-left) through `[1, 1]` (bottom-right) and defaults to `[0.5, 0.5]`.
+- `contain` preserves the complete source and may leave transparent bars; `cover` preserves aspect ratio while cropping overflow; `fill` stretches to the canvas; `none` keeps native pixel size. Placement occurs before the ordered effect program.
 - Asset existence and decodability are checked when media is probed or rendered, not during syntax-only composition validation.
 
 ## Basic effects and blending
@@ -93,4 +96,4 @@ Solid and video layers may declare an ordered `effects` array and an optional `b
 - Supported blend modes are `source_over` (default), `multiply`, `screen`, and `plus`.
 - At most 64 effects may be declared on a layer in the experimental schema.
 - Video layers retain the legacy top-level `opacity` field. When it differs from 1, it is applied after the ordered `effects` array.
-- Blur, temporal, external/plugin, animated, and fit/contain/cover effects are not accepted by the JSON schema yet.
+- Blur, temporal, external/plugin, and animated effects are not accepted by the JSON schema yet.

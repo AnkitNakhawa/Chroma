@@ -41,6 +41,23 @@ enum class BlendMode {
 
 [[nodiscard]] std::string_view blend_mode_name(BlendMode mode) noexcept;
 
+enum class FitMode {
+  none,
+  contain,
+  cover,
+  fill,
+};
+
+[[nodiscard]] std::string_view fit_mode_name(FitMode mode) noexcept;
+
+struct SourcePlacement {
+  FitMode fit{FitMode::none};
+  double position_x{0.5};
+  double position_y{0.5};
+
+  friend bool operator==(const SourcePlacement&, const SourcePlacement&) = default;
+};
+
 struct SolidLayer {
   std::string id;
   FrameRange range;
@@ -60,6 +77,7 @@ struct VideoLayer {
   std::string asset_id;
   FrameIndex source_start;
   double opacity;
+  SourcePlacement placement;
   EffectProgram effects;
   BlendMode blend_mode{BlendMode::source_over};
 };

@@ -78,7 +78,8 @@ void video_assets_and_layers_are_normalized() {
     ],
     "layers": [
       {"id": "video", "type": "video", "asset": "clip", "start_frame": 10,
-       "end_frame": 40, "source_start_frame": 3, "opacity": 0.75}
+       "end_frame": 40, "source_start_frame": 3, "opacity": 0.75,
+       "fit": "cover", "position": [0.25, 0.75]}
     ]
   }
   )json";
@@ -95,6 +96,9 @@ void video_assets_and_layers_are_normalized() {
     CHECK(video->asset_id == "clip");
     CHECK(video->source_start == chroma::FrameIndex(3));
     CHECK(video->opacity == 0.75);
+    CHECK(video->placement.fit == chroma::FitMode::cover);
+    CHECK(video->placement.position_x == 0.25);
+    CHECK(video->placement.position_y == 0.75);
   }
 }
 
@@ -110,7 +114,7 @@ void invalid_video_references_are_reported() {
     },
     "layers": [
       {"id": "video", "type": "video", "asset": "missing", "start_frame": 0,
-       "end_frame": 10, "opacity": 2}
+       "end_frame": 10, "opacity": 2, "fit": "stretch", "position": [-1, 2]}
     ]
   }
   )json";
@@ -118,6 +122,8 @@ void invalid_video_references_are_reported() {
   CHECK(!result.valid());
   CHECK(has_code(result, "layer.unknown_asset"));
   CHECK(has_code(result, "layer.invalid_opacity"));
+  CHECK(has_code(result, "layer.unsupported_fit"));
+  CHECK(has_code(result, "layer.invalid_position"));
 }
 
 void effects_and_blend_modes_are_normalized() {

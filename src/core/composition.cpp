@@ -139,6 +139,17 @@ bool valid_blend_mode(BlendMode mode) noexcept {
   return false;
 }
 
+bool valid_fit_mode(FitMode mode) noexcept {
+  switch (mode) {
+    case FitMode::none:
+    case FitMode::contain:
+    case FitMode::cover:
+    case FitMode::fill:
+      return true;
+  }
+  return false;
+}
+
 std::optional<BlendMode> parse_blend_mode(const Json* value, std::string_view path,
                                           std::vector<Diagnostic>& diagnostics) {
   if (value == nullptr) {
@@ -155,6 +166,56 @@ std::optional<BlendMode> parse_blend_mode(const Json* value, std::string_view pa
   add_diagnostic(diagnostics, "layer.unsupported_blend_mode", std::string(path),
                  "supported blend modes are source_over, multiply, screen, and plus");
   return std::nullopt;
+}
+
+std::optional<FitMode> parse_fit_mode(const Json* value, std::string_view path,
+                                      std::vector<Diagnostic>& diagnostics) {
+  if (value == nullptr) {
+    return FitMode::none;
+  }
+  const auto name = string_value(value, path, diagnostics);
+  if (!name) {
+    return std::nullopt;
+  }
+  if (*name == "none") return FitMode::none;
+  if (*name == "contain") return FitMode::contain;
+  if (*name == "cover") return FitMode::cover;
+  if (*name == "fill") return FitMode::fill;
+  add_diagnostic(diagnostics, "layer.unsupported_fit", std::string(path),
+                 "supported fit modes are none, contain, cover, and fill");
+  return std::nullopt;
+}
+
+std::optional<SourcePlacement> parse_placement(const Json& layer, std::string_view path,
+                                               std::vector<Diagnostic>& diagnostics) {
+  auto fit = parse_fit_mode(optional_member(layer, "fit"), std::string(path) + "/fit",
+                            diagnostics);
+  SourcePlacement placement;
+  if (fit) {
+    placement.fit = *fit;
+  }
+  const auto* position = optional_member(layer, "position");
+  if (position == nullptr) {
+    return fit ? std::optional<SourcePlacement>(placement) : std::nullopt;
+  }
+  if (!position->is_array() || position->size() != 2) {
+    add_diagnostic(diagnostics, "layer.invalid_position", std::string(path) + "/position",
+                   "position must contain exactly two normalized numbers");
+    return std::nullopt;
+  }
+  const auto x = number_value(&(*position)[0], std::string(path) + "/position/0", diagnostics);
+  const auto y = number_value(&(*position)[1], std::string(path) + "/position/1", diagnostics);
+  if (!x || !y) {
+    return std::nullopt;
+  }
+  if (*x < 0.0 || *x > 1.0 || *y < 0.0 || *y > 1.0) {
+    add_diagnostic(diagnostics, "layer.invalid_position", std::string(path) + "/position",
+                   "position values must be between 0 and 1");
+    return std::nullopt;
+  }
+  placement.position_x = *x;
+  placement.position_y = *y;
+  return fit ? std::optional<SourcePlacement>(placement) : std::nullopt;
 }
 
 template <std::size_t Size>
@@ -309,6 +370,16 @@ std::string_view blend_mode_name(BlendMode mode) noexcept {
   return "unknown";
 }
 
+std::string_view fit_mode_name(FitMode mode) noexcept {
+  switch (mode) {
+    case FitMode::none: return "none";
+    case FitMode::contain: return "contain";
+    case FitMode::cover: return "cover";
+    case FitMode::fill: return "fill";
+  }
+  return "unknown";
+}
+
 Composition::Composition(std::int32_t schema_version, std::int32_t width, std::int32_t height,
                          FrameRate frame_rate, FrameRange range,
                          std::vector<SolidLayer> layers)
@@ -381,6 +452,13 @@ Composition::Composition(std::int32_t schema_version, std::int32_t width, std::i
     }
     if (!std::isfinite(video.opacity) || video.opacity < 0.0 || video.opacity > 1.0) {
       throw std::invalid_argument("composition video opacity must be between 0 and 1");
+    }
+    if (!valid_fit_mode(video.placement.fit) ||
+        !std::isfinite(video.placement.position_x) ||
+        !std::isfinite(video.placement.position_y) || video.placement.position_x < 0.0 ||
+        video.placement.position_x > 1.0 || video.placement.position_y < 0.0 ||
+        video.placement.position_y > 1.0) {
+      throw std::invalid_argument("composition video placement is invalid");
     }
     if (!valid_blend_mode(video.blend_mode)) {
       throw std::invalid_argument("composition video layer blend mode is invalid");
@@ -596,6 +674,7 @@ CompositionParseResult parse_composition(std::string_view source,
         auto opacity = number_value(optional_member(layer, "opacity"), base + "/opacity",
                                     result.diagnostics)
                            .value_or(1.0);
+        auto placement = parse_placement(layer, base, result.diagnostics);
         if (asset && !asset_ids.contains(*asset)) {
           add_diagnostic(result.diagnostics, "layer.unknown_asset", base + "/asset",
                          "video layer references an unknown asset");
@@ -610,13 +689,14 @@ CompositionParseResult parse_composition(std::string_view source,
                          "opacity must be between 0 and 1");
         }
         if (common_valid && asset && asset_ids.contains(*asset) && source_start >= 0 &&
-            opacity >= 0.0 && opacity <= 1.0 && effects && blend_mode) {
+            opacity >= 0.0 && opacity <= 1.0 && placement && effects && blend_mode) {
           layers.emplace_back(
               VideoLayer{.id = std::move(*id),
                          .range = FrameRange(FrameIndex(*start), FrameIndex(*end)),
                          .asset_id = std::move(*asset),
                          .source_start = FrameIndex(source_start),
                          .opacity = opacity,
+                         .placement = *placement,
                          .effects = std::move(*effects),
                          .blend_mode = *blend_mode});
         }

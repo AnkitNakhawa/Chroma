@@ -41,6 +41,18 @@ bool valid_blend_mode(BlendMode mode) noexcept {
   return blend_mode_name(mode) != "unknown";
 }
 
+bool valid_placement(const SourcePlacement& placement) noexcept {
+  return fit_mode_name(placement.fit) != "unknown" &&
+         std::isfinite(placement.position_x) && std::isfinite(placement.position_y) &&
+         placement.position_x >= 0.0 && placement.position_x <= 1.0 &&
+         placement.position_y >= 0.0 && placement.position_y <= 1.0;
+}
+
+nlohmann::json placement_json(const SourcePlacement& placement) {
+  return {{"fit", fit_mode_name(placement.fit)},
+          {"position", {placement.position_x, placement.position_y}}};
+}
+
 OptimizedEffectProgram compile_effects(const EffectProgram& program,
                                        std::optional<double> final_opacity = std::nullopt) {
   auto effects = program.effects();
@@ -129,6 +141,7 @@ ExecutionPlan::ExecutionPlan(std::int32_t width, std::int32_t height, FrameIndex
     }
     const auto& video = std::get<CompositeVideoFrameOperation>(operation);
     if (video.asset_path.empty() || video.source_time < Rational(0) ||
+        !valid_placement(video.placement) ||
         !valid_blend_mode(video.blend_mode)) {
       throw std::invalid_argument("execution plan video operation is invalid");
     }
@@ -179,6 +192,7 @@ ExecutionPlan compile_frame(const Composition& composition, FrameIndex frame) {
           .source_id = video.id,
           .asset_path = asset->path,
           .source_time = composition.frame_rate().time_at(FrameIndex(source_frame)),
+          .placement = video.placement,
           .effects = optimized.program(),
           .effect_rewrite_count = optimized.rewrite_count(),
           .blend_mode = video.blend_mode});
@@ -211,6 +225,7 @@ std::string execution_plan_json(const ExecutionPlan& plan) {
          {"asset_path", video.asset_path.string()},
          {"source_time", {{"numerator", video.source_time.numerator()},
                           {"denominator", video.source_time.denominator()}}},
+         {"placement", placement_json(video.placement)},
          {"effects", effects_json(video.effects)},
          {"effect_rewrite_count", video.effect_rewrite_count},
          {"blend_mode", blend_mode_name(video.blend_mode)}});
@@ -240,6 +255,7 @@ std::string optimized_execution_plan_json(const ExecutionPlan& plan) {
     std::string source_node;
     std::vector<Effect> effects;
     std::size_t compiled_rewrite_count = 0;
+    std::string placement_node;
     if (const auto* solid = std::get_if<CompositeSolidOperation>(&operation)) {
       source_id = solid->source_id;
       source_node = "solid_source";
@@ -249,12 +265,16 @@ std::string optimized_execution_plan_json(const ExecutionPlan& plan) {
       const auto& video = std::get<CompositeVideoFrameOperation>(operation);
       source_id = video.source_id;
       source_node = "video_sample";
+      placement_node = "place_" + std::string(fit_mode_name(video.placement.fit));
       effects = video.effects.effects();
       compiled_rewrite_count = video.effect_rewrite_count;
     }
 
     const auto optimized = optimize_effect_program(EffectProgram(std::move(effects)));
     nlohmann::json nodes = nlohmann::json::array({source_node});
+    if (!placement_node.empty()) {
+      nodes.push_back(placement_node);
+    }
     for (const auto& effect : optimized.program().effects()) {
       nodes.push_back(effect_name(effect));
     }

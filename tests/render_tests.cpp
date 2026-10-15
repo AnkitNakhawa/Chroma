@@ -170,6 +170,63 @@ void singular_transforms_produce_transparency() {
   CHECK(transformed.pixel(0, 0) == chroma::Pixel{});
 }
 
+void source_placement_modes_map_into_the_canvas() {
+  const auto red = chroma::Pixel{.red = 1.0F, .alpha = 1.0F};
+
+  const auto contained = chroma::place_surface_cpu(
+      chroma::Surface(2, 1, red), 4, 4,
+      chroma::SourcePlacement{.fit = chroma::FitMode::contain});
+  CHECK(contained.pixel(0, 0) == chroma::Pixel{});
+  CHECK(contained.pixel(0, 1) == red);
+  CHECK(contained.pixel(3, 2) == red);
+  CHECK(contained.pixel(3, 3) == chroma::Pixel{});
+
+  const auto covered = chroma::place_surface_cpu(
+      chroma::Surface(2, 1, red), 2, 2,
+      chroma::SourcePlacement{.fit = chroma::FitMode::cover});
+  CHECK(covered.pixel(0, 0) == red);
+  CHECK(covered.pixel(1, 1) == red);
+
+  chroma::Surface crop_source(4, 1, red);
+  const auto blue = chroma::Pixel{.blue = 1.0F, .alpha = 1.0F};
+  crop_source.pixel(3, 0) = blue;
+  const auto cover_left = chroma::place_surface_cpu(
+      crop_source, 1, 1,
+      chroma::SourcePlacement{.fit = chroma::FitMode::cover,
+                              .position_x = 0.0,
+                              .position_y = 0.5});
+  const auto cover_right = chroma::place_surface_cpu(
+      std::move(crop_source), 1, 1,
+      chroma::SourcePlacement{.fit = chroma::FitMode::cover,
+                              .position_x = 1.0,
+                              .position_y = 0.5});
+  CHECK(cover_left.pixel(0, 0) == red);
+  CHECK(cover_right.pixel(0, 0) == blue);
+
+  const auto filled = chroma::place_surface_cpu(
+      chroma::Surface(1, 1, red), 3, 2,
+      chroma::SourcePlacement{.fit = chroma::FitMode::fill});
+  CHECK(filled.pixel(0, 0) == red);
+  CHECK(filled.pixel(2, 1) == red);
+
+  const auto native = chroma::place_surface_cpu(
+      chroma::Surface(1, 1, red), 3, 1,
+      chroma::SourcePlacement{.fit = chroma::FitMode::none,
+                              .position_x = 1.0,
+                              .position_y = 0.5});
+  CHECK(native.pixel(0, 0) == chroma::Pixel{});
+  CHECK(native.pixel(1, 0) == chroma::Pixel{});
+  CHECK(native.pixel(2, 0) == red);
+
+  CHECK_THROWS_AS(
+      chroma::place_surface_cpu(
+          chroma::Surface(1, 1, red), 1, 1,
+          chroma::SourcePlacement{.fit = chroma::FitMode::contain,
+                                  .position_x = 2.0,
+                                  .position_y = 0.5}),
+      std::invalid_argument);
+}
+
 void unavailable_cpu_effects_fail_explicitly() {
   CHECK_THROWS_AS(
       chroma::apply_effect_program_cpu(
@@ -266,6 +323,22 @@ void video_layers_decode_into_the_cpu_plan(const char* path) {
   CHECK(blue.red < 0.05F);
   CHECK(red.red > 0.8F);
   CHECK(red.blue < 0.05F);
+
+  const chroma::Composition square_composition(
+      1, 32, 32, chroma::FrameRate(chroma::Rational(30)),
+      chroma::FrameRange(chroma::FrameIndex(0), chroma::FrameIndex(1)),
+      {chroma::VideoAsset{.id = "clip", .path = path}},
+      {chroma::VideoLayer{
+          .id = "contained-video",
+          .range = chroma::FrameRange(chroma::FrameIndex(0), chroma::FrameIndex(1)),
+          .asset_id = "clip",
+          .source_start = chroma::FrameIndex(0),
+          .opacity = 1.0,
+          .placement = {.fit = chroma::FitMode::contain}}});
+  const auto contained =
+      chroma::render_frame_cpu(square_composition, chroma::FrameIndex(0));
+  CHECK(contained.pixel(16, 0) == chroma::Pixel{});
+  CHECK(contained.pixel(16, 16).blue > 0.8F);
 }
 
 }  // namespace
@@ -281,6 +354,7 @@ int main(int argc, char** argv) {
   cpu_effects_apply_in_program_order();
   color_matrix_operates_on_straight_linear_rgba();
   singular_transforms_produce_transparency();
+  source_placement_modes_map_into_the_canvas();
   unavailable_cpu_effects_fail_explicitly();
   blend_modes_follow_premultiplied_source_over_semantics();
   composition_effects_execute_through_the_frame_plan();

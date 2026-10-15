@@ -32,6 +32,7 @@ struct CompositeVideoFrameOperation {
   std::string source_id;
   std::filesystem::path asset_path;
   Rational source_time;
+  SourcePlacement placement;
   EffectProgram effects;
   std::size_t effect_rewrite_count{0};
   BlendMode blend_mode{BlendMode::source_over};

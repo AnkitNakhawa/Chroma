@@ -17,7 +17,9 @@
       "start_frame": 0,
       "end_frame": 60,
       "source_start_frame": 0,
-      "opacity": 1.0
+      "opacity": 1.0,
+      "fit": "cover",
+      "position": [0.5, 0.5]
     }
   ]
 }

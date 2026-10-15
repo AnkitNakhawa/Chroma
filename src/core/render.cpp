@@ -245,6 +245,70 @@ Pixel composite(Pixel source, Pixel destination, BlendMode mode) noexcept {
                .alpha = source_alpha + destination_alpha * (1.0F - source_alpha)};
 }
 
+Surface place_surface_cpu(Surface source, std::int32_t width, std::int32_t height,
+                          const SourcePlacement& placement) {
+  if (fit_mode_name(placement.fit) == "unknown" ||
+      !std::isfinite(placement.position_x) || !std::isfinite(placement.position_y) ||
+      placement.position_x < 0.0 || placement.position_x > 1.0 ||
+      placement.position_y < 0.0 || placement.position_y > 1.0) {
+    throw std::invalid_argument("source placement is invalid");
+  }
+  if (source.width() == width && source.height() == height) {
+    return source;
+  }
+
+  const auto source_width = static_cast<double>(source.width());
+  const auto source_height = static_cast<double>(source.height());
+  const auto target_width = static_cast<double>(width);
+  const auto target_height = static_cast<double>(height);
+  double scale_x = 1.0;
+  double scale_y = 1.0;
+  switch (placement.fit) {
+    case FitMode::none: break;
+    case FitMode::contain: {
+      const auto scale = std::min(target_width / source_width, target_height / source_height);
+      scale_x = scale;
+      scale_y = scale;
+      break;
+    }
+    case FitMode::cover: {
+      const auto scale = std::max(target_width / source_width, target_height / source_height);
+      scale_x = scale;
+      scale_y = scale;
+      break;
+    }
+    case FitMode::fill:
+      scale_x = target_width / source_width;
+      scale_y = target_height / source_height;
+      break;
+    default: throw std::logic_error("validated source placement has an invalid fit mode");
+  }
+
+  const auto placed_width = source_width * scale_x;
+  const auto placed_height = source_height * scale_y;
+  const auto left = (target_width - placed_width) * placement.position_x;
+  const auto top = (target_height - placed_height) * placement.position_y;
+  Surface output(width, height);
+  for (std::int32_t y = 0; y < height; ++y) {
+    const auto target_y = static_cast<double>(y) + 0.5;
+    if (target_y < top || target_y >= top + placed_height) {
+      continue;
+    }
+    for (std::int32_t x = 0; x < width; ++x) {
+      const auto target_x = static_cast<double>(x) + 0.5;
+      if (target_x < left || target_x >= left + placed_width) {
+        continue;
+      }
+      const auto source_x = std::clamp((target_x - left) / scale_x - 0.5, 0.0,
+                                       source_width - 1.0);
+      const auto source_y = std::clamp((target_y - top) / scale_y - 0.5, 0.0,
+                                       source_height - 1.0);
+      output.pixel(x, y) = sample_bilinear(source, source_x, source_y);
+    }
+  }
+  return output;
+}
+
 Surface apply_effect_program_cpu(Surface source, const EffectProgram& program) {
   for (const auto& effect : program.effects()) {
     std::visit(
@@ -308,12 +372,9 @@ Surface CpuRenderContext::execute(const ExecutionPlan& plan) {
       decoder = std::make_unique<VideoDecoder>(video.asset_path);
     }
     auto decoded = decoder->frame_at(video.source_time);
-    if (decoded.surface.width() != result.width() ||
-        decoded.surface.height() != result.height()) {
-      throw std::runtime_error("video layer dimensions must match the composition canvas");
-    }
-    auto source_surface =
-        apply_effect_program_cpu(std::move(decoded.surface), video.effects);
+    auto source_surface = place_surface_cpu(std::move(decoded.surface), result.width(),
+                                            result.height(), video.placement);
+    source_surface = apply_effect_program_cpu(std::move(source_surface), video.effects);
     for (std::size_t index = 0; index < result.size(); ++index) {
       result.pixels()[index] =
           composite(source_surface.pixels()[index], result.pixels()[index], video.blend_mode);

@@ -136,6 +136,16 @@ void plans_reject_invalid_operations() {
                .color = chroma::Color{1.0, 0.0, 0.0, 1.0},
                .blend_mode = static_cast<chroma::BlendMode>(99)}}),
       std::invalid_argument);
+  CHECK_THROWS_AS(
+      chroma::ExecutionPlan(
+          1, 1, chroma::FrameIndex(0),
+          {chroma::ClearOperation{.color = chroma::Color{0.0, 0.0, 0.0, 0.0}},
+           chroma::CompositeVideoFrameOperation{
+               .source_id = "bad-placement",
+               .asset_path = "clip.mkv",
+               .source_time = chroma::Rational(0),
+               .placement = {.fit = chroma::FitMode::cover, .position_x = -1.0}}}),
+      std::invalid_argument);
 }
 
 void video_layers_compile_to_exact_source_times() {
@@ -148,7 +158,10 @@ void video_layers_compile_to_exact_source_times() {
           .range = chroma::FrameRange(chroma::FrameIndex(10), chroma::FrameIndex(40)),
           .asset_id = "clip",
           .source_start = chroma::FrameIndex(3),
-          .opacity = 0.75}});
+          .opacity = 0.75,
+          .placement = {.fit = chroma::FitMode::contain,
+                        .position_x = 0.25,
+                        .position_y = 0.75}}});
   const auto plan = chroma::compile_frame(composition, chroma::FrameIndex(13));
   CHECK(plan.operations().size() == 2);
   const auto* video =
@@ -158,6 +171,9 @@ void video_layers_compile_to_exact_source_times() {
     CHECK(video->source_id == "video");
     CHECK(video->asset_path == "clip.mkv");
     CHECK(video->source_time == chroma::Rational(1, 5));
+    CHECK(video->placement.fit == chroma::FitMode::contain);
+    CHECK(video->placement.position_x == 0.25);
+    CHECK(video->placement.position_y == 0.75);
     CHECK(video->effects.effects().size() == 1);
     const auto* opacity = std::get_if<chroma::OpacityEffect>(&video->effects.effects().front());
     CHECK(opacity != nullptr);
@@ -165,6 +181,11 @@ void video_layers_compile_to_exact_source_times() {
       CHECK(opacity->opacity == 0.75);
     }
   }
+  const auto json = chroma::execution_plan_json(plan);
+  CHECK(json.find("\"fit\": \"contain\"") != std::string::npos);
+  CHECK(json.find("0.25") != std::string::npos);
+  const auto optimized_json = chroma::optimized_execution_plan_json(plan);
+  CHECK(optimized_json.find("place_contain") != std::string::npos);
 }
 
 void layer_effects_and_blends_lower_into_the_plan() {

@@ -53,3 +53,6 @@
 - Made optimized effect programs authoritative in the typed execution plan while retaining rewrite counts in both exact and optimized inspection output.
 - Added conservative dead-layer elimination for provably transparent effect chains and backward culling when an unaffected opaque full-canvas solid completely replaces earlier work.
 - Added regression tests for combined opacity execution, rewrite diagnostics, transparent-layer safety, alpha-restoring color matrices, and opaque-cover culling.
+- Added typed video source placement with `none`, `contain`, `cover`, and `fill` modes plus normalized alignment, carried through parsing and plan inspection.
+- Added deterministic CPU bilinear placement before effects and blending, removing the requirement that decoded video dimensions match the canvas.
+- Added parser diagnostics, per-mode pixel tests, and a real mismatched-dimensions video integration test; completed the CPU effects/placement implementation slice.

@@ -83,13 +83,20 @@ The first useful product target is template-style programmatic video: a backgrou
 ### Ordered implementation slices
 
 1. [complete] Define an immutable effect IR and effect-trait contract covering identity, pointwise, coordinate-transform, neighborhood, temporal, and external/barrier operations. Add stable optimized-plan inspection.
-2. [in_progress] Implement transforms, crop/fit, opacity, color matrices, and blend modes in the CPU reference backend. Transform, crop, opacity, color-matrix, and four blend modes now execute end to end. Optimized programs are authoritative for execution, provably transparent layers are removed, and opaque full-canvas solids cull hidden work; fit helpers and broader graph simplification remain.
+2. [complete] Implement transforms, crop/fit, opacity, color matrices, and blend modes in the CPU reference backend. Video source placement now supports explicit none/contain/cover/fill sampling and normalized alignment before the optimized effect chain. Optimized programs are authoritative for execution, provably transparent layers are removed, and opaque full-canvas solids cull hidden work.
 3. [pending] Partition the optimized graph into fusible groups and explicit barriers. Add pass-count, intermediate-surface, estimated-byte-traffic, and cache-decision diagnostics; prove the planner with tests before GPU code generation.
 4. [pending] Add image layers plus text and basic shapes. Prefer a narrow text shaping/raster dependency, cache static raster results, and avoid adopting a general compositor dependency at this stage.
 5. [pending] Build the first Linux/NVIDIA CUDA vertical slice: retain decoded surfaces on the GPU where supported and fuse sample/transform/color/opacity/composite for the benchmark-critical path. Compare output against the CPU reference backend.
 6. [pending] Add keyframes/easing, simple masks, blur, and transitions. Use blur as the first neighborhood-effect barrier and validate fusion on both sides of it.
 7. [pending] Add audio input, trim, gain, simple mixing, and muxing through FFmpeg to complete the useful basic-video path.
 8. [pending] Publish benchmark comparisons against equivalent FFmpeg and GPU-configured Remotion workloads. Report end-to-end time, GPU/CPU transfer bytes, peak memory, kernel/pass count, and warm/cold behavior.
+
+### Active fit/placement checkpoint
+
+1. [complete] Add typed `none`, `contain`, `cover`, and `fill` source placement with normalized alignment.
+2. [complete] Carry placement through JSON parsing and exact/optimized execution-plan inspection.
+3. [complete] Implement deterministic CPU placement before the existing effect chain and blending.
+4. [complete] Add parser, plan, pixel, and mismatched-video integration tests; update public documentation.
 
 ### Dependency policy for these slices
 
@@ -121,3 +128,4 @@ The first useful product target is template-style programmatic video: a backgrou
 | End-of-media test did not throw for Matroska fixture | 1 | Matroska exposed duration only at container level; rescaled the container duration into the selected stream time base as a fallback. |
 | Adding effect programs as defaulted aggregate members failed to compile | 1 | Replaced the explicit constructor's default argument with a real default constructor while keeping vector conversion explicit. |
 | `clang-format` was unavailable on the development host | 1 | Kept the existing project style manually and verified whitespace with `git diff --check` plus compiler warnings. |
+| Invalid fit prevented an independent invalid-position diagnostic | 1 | Parsed fit and position independently, then returned placement only when both were valid. |

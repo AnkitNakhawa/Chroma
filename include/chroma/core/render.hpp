@@ -58,6 +58,8 @@ class CpuRenderContext {
 
 [[nodiscard]] Pixel composite_over(Pixel source, Pixel destination) noexcept;
 [[nodiscard]] Pixel composite(Pixel source, Pixel destination, BlendMode mode) noexcept;
+[[nodiscard]] Surface place_surface_cpu(Surface source, std::int32_t width, std::int32_t height,
+                                        const SourcePlacement& placement);
 [[nodiscard]] Surface apply_effect_program_cpu(Surface source, const EffectProgram& program);
 [[nodiscard]] Surface execute_cpu(const ExecutionPlan& plan);
 [[nodiscard]] Surface render_frame_cpu(const Composition& composition, FrameIndex frame);
