@@ -314,6 +314,13 @@ void optimized_plan_exposes_rewrites_without_changing_execution() {
           .source_start = chroma::FrameIndex(0),
           .opacity = 1.0}});
   const auto plan = chroma::compile_frame(composition, chroma::FrameIndex(0));
+  const auto analysis = chroma::analyze_execution_plan(plan);
+  CHECK(analysis.passes.size() == 2);
+  CHECK(analysis.logical_temporary_surfaces == 0);
+  CHECK(analysis.surface_bytes == 36'864);
+  CHECK(analysis.estimated_bytes_read == 73'728);
+  CHECK(analysis.estimated_bytes_written == 73'728);
+  CHECK(analysis.peak_live_bytes == 73'728);
   const auto json = chroma::optimized_execution_plan_json(plan);
   CHECK(json.find("planning_only") != std::string::npos);
   CHECK(json.find("fusion_candidate") != std::string::npos);
@@ -323,7 +330,7 @@ void optimized_plan_exposes_rewrites_without_changing_execution() {
   CHECK(json.find("\"rewrite_count\": 0") != std::string::npos);
 }
 
-void optimizer_inspection_marks_barrier_chains_as_multi_pass() {
+void physical_planner_splits_barriers_and_tracks_resources() {
   const chroma::Composition composition(
       1, 4, 2, chroma::FrameRate(chroma::Rational(30)),
       chroma::FrameRange(chroma::FrameIndex(0), chroma::FrameIndex(10)),
@@ -331,11 +338,59 @@ void optimizer_inspection_marks_barrier_chains_as_multi_pass() {
           .id = "blurred",
           .range = chroma::FrameRange(chroma::FrameIndex(0), chroma::FrameIndex(10)),
           .color = chroma::Color{.red = 1.0, .green = 0.0, .blue = 0.0, .alpha = 1.0},
-          .effects = chroma::EffectProgram({chroma::GaussianBlurEffect{.radius = 2.0}})}});
-  const auto json = chroma::optimized_execution_plan_json(
-      chroma::compile_frame(composition, chroma::FrameIndex(0)));
-  CHECK(json.find("multi_pass_required") != std::string::npos);
-  CHECK(json.find("\"gpu_fusible\": false") != std::string::npos);
+          .effects = chroma::EffectProgram(
+              {chroma::OpacityEffect{.opacity = 0.5},
+               chroma::GaussianBlurEffect{.radius = 2.0},
+               chroma::CropEffect{.x = 0, .y = 0, .width = 4, .height = 2},
+               chroma::ExternalEffect{.implementation = "example", .deterministic = true}})}});
+  const auto plan = chroma::compile_frame(composition, chroma::FrameIndex(0));
+  const auto analysis = chroma::analyze_execution_plan(plan);
+  CHECK(analysis.passes.size() == 6);
+  CHECK(analysis.logical_temporary_surfaces == 4);
+  CHECK(analysis.surface_bytes == 128);
+  CHECK(analysis.estimated_bytes_read == 640);
+  CHECK(analysis.estimated_bytes_written == 768);
+  CHECK(analysis.peak_live_bytes == 384);
+  if (analysis.passes.size() == 6) {
+    CHECK(analysis.passes[1].nodes ==
+          (std::vector<std::string>{"solid_source", "opacity"}));
+    CHECK(analysis.passes[2].kind == chroma::RenderPassKind::barrier);
+    CHECK(analysis.passes[2].barrier == chroma::BarrierReason::neighborhood_effect);
+    CHECK(analysis.passes[2].nodes == (std::vector<std::string>{"gaussian_blur"}));
+    CHECK(analysis.passes[3].nodes == (std::vector<std::string>{"crop"}));
+    CHECK(analysis.passes[4].kind == chroma::RenderPassKind::barrier);
+    CHECK(analysis.passes[4].barrier == chroma::BarrierReason::external_effect);
+    CHECK(analysis.passes[4].nodes == (std::vector<std::string>{"external"}));
+    CHECK(analysis.passes[5].nodes == (std::vector<std::string>{"source_over"}));
+    CHECK(analysis.passes[1].write_resource == analysis.passes[2].read_resources.front());
+    CHECK(analysis.passes[4].write_resource == analysis.passes[5].read_resources.front());
+  }
+  CHECK(analysis == chroma::analyze_execution_plan(plan));
+
+  const auto json = chroma::optimized_execution_plan_json(plan);
+  CHECK(json.find("\"kind\": \"barrier\"") != std::string::npos);
+  CHECK(json.find("neighborhood_effect") != std::string::npos);
+  CHECK(json.find("external_effect") != std::string::npos);
+  CHECK(json.find("logical_temporary_surfaces") != std::string::npos);
+  CHECK(json.find("peak_live_bytes") != std::string::npos);
+
+  const chroma::Composition temporal_composition(
+      1, 4, 2, chroma::FrameRate(chroma::Rational(30)),
+      chroma::FrameRange(chroma::FrameIndex(0), chroma::FrameIndex(10)),
+      {chroma::SolidLayer{
+          .id = "temporal",
+          .range = chroma::FrameRange(chroma::FrameIndex(0), chroma::FrameIndex(10)),
+          .color = chroma::Color{.red = 1.0, .green = 1.0, .blue = 1.0, .alpha = 1.0},
+          .effects = chroma::EffectProgram({chroma::TemporalSampleEffect{.radius = 1}})}});
+  const auto temporal_analysis = chroma::analyze_execution_plan(
+      chroma::compile_frame(temporal_composition, chroma::FrameIndex(0)));
+  CHECK(temporal_analysis.passes.size() == 4);
+  if (temporal_analysis.passes.size() == 4) {
+    CHECK(temporal_analysis.passes[2].barrier == chroma::BarrierReason::temporal_effect);
+    CHECK(temporal_analysis.passes[2].read_resources.size() == 3);
+    CHECK(temporal_analysis.passes[2].read_resources[1] == "temporal:temporal:-1");
+    CHECK(temporal_analysis.passes[2].read_resources[2] == "temporal:temporal:1");
+  }
 }
 
 }  // namespace
@@ -355,7 +410,7 @@ int main() {
   compilation_keeps_layers_that_can_restore_alpha();
   opaque_full_canvas_solids_cull_hidden_layers();
   optimized_plan_exposes_rewrites_without_changing_execution();
-  optimizer_inspection_marks_barrier_chains_as_multi_pass();
+  physical_planner_splits_barriers_and_tracks_resources();
 
   if (failures != 0) {
     std::cerr << failures << " test assertion(s) failed\n";

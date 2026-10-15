@@ -84,7 +84,7 @@ The first useful product target is template-style programmatic video: a backgrou
 
 1. [complete] Define an immutable effect IR and effect-trait contract covering identity, pointwise, coordinate-transform, neighborhood, temporal, and external/barrier operations. Add stable optimized-plan inspection.
 2. [complete] Implement transforms, crop/fit, opacity, color matrices, and blend modes in the CPU reference backend. Video source placement now supports explicit none/contain/cover/fill sampling and normalized alignment before the optimized effect chain. Optimized programs are authoritative for execution, provably transparent layers are removed, and opaque full-canvas solids cull hidden work.
-3. [pending] Partition the optimized graph into fusible groups and explicit barriers. Add pass-count, intermediate-surface, estimated-byte-traffic, and cache-decision diagnostics; prove the planner with tests before GPU code generation.
+3. [in_progress] Partition the optimized graph into fusible groups and explicit barriers. Add pass-count, intermediate-surface, estimated-byte-traffic, and cache-decision diagnostics; prove the planner with tests before GPU code generation.
 4. [pending] Add image layers plus text and basic shapes. Prefer a narrow text shaping/raster dependency, cache static raster results, and avoid adopting a general compositor dependency at this stage.
 5. [pending] Build the first Linux/NVIDIA CUDA vertical slice: retain decoded surfaces on the GPU where supported and fuse sample/transform/color/opacity/composite for the benchmark-critical path. Compare output against the CPU reference backend.
 6. [pending] Add keyframes/easing, simple masks, blur, and transitions. Use blur as the first neighborhood-effect barrier and validate fusion on both sides of it.
@@ -97,6 +97,13 @@ The first useful product target is template-style programmatic video: a backgrou
 2. [complete] Carry placement through JSON parsing and exact/optimized execution-plan inspection.
 3. [complete] Implement deterministic CPU placement before the existing effect chain and blending.
 4. [complete] Add parser, plan, pixel, and mismatched-video integration tests; update public documentation.
+
+### Active physical pass-planner checkpoint
+
+1. [complete] Define typed physical passes, barrier reasons, resource reads/writes, and aggregate cost diagnostics.
+2. [complete] Split optimized effect chains at neighborhood, temporal, and external barriers while preserving fusible regions.
+3. [complete] Estimate logical temporary surfaces, full-frame byte traffic, and peak live memory with explicit assumptions.
+4. [complete] Expose stable JSON, add legal/illegal fusion and resource-lifetime tests, update docs, and exercise the diagnostic path through the CLI.
 
 ### Dependency policy for these slices
 
@@ -129,3 +136,4 @@ The first useful product target is template-style programmatic video: a backgrou
 | Adding effect programs as defaulted aggregate members failed to compile | 1 | Replaced the explicit constructor's default argument with a real default constructor while keeping vector conversion explicit. |
 | `clang-format` was unavailable on the development host | 1 | Kept the existing project style manually and verified whitespace with `git diff --check` plus compiler warnings. |
 | Invalid fit prevented an independent invalid-position diagnostic | 1 | Parsed fit and position independently, then returned placement only when both were valid. |
+| Legacy optimizer test expected one `multi_pass_required` marker | 1 | Replaced it with typed assertions over the new concrete fusion and barrier passes, resource edges, and cost totals. |

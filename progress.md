@@ -56,3 +56,6 @@
 - Added typed video source placement with `none`, `contain`, `cover`, and `fill` modes plus normalized alignment, carried through parsing and plan inspection.
 - Added deterministic CPU bilinear placement before effects and blending, removing the requirement that decoded video dimensions match the canvas.
 - Added parser diagnostics, per-mode pixel tests, and a real mismatched-dimensions video integration test; completed the CPU effects/placement implementation slice.
+- Added a typed physical execution-plan analysis with fusion-candidate, clear, and barrier passes plus named resource reads/writes.
+- Split neighborhood, temporal, and external effects into explicit barriers while preserving fusible regions on both sides; temporal barriers account for neighboring frame inputs.
+- Added deterministic pass-count, logical-temporary, full-frame byte-traffic, peak-live-memory, rewrite, and cache-status diagnostics to `inspect-optimized-plan`.

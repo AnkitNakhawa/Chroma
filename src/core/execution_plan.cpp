@@ -1,10 +1,12 @@
 #include "chroma/core/execution_plan.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <limits>
 #include <optional>
 #include <stdexcept>
 #include <type_traits>
+#include <unordered_set>
 #include <utility>
 
 #include <nlohmann/json.hpp>
@@ -96,7 +98,38 @@ nlohmann::json effects_json(const EffectProgram& program) {
   return nlohmann::json::parse(effect_program_json(program));
 }
 
+BarrierReason barrier_reason(const Effect& effect) noexcept {
+  switch (effect_traits(effect).domain) {
+    case EffectDomain::neighborhood: return BarrierReason::neighborhood_effect;
+    case EffectDomain::temporal: return BarrierReason::temporal_effect;
+    case EffectDomain::external: return BarrierReason::external_effect;
+    case EffectDomain::coordinate:
+    case EffectDomain::pointwise: return BarrierReason::none;
+  }
+  return BarrierReason::external_effect;
+}
+
 }  // namespace
+
+std::string_view render_pass_kind_name(RenderPassKind kind) noexcept {
+  switch (kind) {
+    case RenderPassKind::clear: return "clear";
+    case RenderPassKind::fusion_candidate: return "fusion_candidate";
+    case RenderPassKind::barrier: return "barrier";
+  }
+  return "unknown";
+}
+
+std::string_view barrier_reason_name(BarrierReason reason) noexcept {
+  switch (reason) {
+    case BarrierReason::none: return "none";
+    case BarrierReason::surface_initialization: return "surface_initialization";
+    case BarrierReason::neighborhood_effect: return "neighborhood_effect";
+    case BarrierReason::temporal_effect: return "temporal_effect";
+    case BarrierReason::external_effect: return "external_effect";
+  }
+  return "unknown";
+}
 
 ExecutionPlan::ExecutionPlan(std::int32_t width, std::int32_t height, FrameIndex frame,
                              std::vector<RenderOperation> operations)
@@ -202,6 +235,126 @@ ExecutionPlan compile_frame(const Composition& composition, FrameIndex frame) {
   return ExecutionPlan(composition.width(), composition.height(), frame, std::move(operations));
 }
 
+ExecutionPlanAnalysis analyze_execution_plan(const ExecutionPlan& plan) {
+  ExecutionPlanAnalysis analysis;
+  analysis.surface_bytes = static_cast<std::uint64_t>(plan.width()) *
+                           static_cast<std::uint64_t>(plan.height()) * 4U * sizeof(float);
+  std::size_t temporary_index = 0;
+
+  const auto next_temporary = [&]() {
+    ++analysis.logical_temporary_surfaces;
+    return std::string("temporary:") + std::to_string(temporary_index++);
+  };
+  const auto append_pass = [&](RenderPassKind kind, BarrierReason barrier,
+                               const std::string& source_id, bool gpu_fusible,
+                               std::size_t rewrite_count, std::vector<std::string> nodes,
+                               std::vector<std::string> reads, std::string write) {
+    const auto read_count = static_cast<std::uint64_t>(reads.size());
+    analysis.estimated_bytes_read += read_count * analysis.surface_bytes;
+    analysis.estimated_bytes_written += analysis.surface_bytes;
+
+    std::unordered_set<std::string> live_resources{"canvas"};
+    live_resources.insert(reads.begin(), reads.end());
+    live_resources.insert(write);
+    const auto live_bytes = static_cast<std::uint64_t>(live_resources.size()) *
+                            analysis.surface_bytes;
+    analysis.peak_live_bytes = std::max(analysis.peak_live_bytes, live_bytes);
+    analysis.passes.push_back(PlannedRenderPass{
+        .index = analysis.passes.size(),
+        .kind = kind,
+        .barrier = barrier,
+        .source_id = source_id,
+        .gpu_fusible = gpu_fusible,
+        .rewrite_count = rewrite_count,
+        .nodes = std::move(nodes),
+        .read_resources = std::move(reads),
+        .write_resource = std::move(write)});
+  };
+
+  append_pass(RenderPassKind::clear, BarrierReason::surface_initialization, "", false, 0,
+              {"clear"}, {}, "canvas");
+
+  for (const auto& operation : plan.operations()) {
+    if (std::holds_alternative<ClearOperation>(operation)) {
+      continue;
+    }
+
+    std::string source_id;
+    std::vector<std::string> current_nodes;
+    std::vector<std::string> current_reads;
+    std::vector<Effect> effects;
+    std::size_t pending_rewrites = 0;
+    BlendMode blend_mode = BlendMode::source_over;
+    if (const auto* solid = std::get_if<CompositeSolidOperation>(&operation)) {
+      source_id = solid->source_id;
+      current_nodes.push_back("solid_source");
+      effects = solid->effects.effects();
+      pending_rewrites = solid->effect_rewrite_count;
+      blend_mode = solid->blend_mode;
+    } else {
+      const auto& video = std::get<CompositeVideoFrameOperation>(operation);
+      source_id = video.source_id;
+      current_nodes.push_back("video_sample");
+      current_nodes.push_back("place_" + std::string(fit_mode_name(video.placement.fit)));
+      current_reads.push_back("source:" + source_id);
+      effects = video.effects.effects();
+      pending_rewrites = video.effect_rewrite_count;
+      blend_mode = video.blend_mode;
+    }
+
+    const auto optimized = optimize_effect_program(EffectProgram(std::move(effects)));
+    pending_rewrites += optimized.rewrite_count();
+    analysis.total_rewrite_count += pending_rewrites;
+    for (const auto& group : optimized.fusion_groups()) {
+      if (group.gpu_fusible) {
+        for (auto index = group.begin; index < group.end; ++index) {
+          current_nodes.emplace_back(effect_name(optimized.program().effects()[index]));
+        }
+        continue;
+      }
+
+      if (!current_nodes.empty()) {
+        auto temporary = next_temporary();
+        append_pass(RenderPassKind::fusion_candidate, BarrierReason::none, source_id, true,
+                    pending_rewrites, std::move(current_nodes), std::move(current_reads),
+                    temporary);
+        pending_rewrites = 0;
+        current_reads = {std::move(temporary)};
+      }
+
+      for (auto index = group.begin; index < group.end; ++index) {
+        const auto& effect = optimized.program().effects()[index];
+        auto temporary = next_temporary();
+        auto barrier_reads = current_reads;
+        if (const auto* temporal = std::get_if<TemporalSampleEffect>(&effect)) {
+          for (auto offset = -temporal->radius; offset <= temporal->radius; ++offset) {
+            if (offset != 0) {
+              barrier_reads.push_back("temporal:" + source_id + ":" +
+                                      std::to_string(offset));
+            }
+          }
+        }
+        append_pass(RenderPassKind::barrier, barrier_reason(effect), source_id, false,
+                    pending_rewrites, {std::string(effect_name(effect))},
+                    std::move(barrier_reads),
+                    temporary);
+        pending_rewrites = 0;
+        current_reads = {std::move(temporary)};
+      }
+    }
+
+    current_nodes.emplace_back(blend_mode_name(blend_mode));
+    if (std::find(current_reads.begin(), current_reads.end(), "canvas") ==
+        current_reads.end()) {
+      current_reads.emplace_back("canvas");
+    }
+    append_pass(RenderPassKind::fusion_candidate, BarrierReason::none, source_id, true,
+                pending_rewrites, std::move(current_nodes), std::move(current_reads),
+                "canvas");
+  }
+  return analysis;
+}
+
 std::string execution_plan_json(const ExecutionPlan& plan) {
   nlohmann::json operations = nlohmann::json::array();
   for (const auto& operation : plan.operations()) {
@@ -238,80 +391,38 @@ std::string execution_plan_json(const ExecutionPlan& plan) {
 }
 
 std::string optimized_execution_plan_json(const ExecutionPlan& plan) {
+  const auto analysis = analyze_execution_plan(plan);
   nlohmann::json passes = nlohmann::json::array();
-  std::size_t pass_index = 0;
-
-  for (const auto& operation : plan.operations()) {
-    if (std::holds_alternative<ClearOperation>(operation)) {
-      passes.push_back({{"pass", pass_index++},
-                        {"kind", "clear"},
-                        {"gpu_fusible", false},
-                        {"barrier", "surface_initialization"},
-                        {"nodes", nlohmann::json::array({"clear"})}});
-      continue;
-    }
-
-    std::string source_id;
-    std::string source_node;
-    std::vector<Effect> effects;
-    std::size_t compiled_rewrite_count = 0;
-    std::string placement_node;
-    if (const auto* solid = std::get_if<CompositeSolidOperation>(&operation)) {
-      source_id = solid->source_id;
-      source_node = "solid_source";
-      effects = solid->effects.effects();
-      compiled_rewrite_count = solid->effect_rewrite_count;
-    } else {
-      const auto& video = std::get<CompositeVideoFrameOperation>(operation);
-      source_id = video.source_id;
-      source_node = "video_sample";
-      placement_node = "place_" + std::string(fit_mode_name(video.placement.fit));
-      effects = video.effects.effects();
-      compiled_rewrite_count = video.effect_rewrite_count;
-    }
-
-    const auto optimized = optimize_effect_program(EffectProgram(std::move(effects)));
-    nlohmann::json nodes = nlohmann::json::array({source_node});
-    if (!placement_node.empty()) {
-      nodes.push_back(placement_node);
-    }
-    for (const auto& effect : optimized.program().effects()) {
-      nodes.push_back(effect_name(effect));
-    }
-    const auto blend_mode = std::visit(
-        [](const auto& typed_operation) {
-          if constexpr (requires { typed_operation.blend_mode; }) {
-            return typed_operation.blend_mode;
-          }
-          return BlendMode::source_over;
-        },
-        operation);
-    nodes.push_back(blend_mode_name(blend_mode));
-
-    nlohmann::json effect_groups = nlohmann::json::array();
-    bool entire_chain_fusible = true;
-    for (const auto& group : optimized.fusion_groups()) {
-      entire_chain_fusible = entire_chain_fusible && group.gpu_fusible;
-      effect_groups.push_back({{"begin", group.begin},
-                               {"end", group.end},
-                               {"gpu_fusible", group.gpu_fusible}});
-    }
-
-    // Source sampling, simple effects, and blending are one candidate pass until a
-    // non-fusible effect forces the future GPU compiler to split the chain.
-    passes.push_back({{"pass", pass_index++},
-                      {"kind", entire_chain_fusible ? "fusion_candidate"
-                                                     : "multi_pass_required"},
-                      {"source_id", source_id},
-                      {"gpu_fusible", entire_chain_fusible},
-                      {"rewrite_count", compiled_rewrite_count + optimized.rewrite_count()},
-                      {"nodes", std::move(nodes)},
-                      {"effect_groups", std::move(effect_groups)}});
+  for (const auto& pass : analysis.passes) {
+    passes.push_back({{"pass", pass.index},
+                      {"kind", render_pass_kind_name(pass.kind)},
+                      {"source_id", pass.source_id},
+                      {"gpu_fusible", pass.gpu_fusible},
+                      {"barrier", barrier_reason_name(pass.barrier)},
+                      {"rewrite_count", pass.rewrite_count},
+                      {"nodes", pass.nodes},
+                      {"resources",
+                       {{"reads", pass.read_resources}, {"writes", pass.write_resource}}},
+                      {"estimated_bytes_read",
+                       static_cast<std::uint64_t>(pass.read_resources.size()) *
+                           analysis.surface_bytes},
+                      {"estimated_bytes_written", analysis.surface_bytes},
+                      {"cache_decision", "not_planned"}});
   }
 
   return nlohmann::json{{"frame", plan.frame().value()},
                         {"surface", {{"width", plan.width()}, {"height", plan.height()}}},
                         {"status", "planning_only"},
+                        {"summary",
+                         {{"pass_count", analysis.passes.size()},
+                          {"logical_temporary_surfaces",
+                           analysis.logical_temporary_surfaces},
+                          {"surface_bytes", analysis.surface_bytes},
+                          {"estimated_bytes_read", analysis.estimated_bytes_read},
+                          {"estimated_bytes_written", analysis.estimated_bytes_written},
+                          {"peak_live_bytes", analysis.peak_live_bytes},
+                          {"total_rewrite_count", analysis.total_rewrite_count},
+                          {"cache_planning", "not_implemented"}}},
                         {"passes", std::move(passes)}}
       .dump(2);
 }

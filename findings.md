@@ -93,6 +93,7 @@ The project should be a headless native motion-graphics runtime for AI-generated
 ## Effects and optimizer direction
 
 - Fit belongs in typed source sampling rather than as an opaque resize effect: source dimensions are only known at media execution today, and a future GPU backend should fuse placement with sampling, effects, and blending instead of materializing a resized intermediate.
+- Physical pass diagnostics should distinguish logical SSA-style intermediates from physical buffer allocations. The former makes dependencies and illegal fusion testable now; lifetime-based buffer reuse belongs to a later allocator pass.
 - Reusing mature C/C++ libraries is necessary but creates a risk that Chroma becomes a conversion-heavy wrapper. Chroma must own the semantic IR, whole-graph rewrites, fusion grouping, memory lifetime planning, residency decisions, caching, and scheduling.
 - External libraries fall into three categories: specialized primitives that should be reused, backend implementations that preserve Chroma semantics, and black-box operations that form optimizer barriers.
 - The first native fusible class should combine coordinate mapping, sampling, simple color math, opacity, and compositing. Neighborhood effects such as blur, temporal effects, fan-out, incompatible formats, and opaque external calls create natural fusion boundaries.
