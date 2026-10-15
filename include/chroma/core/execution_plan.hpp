@@ -80,8 +80,24 @@ enum class BarrierReason {
   external_effect,
 };
 
+enum class CacheDecision {
+  not_cacheable,
+  recompute,
+  cache_candidate,
+};
+
+enum class CacheReason {
+  frame_variant_source,
+  temporal_dependency,
+  nondeterministic_effect,
+  cheap_static_subgraph,
+  expensive_static_subgraph,
+};
+
 [[nodiscard]] std::string_view render_pass_kind_name(RenderPassKind kind) noexcept;
 [[nodiscard]] std::string_view barrier_reason_name(BarrierReason reason) noexcept;
+[[nodiscard]] std::string_view cache_decision_name(CacheDecision decision) noexcept;
+[[nodiscard]] std::string_view cache_reason_name(CacheReason reason) noexcept;
 
 struct PlannedRenderPass {
   std::size_t index;
@@ -97,10 +113,33 @@ struct PlannedRenderPass {
   friend bool operator==(const PlannedRenderPass&, const PlannedRenderPass&) = default;
 };
 
+struct TemporaryAllocation {
+  std::string logical_resource;
+  std::size_t physical_buffer;
+  std::size_t first_pass;
+  std::size_t last_pass;
+
+  friend bool operator==(const TemporaryAllocation&, const TemporaryAllocation&) = default;
+};
+
+struct CacheOpportunity {
+  std::string source_id;
+  CacheDecision decision;
+  CacheReason reason;
+  std::vector<std::string> nodes;
+  std::uint64_t estimated_storage_bytes;
+
+  friend bool operator==(const CacheOpportunity&, const CacheOpportunity&) = default;
+};
+
 struct ExecutionPlanAnalysis {
   std::vector<PlannedRenderPass> passes;
+  std::vector<TemporaryAllocation> temporary_allocations;
+  std::vector<CacheOpportunity> cache_opportunities;
   std::size_t logical_temporary_surfaces{0};
+  std::size_t physical_temporary_buffers{0};
   std::uint64_t surface_bytes{0};
+  std::uint64_t physical_temporary_bytes{0};
   std::uint64_t estimated_bytes_read{0};
   std::uint64_t estimated_bytes_written{0};
   std::uint64_t peak_live_bytes{0};

@@ -29,7 +29,7 @@ Chroma is not intended to be a visual editor, preview platform, hosted rendering
 
 ## Status
 
-Post-baseline compiler spike. Chroma can parse and validate solid/video compositions, resolve assets, probe and decode media at exact rational times, compile typed per-frame plans, render through a persistent CPU execution context, write PPM frames, encode H.264/MP4 directly, and emit per-stage benchmark JSON. Video sources support `none`, `contain`, `cover`, and `fill` placement with normalized alignment. Composition layers can request transform, crop, opacity, and color-matrix effects plus source-over, multiply, screen, and plus blending. The compiler makes conservative algebraic rewrites authoritative for execution, removes provably dead work, and produces a typed physical-pass analysis with fusion candidates, explicit barriers, logical intermediate resources, full-frame byte-traffic estimates, and peak-live memory. CUDA execution, audio, text, image assets, production color management, caching, parallel scheduling, and language bindings are not implemented yet.
+Post-baseline compiler spike. Chroma can parse and validate solid/video compositions, resolve assets, probe and decode media at exact rational times, compile typed per-frame plans, render through a persistent CPU execution context, write PPM frames, encode H.264/MP4 directly, and emit per-stage benchmark JSON. Video sources support `none`, `contain`, `cover`, and `fill` placement with normalized alignment. Composition layers can request transform, crop, opacity, and color-matrix effects plus source-over, multiply, screen, and plus blending. The compiler makes conservative algebraic rewrites authoritative for execution, removes provably dead work, and produces a typed physical-pass analysis with fusion candidates, explicit barriers, logical intermediate resources, reusable physical-buffer assignments, full-frame byte-traffic estimates, peak-live memory, and cache opportunities. CUDA execution, audio, text, image assets, production color management, cache persistence, parallel scheduling, and language bindings are not implemented yet.
 
 ## Build and test
 
@@ -92,7 +92,7 @@ Inspect proposed rewrites and GPU fusion candidates separately:
 ```
 
 Optimized-plan output currently reports `"status": "planning_only"`; rendering still executes the typed plan shown by `inspect-plan`.
-Its cost summary assumes a linear-premultiplied RGBA working surface of four floats per pixel and full-canvas reads/writes. Logical temporary counts describe compiler resources before buffer reuse; cache decisions remain explicitly marked as not implemented.
+Its cost summary assumes a linear-premultiplied RGBA working surface of four floats per pixel and full-canvas reads/writes. Logical temporaries use SSA-style names; non-overlapping lifetimes are mapped onto reusable physical buffer numbers. Cache diagnostics conservatively classify frame-varying, temporal, and nondeterministic work as non-cacheable, cheap static work as better to recompute, and expensive deterministic static work as a cache candidate. These are planning decisions only: the renderer does not yet allocate from this physical plan or persist cached surfaces.
 
 Render the basic effects example:
 

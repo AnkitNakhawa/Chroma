@@ -317,10 +317,18 @@ void optimized_plan_exposes_rewrites_without_changing_execution() {
   const auto analysis = chroma::analyze_execution_plan(plan);
   CHECK(analysis.passes.size() == 2);
   CHECK(analysis.logical_temporary_surfaces == 0);
+  CHECK(analysis.physical_temporary_buffers == 0);
   CHECK(analysis.surface_bytes == 36'864);
   CHECK(analysis.estimated_bytes_read == 73'728);
   CHECK(analysis.estimated_bytes_written == 73'728);
   CHECK(analysis.peak_live_bytes == 73'728);
+  CHECK(analysis.cache_opportunities.size() == 1);
+  if (analysis.cache_opportunities.size() == 1) {
+    CHECK(analysis.cache_opportunities[0].decision ==
+          chroma::CacheDecision::not_cacheable);
+    CHECK(analysis.cache_opportunities[0].reason ==
+          chroma::CacheReason::frame_variant_source);
+  }
   const auto json = chroma::optimized_execution_plan_json(plan);
   CHECK(json.find("planning_only") != std::string::npos);
   CHECK(json.find("fusion_candidate") != std::string::npos);
@@ -347,10 +355,40 @@ void physical_planner_splits_barriers_and_tracks_resources() {
   const auto analysis = chroma::analyze_execution_plan(plan);
   CHECK(analysis.passes.size() == 6);
   CHECK(analysis.logical_temporary_surfaces == 4);
+  CHECK(analysis.physical_temporary_buffers == 2);
+  CHECK(analysis.physical_temporary_bytes == 256);
   CHECK(analysis.surface_bytes == 128);
   CHECK(analysis.estimated_bytes_read == 640);
   CHECK(analysis.estimated_bytes_written == 768);
   CHECK(analysis.peak_live_bytes == 384);
+  CHECK(analysis.temporary_allocations.size() == 4);
+  if (analysis.temporary_allocations.size() == 4) {
+    CHECK(analysis.temporary_allocations[0].physical_buffer == 0);
+    CHECK(analysis.temporary_allocations[1].physical_buffer == 1);
+    CHECK(analysis.temporary_allocations[2].physical_buffer == 0);
+    CHECK(analysis.temporary_allocations[3].physical_buffer == 1);
+    CHECK(analysis.temporary_allocations[0].first_pass == 1);
+    CHECK(analysis.temporary_allocations[0].last_pass == 2);
+    CHECK(analysis.temporary_allocations[3].first_pass == 4);
+    CHECK(analysis.temporary_allocations[3].last_pass == 5);
+    for (std::size_t left = 0; left < analysis.temporary_allocations.size(); ++left) {
+      for (std::size_t right = left + 1; right < analysis.temporary_allocations.size(); ++right) {
+        const auto& first = analysis.temporary_allocations[left];
+        const auto& second = analysis.temporary_allocations[right];
+        if (first.physical_buffer == second.physical_buffer) {
+          CHECK(first.last_pass < second.first_pass || second.last_pass < first.first_pass);
+        }
+      }
+    }
+  }
+  CHECK(analysis.cache_opportunities.size() == 1);
+  if (analysis.cache_opportunities.size() == 1) {
+    CHECK(analysis.cache_opportunities[0].decision ==
+          chroma::CacheDecision::cache_candidate);
+    CHECK(analysis.cache_opportunities[0].reason ==
+          chroma::CacheReason::expensive_static_subgraph);
+    CHECK(analysis.cache_opportunities[0].estimated_storage_bytes == 128);
+  }
   if (analysis.passes.size() == 6) {
     CHECK(analysis.passes[1].nodes ==
           (std::vector<std::string>{"solid_source", "opacity"}));
@@ -373,6 +411,8 @@ void physical_planner_splits_barriers_and_tracks_resources() {
   CHECK(json.find("external_effect") != std::string::npos);
   CHECK(json.find("logical_temporary_surfaces") != std::string::npos);
   CHECK(json.find("peak_live_bytes") != std::string::npos);
+  CHECK(json.find("physical_temporary_buffers") != std::string::npos);
+  CHECK(json.find("cache_candidate") != std::string::npos);
 
   const chroma::Composition temporal_composition(
       1, 4, 2, chroma::FrameRate(chroma::Rational(30)),
@@ -390,6 +430,41 @@ void physical_planner_splits_barriers_and_tracks_resources() {
     CHECK(temporal_analysis.passes[2].read_resources.size() == 3);
     CHECK(temporal_analysis.passes[2].read_resources[1] == "temporal:temporal:-1");
     CHECK(temporal_analysis.passes[2].read_resources[2] == "temporal:temporal:1");
+  }
+  CHECK(temporal_analysis.cache_opportunities.size() == 1);
+  if (temporal_analysis.cache_opportunities.size() == 1) {
+    CHECK(temporal_analysis.cache_opportunities[0].decision ==
+          chroma::CacheDecision::not_cacheable);
+    CHECK(temporal_analysis.cache_opportunities[0].reason ==
+          chroma::CacheReason::temporal_dependency);
+  }
+
+  const chroma::Composition nondeterministic_composition(
+      1, 4, 2, chroma::FrameRate(chroma::Rational(30)),
+      chroma::FrameRange(chroma::FrameIndex(0), chroma::FrameIndex(10)),
+      {chroma::SolidLayer{
+          .id = "nondeterministic",
+          .range = chroma::FrameRange(chroma::FrameIndex(0), chroma::FrameIndex(10)),
+          .color = chroma::Color{.red = 1.0, .green = 1.0, .blue = 1.0, .alpha = 1.0},
+          .effects = chroma::EffectProgram(
+              {chroma::ExternalEffect{.implementation = "random", .deterministic = false}})}});
+  const auto nondeterministic_analysis = chroma::analyze_execution_plan(
+      chroma::compile_frame(nondeterministic_composition, chroma::FrameIndex(0)));
+  CHECK(nondeterministic_analysis.cache_opportunities.size() == 1);
+  if (nondeterministic_analysis.cache_opportunities.size() == 1) {
+    CHECK(nondeterministic_analysis.cache_opportunities[0].decision ==
+          chroma::CacheDecision::not_cacheable);
+    CHECK(nondeterministic_analysis.cache_opportunities[0].reason ==
+          chroma::CacheReason::nondeterministic_effect);
+  }
+
+  const auto cheap_analysis = chroma::analyze_execution_plan(
+      chroma::compile_frame(sample_composition(), chroma::FrameIndex(2)));
+  CHECK(cheap_analysis.cache_opportunities.size() == 2);
+  for (const auto& opportunity : cheap_analysis.cache_opportunities) {
+    CHECK(opportunity.decision == chroma::CacheDecision::recompute);
+    CHECK(opportunity.reason == chroma::CacheReason::cheap_static_subgraph);
+    CHECK(opportunity.estimated_storage_bytes == 0);
   }
 }
 

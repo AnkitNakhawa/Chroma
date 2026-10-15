@@ -58,4 +58,7 @@
 - Added parser diagnostics, per-mode pixel tests, and a real mismatched-dimensions video integration test; completed the CPU effects/placement implementation slice.
 - Added a typed physical execution-plan analysis with fusion-candidate, clear, and barrier passes plus named resource reads/writes.
 - Split neighborhood, temporal, and external effects into explicit barriers while preserving fusible regions on both sides; temporal barriers account for neighboring frame inputs.
-- Added deterministic pass-count, logical-temporary, full-frame byte-traffic, peak-live-memory, rewrite, and cache-status diagnostics to `inspect-optimized-plan`.
+- Added deterministic pass-count, logical-temporary, full-frame byte-traffic, peak-live-memory, and rewrite diagnostics to `inspect-optimized-plan`.
+- Added lifetime-based physical temporary reuse with strict read/write non-aliasing, plus physical buffer counts, byte estimates, and allocation intervals.
+- Added conservative cache opportunity diagnostics for frame-varying, temporal, nondeterministic, cheap static, and expensive deterministic subgraphs; cache execution and persistence remain unimplemented.
+- Verified the reuse/cache checkpoint with 21/21 FFmpeg tests, 13/13 core-only tests, and 13/13 sanitizer tests; a focused review found no blocking correctness issues.

@@ -84,7 +84,7 @@ The first useful product target is template-style programmatic video: a backgrou
 
 1. [complete] Define an immutable effect IR and effect-trait contract covering identity, pointwise, coordinate-transform, neighborhood, temporal, and external/barrier operations. Add stable optimized-plan inspection.
 2. [complete] Implement transforms, crop/fit, opacity, color matrices, and blend modes in the CPU reference backend. Video source placement now supports explicit none/contain/cover/fill sampling and normalized alignment before the optimized effect chain. Optimized programs are authoritative for execution, provably transparent layers are removed, and opaque full-canvas solids cull hidden work.
-3. [in_progress] Partition the optimized graph into fusible groups and explicit barriers. Add pass-count, intermediate-surface, estimated-byte-traffic, and cache-decision diagnostics; prove the planner with tests before GPU code generation.
+3. [complete] Partition the optimized graph into fusible groups and explicit barriers. Add pass-count, intermediate-surface, estimated-byte-traffic, physical-buffer-reuse, and cache-decision diagnostics; prove the planner with tests before GPU code generation.
 4. [pending] Add image layers plus text and basic shapes. Prefer a narrow text shaping/raster dependency, cache static raster results, and avoid adopting a general compositor dependency at this stage.
 5. [pending] Build the first Linux/NVIDIA CUDA vertical slice: retain decoded surfaces on the GPU where supported and fuse sample/transform/color/opacity/composite for the benchmark-critical path. Compare output against the CPU reference backend.
 6. [pending] Add keyframes/easing, simple masks, blur, and transitions. Use blur as the first neighborhood-effect barrier and validate fusion on both sides of it.
@@ -104,6 +104,13 @@ The first useful product target is template-style programmatic video: a backgrou
 2. [complete] Split optimized effect chains at neighborhood, temporal, and external barriers while preserving fusible regions.
 3. [complete] Estimate logical temporary surfaces, full-frame byte traffic, and peak live memory with explicit assumptions.
 4. [complete] Expose stable JSON, add legal/illegal fusion and resource-lifetime tests, update docs, and exercise the diagnostic path through the CLI.
+
+### Active reuse/cache checkpoint
+
+1. [complete] Compute logical temporary lifetimes and map them onto reusable physical buffers without read/write aliasing.
+2. [complete] Report physical temporary count/bytes and per-resource allocation intervals in typed and JSON diagnostics.
+3. [complete] Classify deterministic static solid subgraphs as cache candidates, cheap constants as recompute, and frame-varying or temporal work as non-cacheable.
+4. [complete] Add allocator overlap, ping-pong reuse, cache-safety, deterministic-output, and documentation coverage.
 
 ### Dependency policy for these slices
 

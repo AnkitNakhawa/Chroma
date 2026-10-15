@@ -6,6 +6,7 @@
 #include <optional>
 #include <stdexcept>
 #include <type_traits>
+#include <unordered_map>
 #include <unordered_set>
 #include <utility>
 
@@ -109,6 +110,89 @@ BarrierReason barrier_reason(const Effect& effect) noexcept {
   return BarrierReason::external_effect;
 }
 
+bool is_temporary_resource(std::string_view resource) noexcept {
+  return resource.starts_with("temporary:");
+}
+
+CacheOpportunity classify_cache_opportunity(std::string source_id, bool frame_variant,
+                                            const EffectProgram& program,
+                                            std::uint64_t surface_bytes) {
+  CacheOpportunity opportunity{.source_id = std::move(source_id),
+                               .decision = CacheDecision::recompute,
+                               .reason = CacheReason::cheap_static_subgraph,
+                               .nodes = {},
+                               .estimated_storage_bytes = 0};
+  opportunity.nodes.push_back(frame_variant ? "video_sample" : "solid_source");
+  bool temporal = false;
+  bool nondeterministic = false;
+  bool expensive = false;
+  for (const auto& effect : program.effects()) {
+    opportunity.nodes.emplace_back(effect_name(effect));
+    const auto traits = effect_traits(effect);
+    temporal = temporal || traits.domain == EffectDomain::temporal;
+    nondeterministic = nondeterministic || !traits.deterministic;
+    expensive = expensive || traits.domain == EffectDomain::neighborhood ||
+                traits.domain == EffectDomain::external;
+  }
+
+  if (frame_variant) {
+    opportunity.decision = CacheDecision::not_cacheable;
+    opportunity.reason = CacheReason::frame_variant_source;
+  } else if (temporal) {
+    opportunity.decision = CacheDecision::not_cacheable;
+    opportunity.reason = CacheReason::temporal_dependency;
+  } else if (nondeterministic) {
+    opportunity.decision = CacheDecision::not_cacheable;
+    opportunity.reason = CacheReason::nondeterministic_effect;
+  } else if (expensive) {
+    opportunity.decision = CacheDecision::cache_candidate;
+    opportunity.reason = CacheReason::expensive_static_subgraph;
+    opportunity.estimated_storage_bytes = surface_bytes;
+  }
+  return opportunity;
+}
+
+void allocate_temporary_buffers(ExecutionPlanAnalysis& analysis) {
+  std::unordered_map<std::string, std::size_t> allocation_by_resource;
+  for (const auto& pass : analysis.passes) {
+    if (is_temporary_resource(pass.write_resource)) {
+      allocation_by_resource.emplace(pass.write_resource,
+                                     analysis.temporary_allocations.size());
+      analysis.temporary_allocations.push_back(
+          TemporaryAllocation{.logical_resource = pass.write_resource,
+                              .physical_buffer = 0,
+                              .first_pass = pass.index,
+                              .last_pass = pass.index});
+    }
+    for (const auto& resource : pass.read_resources) {
+      const auto found = allocation_by_resource.find(resource);
+      if (found != allocation_by_resource.end()) {
+        analysis.temporary_allocations[found->second].last_pass = pass.index;
+      }
+    }
+  }
+
+  std::vector<std::size_t> buffer_last_use;
+  for (auto& allocation : analysis.temporary_allocations) {
+    auto buffer = buffer_last_use.size();
+    for (std::size_t candidate = 0; candidate < buffer_last_use.size(); ++candidate) {
+      if (buffer_last_use[candidate] < allocation.first_pass) {
+        buffer = candidate;
+        break;
+      }
+    }
+    if (buffer == buffer_last_use.size()) {
+      buffer_last_use.push_back(allocation.last_pass);
+    } else {
+      buffer_last_use[buffer] = allocation.last_pass;
+    }
+    allocation.physical_buffer = buffer;
+  }
+  analysis.physical_temporary_buffers = buffer_last_use.size();
+  analysis.physical_temporary_bytes =
+      static_cast<std::uint64_t>(analysis.physical_temporary_buffers) * analysis.surface_bytes;
+}
+
 }  // namespace
 
 std::string_view render_pass_kind_name(RenderPassKind kind) noexcept {
@@ -127,6 +211,26 @@ std::string_view barrier_reason_name(BarrierReason reason) noexcept {
     case BarrierReason::neighborhood_effect: return "neighborhood_effect";
     case BarrierReason::temporal_effect: return "temporal_effect";
     case BarrierReason::external_effect: return "external_effect";
+  }
+  return "unknown";
+}
+
+std::string_view cache_decision_name(CacheDecision decision) noexcept {
+  switch (decision) {
+    case CacheDecision::not_cacheable: return "not_cacheable";
+    case CacheDecision::recompute: return "recompute";
+    case CacheDecision::cache_candidate: return "cache_candidate";
+  }
+  return "unknown";
+}
+
+std::string_view cache_reason_name(CacheReason reason) noexcept {
+  switch (reason) {
+    case CacheReason::frame_variant_source: return "frame_variant_source";
+    case CacheReason::temporal_dependency: return "temporal_dependency";
+    case CacheReason::nondeterministic_effect: return "nondeterministic_effect";
+    case CacheReason::cheap_static_subgraph: return "cheap_static_subgraph";
+    case CacheReason::expensive_static_subgraph: return "expensive_static_subgraph";
   }
   return "unknown";
 }
@@ -303,6 +407,9 @@ ExecutionPlanAnalysis analyze_execution_plan(const ExecutionPlan& plan) {
     }
 
     const auto optimized = optimize_effect_program(EffectProgram(std::move(effects)));
+    analysis.cache_opportunities.push_back(classify_cache_opportunity(
+        source_id, std::holds_alternative<CompositeVideoFrameOperation>(operation),
+        optimized.program(), analysis.surface_bytes));
     pending_rewrites += optimized.rewrite_count();
     analysis.total_rewrite_count += pending_rewrites;
     for (const auto& group : optimized.fusion_groups()) {
@@ -352,6 +459,7 @@ ExecutionPlanAnalysis analyze_execution_plan(const ExecutionPlan& plan) {
                 pending_rewrites, std::move(current_nodes), std::move(current_reads),
                 "canvas");
   }
+  allocate_temporary_buffers(analysis);
   return analysis;
 }
 
@@ -406,8 +514,29 @@ std::string optimized_execution_plan_json(const ExecutionPlan& plan) {
                       {"estimated_bytes_read",
                        static_cast<std::uint64_t>(pass.read_resources.size()) *
                            analysis.surface_bytes},
-                      {"estimated_bytes_written", analysis.surface_bytes},
-                      {"cache_decision", "not_planned"}});
+                      {"estimated_bytes_written", analysis.surface_bytes}});
+  }
+
+  nlohmann::json allocations = nlohmann::json::array();
+  for (const auto& allocation : analysis.temporary_allocations) {
+    allocations.push_back({{"logical_resource", allocation.logical_resource},
+                           {"physical_buffer", allocation.physical_buffer},
+                           {"first_pass", allocation.first_pass},
+                           {"last_pass", allocation.last_pass}});
+  }
+
+  nlohmann::json cache_opportunities = nlohmann::json::array();
+  std::size_t cache_candidate_count = 0;
+  for (const auto& opportunity : analysis.cache_opportunities) {
+    if (opportunity.decision == CacheDecision::cache_candidate) {
+      ++cache_candidate_count;
+    }
+    cache_opportunities.push_back(
+        {{"source_id", opportunity.source_id},
+         {"decision", cache_decision_name(opportunity.decision)},
+         {"reason", cache_reason_name(opportunity.reason)},
+         {"nodes", opportunity.nodes},
+         {"estimated_storage_bytes", opportunity.estimated_storage_bytes}});
   }
 
   return nlohmann::json{{"frame", plan.frame().value()},
@@ -417,13 +546,19 @@ std::string optimized_execution_plan_json(const ExecutionPlan& plan) {
                          {{"pass_count", analysis.passes.size()},
                           {"logical_temporary_surfaces",
                            analysis.logical_temporary_surfaces},
+                          {"physical_temporary_buffers",
+                           analysis.physical_temporary_buffers},
                           {"surface_bytes", analysis.surface_bytes},
+                          {"physical_temporary_bytes",
+                           analysis.physical_temporary_bytes},
                           {"estimated_bytes_read", analysis.estimated_bytes_read},
                           {"estimated_bytes_written", analysis.estimated_bytes_written},
                           {"peak_live_bytes", analysis.peak_live_bytes},
                           {"total_rewrite_count", analysis.total_rewrite_count},
-                          {"cache_planning", "not_implemented"}}},
-                        {"passes", std::move(passes)}}
+                          {"cache_candidate_count", cache_candidate_count}}},
+                        {"passes", std::move(passes)},
+                        {"temporary_allocations", std::move(allocations)},
+                        {"cache_opportunities", std::move(cache_opportunities)}}
       .dump(2);
 }
 
