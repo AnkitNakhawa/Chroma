@@ -427,6 +427,9 @@ bool composite_fused_source(const Surface& source, Surface& destination,
   const auto* transform = program.effects().empty()
                               ? nullptr
                               : std::get_if<Transform2DEffect>(&program.effects().front());
+  if (transform == nullptr) {
+    return false;
+  }
   double inverse00 = 0.0;
   double inverse01 = 0.0;
   double inverse10 = 0.0;

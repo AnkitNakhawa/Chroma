@@ -380,7 +380,9 @@ chroma::ColorMatrixEffect test_color_matrix() {
 chroma::Composition image_effect_composition(const char* path, std::int32_t width,
                                              std::int32_t height,
                                              chroma::SourcePlacement placement,
-                                             chroma::EffectProgram effects) {
+                                             chroma::EffectProgram effects,
+                                             chroma::BlendMode blend_mode =
+                                                 chroma::BlendMode::screen) {
   return chroma::Composition(
       1, width, height, chroma::FrameRate(chroma::Rational(30)),
       chroma::FrameRange(chroma::FrameIndex(0), chroma::FrameIndex(1)),
@@ -396,7 +398,7 @@ chroma::Composition image_effect_composition(const char* path, std::int32_t widt
            .asset_id = "red",
            .placement = placement,
            .effects = std::move(effects),
-           .blend_mode = chroma::BlendMode::screen}});
+           .blend_mode = blend_mode}});
 }
 
 void fused_image_sampling_and_effects_match_the_reference_path(const char* path) {
@@ -413,30 +415,49 @@ void fused_image_sampling_and_effects_match_the_reference_path(const char* path)
   const auto reference =
       reference_context.execute(plan, chroma::CpuExecutionMode::reference);
   CHECK(fused.pixels() == reference.pixels());
-  CHECK(fused_context.last_execution_stats().fused_operations == 1);
-  CHECK(fused_context.last_execution_stats().reference_operations == 0);
-  CHECK(fused_context.last_execution_stats().full_frame_intermediates_avoided == 1);
+  CHECK(fused_context.last_execution_stats().fused_operations == 0);
+  CHECK(fused_context.last_execution_stats().reference_operations == 1);
+  CHECK(fused_context.last_execution_stats().full_frame_intermediates_materialized == 1);
   CHECK(reference_context.last_execution_stats().fused_operations == 0);
   CHECK(reference_context.last_execution_stats().reference_operations == 1);
 }
 
 void fused_transform_matches_reference_and_unsafe_order_falls_back(const char* path) {
-  const auto fused_composition = image_effect_composition(
+  for (const auto blend_mode : {chroma::BlendMode::source_over, chroma::BlendMode::multiply,
+                                chroma::BlendMode::screen, chroma::BlendMode::plus}) {
+    const auto fused_composition = image_effect_composition(
+        path, 32, 32, {.fit = chroma::FitMode::fill},
+        chroma::EffectProgram({
+            chroma::Transform2DEffect{.m00 = 0.95, .m01 = 0.1, .m02 = 0.25,
+                                      .m10 = -0.05, .m11 = 0.9, .m12 = 1.5},
+            chroma::CropEffect{.x = 1, .y = 2, .width = 28, .height = 26},
+            chroma::OpacityEffect{.opacity = 0.7}}),
+        blend_mode);
+    const auto fused_plan =
+        chroma::compile_frame(fused_composition, chroma::FrameIndex(0));
+    chroma::CpuRenderContext fused_context;
+    chroma::CpuRenderContext reference_context;
+    const auto fused = fused_context.execute(fused_plan);
+    const auto reference =
+        reference_context.execute(fused_plan, chroma::CpuExecutionMode::reference);
+    CHECK(fused.pixels() == reference.pixels());
+    CHECK(fused_context.last_execution_stats().fused_operations == 1);
+    CHECK(fused_context.last_execution_stats().full_frame_intermediates_avoided == 1);
+  }
+
+  const auto singular_composition = image_effect_composition(
       path, 32, 32, {.fit = chroma::FitMode::fill},
-      chroma::EffectProgram({
-          chroma::Transform2DEffect{.m00 = 0.95, .m01 = 0.1, .m02 = 0.25,
-                                    .m10 = -0.05, .m11 = 0.9, .m12 = 1.5},
-          chroma::CropEffect{.x = 1, .y = 2, .width = 28, .height = 26},
-          chroma::OpacityEffect{.opacity = 0.7}}));
-  const auto fused_plan = chroma::compile_frame(fused_composition, chroma::FrameIndex(0));
-  chroma::CpuRenderContext fused_context;
-  chroma::CpuRenderContext reference_context;
-  const auto fused = fused_context.execute(fused_plan);
-  const auto reference =
-      reference_context.execute(fused_plan, chroma::CpuExecutionMode::reference);
-  CHECK(fused.pixels() == reference.pixels());
-  CHECK(fused_context.last_execution_stats().fused_operations == 1);
-  CHECK(fused_context.last_execution_stats().full_frame_intermediates_avoided == 1);
+      chroma::EffectProgram({chroma::Transform2DEffect{.m00 = 0.0, .m11 = 0.0},
+                             chroma::OpacityEffect{.opacity = 0.7}}));
+  const auto singular_plan =
+      chroma::compile_frame(singular_composition, chroma::FrameIndex(0));
+  chroma::CpuRenderContext singular_context;
+  chroma::CpuRenderContext singular_reference_context;
+  const auto singular = singular_context.execute(singular_plan);
+  const auto singular_reference =
+      singular_reference_context.execute(singular_plan, chroma::CpuExecutionMode::reference);
+  CHECK(singular.pixels() == singular_reference.pixels());
+  CHECK(singular_context.last_execution_stats().fused_operations == 1);
 
   const auto fallback_composition = image_effect_composition(
       path, 32, 32, {.fit = chroma::FitMode::fill},
