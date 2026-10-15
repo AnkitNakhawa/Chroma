@@ -1,5 +1,6 @@
 #include "chroma/core/composition.hpp"
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <limits>
@@ -150,6 +151,15 @@ bool valid_fit_mode(FitMode mode) noexcept {
   return false;
 }
 
+bool valid_shape_kind(ShapeKind kind) noexcept {
+  switch (kind) {
+    case ShapeKind::rectangle:
+    case ShapeKind::rounded_rectangle:
+    case ShapeKind::ellipse: return true;
+  }
+  return false;
+}
+
 std::optional<BlendMode> parse_blend_mode(const Json* value, std::string_view path,
                                           std::vector<Diagnostic>& diagnostics) {
   if (value == nullptr) {
@@ -184,6 +194,43 @@ std::optional<FitMode> parse_fit_mode(const Json* value, std::string_view path,
   add_diagnostic(diagnostics, "layer.unsupported_fit", std::string(path),
                  "supported fit modes are none, contain, cover, and fill");
   return std::nullopt;
+}
+
+std::optional<ShapeKind> parse_shape_kind(const Json* value, std::string_view path,
+                                          std::vector<Diagnostic>& diagnostics) {
+  const auto name = string_value(value, path, diagnostics);
+  if (!name) {
+    return std::nullopt;
+  }
+  if (*name == "rectangle") return ShapeKind::rectangle;
+  if (*name == "rounded_rectangle") return ShapeKind::rounded_rectangle;
+  if (*name == "ellipse") return ShapeKind::ellipse;
+  add_diagnostic(diagnostics, "layer.unsupported_shape", std::string(path),
+                 "supported shapes are rectangle, rounded_rectangle, and ellipse");
+  return std::nullopt;
+}
+
+std::optional<std::optional<ShapeStroke>> parse_shape_stroke(
+    const Json* value, std::string_view path, std::vector<Diagnostic>& diagnostics) {
+  if (value == nullptr) {
+    return std::optional<ShapeStroke>{};
+  }
+  if (!value->is_object()) {
+    add_diagnostic(diagnostics, "schema.type", std::string(path), "expected an object");
+    return std::nullopt;
+  }
+  const auto color = parse_color(required_member(*value, "color", path, diagnostics),
+                                 std::string(path) + "/color", diagnostics);
+  const auto width = number_value(required_member(*value, "width", path, diagnostics),
+                                  std::string(path) + "/width", diagnostics);
+  if (width && *width <= 0.0) {
+    add_diagnostic(diagnostics, "layer.invalid_stroke", std::string(path) + "/width",
+                   "stroke width must be positive");
+  }
+  if (!color || !width || *width <= 0.0) {
+    return std::nullopt;
+  }
+  return std::optional<ShapeStroke>(ShapeStroke{.color = *color, .width = *width});
 }
 
 std::optional<SourcePlacement> parse_placement(const Json& layer, std::string_view path,
@@ -380,6 +427,15 @@ std::string_view fit_mode_name(FitMode mode) noexcept {
   return "unknown";
 }
 
+std::string_view shape_kind_name(ShapeKind kind) noexcept {
+  switch (kind) {
+    case ShapeKind::rectangle: return "rectangle";
+    case ShapeKind::rounded_rectangle: return "rounded_rectangle";
+    case ShapeKind::ellipse: return "ellipse";
+  }
+  return "unknown";
+}
+
 Composition::Composition(std::int32_t schema_version, std::int32_t width, std::int32_t height,
                          FrameRate frame_rate, FrameRange range,
                          std::vector<SolidLayer> layers)
@@ -483,15 +539,40 @@ Composition::Composition(std::int32_t schema_version, std::int32_t width, std::i
       continue;
     }
 
-    const auto& image = std::get<ImageLayer>(layer_variant);
-    if (find_image_asset(image.asset_id) == nullptr) {
-      throw std::invalid_argument("composition image layer references an unknown asset");
+    if (const auto* image = std::get_if<ImageLayer>(&layer_variant)) {
+      if (find_image_asset(image->asset_id) == nullptr) {
+        throw std::invalid_argument("composition image layer references an unknown asset");
+      }
+      if (!validate_placement(image->placement)) {
+        throw std::invalid_argument("composition image placement is invalid");
+      }
+      if (!valid_blend_mode(image->blend_mode)) {
+        throw std::invalid_argument("composition image layer blend mode is invalid");
+      }
+      continue;
     }
-    if (!validate_placement(image.placement)) {
-      throw std::invalid_argument("composition image placement is invalid");
+
+    const auto& shape = std::get<ShapeLayer>(layer_variant);
+    const auto& geometry = shape.geometry;
+    if (!valid_shape_kind(geometry.kind) || !std::isfinite(geometry.x) ||
+        !std::isfinite(geometry.y) || !std::isfinite(geometry.width) ||
+        !std::isfinite(geometry.height) || geometry.width <= 0.0 || geometry.height <= 0.0 ||
+        !std::isfinite(geometry.corner_radius) || geometry.corner_radius < 0.0) {
+      throw std::invalid_argument("composition shape geometry is invalid");
     }
-    if (!valid_blend_mode(image.blend_mode)) {
-      throw std::invalid_argument("composition image layer blend mode is invalid");
+    const auto valid_color = [](const Color& color) {
+      const double components[] = {color.red, color.green, color.blue, color.alpha};
+      return std::all_of(std::begin(components), std::end(components), [](double component) {
+        return std::isfinite(component) && component >= 0.0 && component <= 1.0;
+      });
+    };
+    if (!valid_color(shape.fill) ||
+        (shape.stroke && (!valid_color(shape.stroke->color) ||
+                          !std::isfinite(shape.stroke->width) || shape.stroke->width <= 0.0))) {
+      throw std::invalid_argument("composition shape paint is invalid");
+    }
+    if (!valid_blend_mode(shape.blend_mode)) {
+      throw std::invalid_argument("composition shape layer blend mode is invalid");
     }
   }
 }
@@ -688,9 +769,10 @@ CompositionParseResult parse_composition(std::string_view source,
         add_diagnostic(result.diagnostics, "layer.duplicate_id", base + "/id",
                        "layer id must be unique");
       }
-      if (type && *type != "solid" && *type != "video" && *type != "image") {
+      if (type && *type != "solid" && *type != "video" && *type != "image" &&
+          *type != "shape") {
         add_diagnostic(result.diagnostics, "layer.unsupported_type", base + "/type",
-                       "supported layer types are solid, video, and image");
+                       "supported layer types are solid, video, image, and shape");
       }
       if (start && end && (*start < 0 || *end <= *start)) {
         add_diagnostic(result.diagnostics, "layer.invalid_range", base,
@@ -764,6 +846,45 @@ CompositionParseResult parse_composition(std::string_view source,
                          .range = FrameRange(FrameIndex(*start), FrameIndex(*end)),
                          .asset_id = std::move(*asset),
                          .placement = *placement,
+                         .effects = std::move(*effects),
+                         .blend_mode = *blend_mode});
+        }
+      } else if (type && *type == "shape") {
+        const auto kind = parse_shape_kind(
+            required_member(layer, "shape", base, result.diagnostics), base + "/shape",
+            result.diagnostics);
+        const auto bounds = parse_number_array<4>(
+            required_member(layer, "bounds", base, result.diagnostics), base + "/bounds",
+            result.diagnostics);
+        const auto fill = parse_color(required_member(layer, "fill", base, result.diagnostics),
+                                      base + "/fill", result.diagnostics);
+        const auto stroke = parse_shape_stroke(optional_member(layer, "stroke"),
+                                               base + "/stroke", result.diagnostics);
+        const auto corner_radius =
+            number_value(optional_member(layer, "corner_radius"), base + "/corner_radius",
+                         result.diagnostics)
+                .value_or(0.0);
+        if (bounds && ((*bounds)[2] <= 0.0 || (*bounds)[3] <= 0.0)) {
+          add_diagnostic(result.diagnostics, "layer.invalid_shape_bounds", base + "/bounds",
+                         "shape width and height must be positive");
+        }
+        if (corner_radius < 0.0) {
+          add_diagnostic(result.diagnostics, "layer.invalid_corner_radius",
+                         base + "/corner_radius", "corner radius must be non-negative");
+        }
+        if (common_valid && kind && bounds && (*bounds)[2] > 0.0 && (*bounds)[3] > 0.0 &&
+            fill && stroke && corner_radius >= 0.0 && effects && blend_mode) {
+          layers.emplace_back(
+              ShapeLayer{.id = std::move(*id),
+                         .range = FrameRange(FrameIndex(*start), FrameIndex(*end)),
+                         .geometry = ShapeGeometry{.kind = *kind,
+                                                   .x = (*bounds)[0],
+                                                   .y = (*bounds)[1],
+                                                   .width = (*bounds)[2],
+                                                   .height = (*bounds)[3],
+                                                   .corner_radius = corner_radius},
+                         .fill = *fill,
+                         .stroke = std::move(*stroke),
                          .effects = std::move(*effects),
                          .blend_mode = *blend_mode});
         }

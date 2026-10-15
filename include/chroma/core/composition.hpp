@@ -96,7 +96,43 @@ struct ImageLayer {
   BlendMode blend_mode{BlendMode::source_over};
 };
 
-using CompositionLayer = std::variant<SolidLayer, VideoLayer, ImageLayer>;
+enum class ShapeKind {
+  rectangle,
+  rounded_rectangle,
+  ellipse,
+};
+
+[[nodiscard]] std::string_view shape_kind_name(ShapeKind kind) noexcept;
+
+struct ShapeGeometry {
+  ShapeKind kind{ShapeKind::rectangle};
+  double x{0.0};
+  double y{0.0};
+  double width{0.0};
+  double height{0.0};
+  double corner_radius{0.0};
+
+  friend bool operator==(const ShapeGeometry&, const ShapeGeometry&) = default;
+};
+
+struct ShapeStroke {
+  Color color;
+  double width;
+
+  friend bool operator==(const ShapeStroke&, const ShapeStroke&) = default;
+};
+
+struct ShapeLayer {
+  std::string id;
+  FrameRange range;
+  ShapeGeometry geometry;
+  Color fill;
+  std::optional<ShapeStroke> stroke;
+  EffectProgram effects;
+  BlendMode blend_mode{BlendMode::source_over};
+};
+
+using CompositionLayer = std::variant<SolidLayer, VideoLayer, ImageLayer, ShapeLayer>;
 
 class Composition {
  public:

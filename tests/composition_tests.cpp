@@ -183,6 +183,58 @@ void image_layers_reject_video_assets() {
   CHECK(has_code(result, "layer.unknown_asset"));
 }
 
+void shape_layers_are_normalized_and_validated() {
+  constexpr std::string_view source = R"json(
+  {
+    "schema_version": 1,
+    "canvas": {"width": 16, "height": 16,
+      "frame_rate": {"numerator": 30, "denominator": 1}, "duration_frames": 10},
+    "layers": [
+      {"id": "card", "type": "shape", "shape": "rounded_rectangle",
+       "start_frame": 0, "end_frame": 10, "bounds": [1, 2, 12, 8],
+       "corner_radius": 2, "fill": [0, 0, 1, 1],
+       "stroke": {"color": [1, 0, 0, 1], "width": 1},
+       "effects": [{"type": "opacity", "value": 0.75}]}
+    ]
+  }
+  )json";
+  const auto result = chroma::parse_composition(source);
+  CHECK(result.valid());
+  if (!result.composition) {
+    return;
+  }
+  const auto* shape = std::get_if<chroma::ShapeLayer>(&result.composition->layers().front());
+  CHECK(shape != nullptr);
+  if (shape != nullptr) {
+    CHECK(shape->geometry.kind == chroma::ShapeKind::rounded_rectangle);
+    CHECK(shape->geometry.x == 1.0);
+    CHECK(shape->geometry.height == 8.0);
+    CHECK(shape->geometry.corner_radius == 2.0);
+    CHECK(shape->stroke.has_value());
+    CHECK(shape->stroke && shape->stroke->width == 1.0);
+  }
+
+  constexpr std::string_view invalid = R"json(
+  {
+    "schema_version": 1,
+    "canvas": {"width": 16, "height": 16,
+      "frame_rate": {"numerator": 30, "denominator": 1}, "duration_frames": 1},
+    "layers": [
+      {"id": "bad", "type": "shape", "shape": "triangle",
+       "start_frame": 0, "end_frame": 1, "bounds": [0, 0, 0, 4],
+       "corner_radius": -1, "fill": [1, 1, 1, 1],
+       "stroke": {"color": [0, 0, 0, 1], "width": 0}}
+    ]
+  }
+  )json";
+  const auto invalid_result = chroma::parse_composition(invalid);
+  CHECK(!invalid_result.valid());
+  CHECK(has_code(invalid_result, "layer.unsupported_shape"));
+  CHECK(has_code(invalid_result, "layer.invalid_shape_bounds"));
+  CHECK(has_code(invalid_result, "layer.invalid_corner_radius"));
+  CHECK(has_code(invalid_result, "layer.invalid_stroke"));
+}
+
 void effects_and_blend_modes_are_normalized() {
   constexpr std::string_view source = R"json(
   {
@@ -353,6 +405,7 @@ int main() {
   invalid_video_references_are_reported();
   image_assets_and_layers_are_normalized();
   image_layers_reject_video_assets();
+  shape_layers_are_normalized_and_validated();
   effects_and_blend_modes_are_normalized();
   invalid_effects_and_blends_are_reported();
 

@@ -89,9 +89,25 @@ Static images use `"type": "image"` and may use any still-image format supported
 - `contain` preserves the complete source and may leave transparent bars; `cover` preserves aspect ratio while cropping overflow; `fill` stretches to the canvas; `none` keeps native pixel size. Placement occurs before the ordered effect program.
 - Asset existence and decodability are checked when media is probed or rendered, not during syntax-only composition validation.
 
+Shape layers use canvas-space `[x, y, width, height]` bounds. Supported shape names are `rectangle`, `rounded_rectangle`, and `ellipse`. Fill is required; stroke is optional and is drawn inside the shape boundary:
+
+```json
+{
+  "id": "card",
+  "type": "shape",
+  "shape": "rounded_rectangle",
+  "start_frame": 0,
+  "end_frame": 60,
+  "bounds": [40, 30, 240, 120],
+  "corner_radius": 18,
+  "fill": [0.1, 0.2, 0.8, 1.0],
+  "stroke": {"color": [1, 1, 1, 1], "width": 2}
+}
+```
+
 ## Basic effects and blending
 
-Solid, image, and video layers may declare an ordered `effects` array and an optional `blend_mode`:
+Solid, image, shape, and video layers may declare an ordered `effects` array and an optional `blend_mode`:
 
 ```json
 {

@@ -51,9 +51,22 @@ bool valid_placement(const SourcePlacement& placement) noexcept {
          placement.position_y >= 0.0 && placement.position_y <= 1.0;
 }
 
+bool valid_shape_geometry(const ShapeGeometry& geometry) noexcept {
+  return shape_kind_name(geometry.kind) != "unknown" && std::isfinite(geometry.x) &&
+         std::isfinite(geometry.y) && std::isfinite(geometry.width) &&
+         std::isfinite(geometry.height) && geometry.width > 0.0 && geometry.height > 0.0 &&
+         std::isfinite(geometry.corner_radius) && geometry.corner_radius >= 0.0;
+}
+
 nlohmann::json placement_json(const SourcePlacement& placement) {
   return {{"fit", fit_mode_name(placement.fit)},
           {"position", {placement.position_x, placement.position_y}}};
+}
+
+nlohmann::json shape_geometry_json(const ShapeGeometry& geometry) {
+  return {{"kind", shape_kind_name(geometry.kind)},
+          {"bounds", {geometry.x, geometry.y, geometry.width, geometry.height}},
+          {"corner_radius", geometry.corner_radius}};
 }
 
 OptimizedEffectProgram compile_effects(const EffectProgram& program,
@@ -289,10 +302,19 @@ ExecutionPlan::ExecutionPlan(std::int32_t width, std::int32_t height, FrameIndex
       }
       continue;
     }
-    const auto& image = std::get<CompositeImageOperation>(operation);
-    if (image.asset_path.empty() || !valid_placement(image.placement) ||
-        !valid_blend_mode(image.blend_mode)) {
-      throw std::invalid_argument("execution plan image operation is invalid");
+    if (const auto* image = std::get_if<CompositeImageOperation>(&operation)) {
+      if (image->asset_path.empty() || !valid_placement(image->placement) ||
+          !valid_blend_mode(image->blend_mode)) {
+        throw std::invalid_argument("execution plan image operation is invalid");
+      }
+      continue;
+    }
+    const auto& shape = std::get<CompositeShapeOperation>(operation);
+    if (!valid_shape_geometry(shape.geometry) || !valid_color(shape.fill) ||
+        (shape.stroke && (!valid_color(shape.stroke->color) ||
+                          !std::isfinite(shape.stroke->width) || shape.stroke->width <= 0.0)) ||
+        !valid_blend_mode(shape.blend_mode)) {
+      throw std::invalid_argument("execution plan shape operation is invalid");
     }
   }
 }
@@ -350,23 +372,44 @@ ExecutionPlan compile_frame(const Composition& composition, FrameIndex frame) {
       continue;
     }
 
-    const auto& image = std::get<ImageLayer>(layer_variant);
-    if (image.range.contains(frame)) {
-      const auto* asset = composition.find_image_asset(image.asset_id);
+    if (const auto* image = std::get_if<ImageLayer>(&layer_variant)) {
+      if (!image->range.contains(frame)) {
+        continue;
+      }
+      const auto* asset = composition.find_image_asset(image->asset_id);
       if (asset == nullptr) {
         throw std::logic_error("validated image layer references a missing asset");
       }
-      const auto optimized = compile_effects(image.effects);
+      const auto optimized = compile_effects(image->effects);
       if (definitely_transparent(optimized.program(), false)) {
         continue;
       }
       operations.emplace_back(CompositeImageOperation{
-          .source_id = image.id,
+          .source_id = image->id,
           .asset_path = asset->path,
-          .placement = image.placement,
+          .placement = image->placement,
           .effects = optimized.program(),
           .effect_rewrite_count = optimized.rewrite_count(),
-          .blend_mode = image.blend_mode});
+          .blend_mode = image->blend_mode});
+      continue;
+    }
+
+    const auto& shape = std::get<ShapeLayer>(layer_variant);
+    if (shape.range.contains(frame)) {
+      const auto optimized = compile_effects(shape.effects);
+      const auto transparent_paint =
+          shape.fill.alpha == 0.0 && (!shape.stroke || shape.stroke->color.alpha == 0.0);
+      if (definitely_transparent(optimized.program(), transparent_paint)) {
+        continue;
+      }
+      operations.emplace_back(CompositeShapeOperation{
+          .source_id = shape.id,
+          .geometry = shape.geometry,
+          .fill = shape.fill,
+          .stroke = shape.stroke,
+          .effects = optimized.program(),
+          .effect_rewrite_count = optimized.rewrite_count(),
+          .blend_mode = shape.blend_mode});
     }
   }
 
@@ -443,17 +486,24 @@ ExecutionPlanAnalysis analyze_execution_plan(const ExecutionPlan& plan) {
       effects = video->effects.effects();
       pending_rewrites = video->effect_rewrite_count;
       blend_mode = video->blend_mode;
-    } else {
-      const auto& image = std::get<CompositeImageOperation>(operation);
-      source_id = image.source_id;
+    } else if (const auto* image = std::get_if<CompositeImageOperation>(&operation)) {
+      source_id = image->source_id;
       source_node = "image_sample";
       static_resource = true;
       current_nodes.push_back(source_node);
-      current_nodes.push_back("place_" + std::string(fit_mode_name(image.placement.fit)));
+      current_nodes.push_back("place_" + std::string(fit_mode_name(image->placement.fit)));
       current_reads.push_back("source:" + source_id);
-      effects = image.effects.effects();
-      pending_rewrites = image.effect_rewrite_count;
-      blend_mode = image.blend_mode;
+      effects = image->effects.effects();
+      pending_rewrites = image->effect_rewrite_count;
+      blend_mode = image->blend_mode;
+    } else {
+      const auto& shape = std::get<CompositeShapeOperation>(operation);
+      source_id = shape.source_id;
+      source_node = "shape_" + std::string(shape_kind_name(shape.geometry.kind));
+      current_nodes.push_back(source_node);
+      effects = shape.effects.effects();
+      pending_rewrites = shape.effect_rewrite_count;
+      blend_mode = shape.blend_mode;
     }
 
     const auto optimized = optimize_effect_program(EffectProgram(std::move(effects)));
@@ -542,14 +592,29 @@ std::string execution_plan_json(const ExecutionPlan& plan) {
            {"blend_mode", blend_mode_name(video->blend_mode)}});
       continue;
     }
-    const auto& image = std::get<CompositeImageOperation>(operation);
-    operations.push_back({{"op", "composite_image"},
-                          {"source_id", image.source_id},
-                          {"asset_path", image.asset_path.string()},
-                          {"placement", placement_json(image.placement)},
-                          {"effects", effects_json(image.effects)},
-                          {"effect_rewrite_count", image.effect_rewrite_count},
-                          {"blend_mode", blend_mode_name(image.blend_mode)}});
+    if (const auto* image = std::get_if<CompositeImageOperation>(&operation)) {
+      operations.push_back({{"op", "composite_image"},
+                            {"source_id", image->source_id},
+                            {"asset_path", image->asset_path.string()},
+                            {"placement", placement_json(image->placement)},
+                            {"effects", effects_json(image->effects)},
+                            {"effect_rewrite_count", image->effect_rewrite_count},
+                            {"blend_mode", blend_mode_name(image->blend_mode)}});
+      continue;
+    }
+    const auto& shape = std::get<CompositeShapeOperation>(operation);
+    nlohmann::json stroke = nullptr;
+    if (shape.stroke) {
+      stroke = {{"color", color_json(shape.stroke->color)}, {"width", shape.stroke->width}};
+    }
+    operations.push_back({{"op", "composite_shape"},
+                          {"source_id", shape.source_id},
+                          {"geometry", shape_geometry_json(shape.geometry)},
+                          {"fill", color_json(shape.fill)},
+                          {"stroke", std::move(stroke)},
+                          {"effects", effects_json(shape.effects)},
+                          {"effect_rewrite_count", shape.effect_rewrite_count},
+                          {"blend_mode", blend_mode_name(shape.blend_mode)}});
   }
 
   return nlohmann::json{{"frame", plan.frame().value()},

@@ -228,6 +228,40 @@ void image_layers_compile_as_static_fusible_sources() {
   CHECK(json.find("logo.png") != std::string::npos);
 }
 
+void shape_layers_compile_as_native_fusible_sources() {
+  const chroma::Composition composition(
+      1, 8, 8, chroma::FrameRate(chroma::Rational(30)),
+      chroma::FrameRange(chroma::FrameIndex(0), chroma::FrameIndex(10)),
+      std::vector<chroma::VideoAsset>{}, std::vector<chroma::ImageAsset>{},
+      {chroma::ShapeLayer{
+          .id = "dot",
+          .range = chroma::FrameRange(chroma::FrameIndex(0), chroma::FrameIndex(10)),
+          .geometry = {.kind = chroma::ShapeKind::ellipse,
+                       .x = 1.0,
+                       .y = 1.0,
+                       .width = 6.0,
+                       .height = 6.0},
+          .fill = {.red = 1.0, .green = 0.0, .blue = 0.0, .alpha = 1.0},
+          .effects = chroma::EffectProgram({chroma::OpacityEffect{.opacity = 0.5}})}});
+  const auto plan = chroma::compile_frame(composition, chroma::FrameIndex(0));
+  CHECK(plan.operations().size() == 2);
+  CHECK(std::holds_alternative<chroma::CompositeShapeOperation>(plan.operations().back()));
+  const auto analysis = chroma::analyze_execution_plan(plan);
+  CHECK(analysis.passes.size() == 2);
+  if (analysis.passes.size() == 2) {
+    CHECK(analysis.passes[1].nodes ==
+          (std::vector<std::string>{"shape_ellipse", "opacity", "source_over"}));
+    CHECK(analysis.passes[1].gpu_fusible);
+  }
+  CHECK(analysis.cache_opportunities.size() == 1);
+  if (analysis.cache_opportunities.size() == 1) {
+    CHECK(analysis.cache_opportunities[0].decision == chroma::CacheDecision::recompute);
+    CHECK(analysis.cache_opportunities[0].reason ==
+          chroma::CacheReason::cheap_static_subgraph);
+  }
+  CHECK(chroma::execution_plan_json(plan).find("composite_shape") != std::string::npos);
+}
+
 void layer_effects_and_blends_lower_into_the_plan() {
   const chroma::Composition composition(
       1, 4, 2, chroma::FrameRate(chroma::Rational(30)),
@@ -520,6 +554,7 @@ int main() {
   plans_reject_invalid_operations();
   video_layers_compile_to_exact_source_times();
   image_layers_compile_as_static_fusible_sources();
+  shape_layers_compile_as_native_fusible_sources();
   layer_effects_and_blends_lower_into_the_plan();
   compilation_optimizes_effects_and_records_rewrites();
   compilation_eliminates_definitely_transparent_layers();

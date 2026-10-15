@@ -53,8 +53,21 @@ struct CompositeImageOperation {
   friend bool operator==(const CompositeImageOperation&, const CompositeImageOperation&) = default;
 };
 
+struct CompositeShapeOperation {
+  std::string source_id;
+  ShapeGeometry geometry;
+  Color fill;
+  std::optional<ShapeStroke> stroke;
+  EffectProgram effects;
+  std::size_t effect_rewrite_count{0};
+  BlendMode blend_mode{BlendMode::source_over};
+
+  friend bool operator==(const CompositeShapeOperation&, const CompositeShapeOperation&) = default;
+};
+
 using RenderOperation = std::variant<ClearOperation, CompositeSolidOperation,
-                                     CompositeVideoFrameOperation, CompositeImageOperation>;
+                                     CompositeVideoFrameOperation, CompositeImageOperation,
+                                     CompositeShapeOperation>;
 
 class ExecutionPlan {
  public:

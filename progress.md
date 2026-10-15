@@ -64,3 +64,4 @@
 - Verified the reuse/cache checkpoint with 21/21 FFmpeg tests, 13/13 core-only tests, and 13/13 sanitizer tests; a focused review found no blocking correctness issues.
 - Started the sequential basic-graphics track with four separate test-and-commit gates: images, native shapes, shaped text, and static prepared-resource planning/demo coverage.
 - Completed static image assets/layers with typed parsing and plans, FFmpeg still-image decode, render-context surface reuse, placement/effects/blending, static-resource cache diagnostics, a real PNG fixture, and updated examples/docs. Verified 22/22 FFmpeg, 14/14 core-only, and 14/14 sanitizer tests.
+- Completed native rectangle, rounded-rectangle, and ellipse layers with canvas-space bounds, fill, optional inside stroke, deterministic 4×4 CPU coverage, typed fusion-plan nodes, parser/plan/pixel tests, an example, and visual inspection. Verified 23/23 FFmpeg, 15/15 core-only, and 15/15 sanitizer tests.

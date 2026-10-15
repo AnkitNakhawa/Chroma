@@ -332,6 +332,77 @@ Surface apply_effect_program_cpu(Surface source, const EffectProgram& program) {
   return source;
 }
 
+bool shape_contains(const ShapeGeometry& geometry, double sample_x, double sample_y,
+                    double inset) noexcept {
+  const auto left = geometry.x + inset;
+  const auto top = geometry.y + inset;
+  const auto width = geometry.width - inset * 2.0;
+  const auto height = geometry.height - inset * 2.0;
+  if (width <= 0.0 || height <= 0.0 || sample_x < left || sample_x >= left + width ||
+      sample_y < top || sample_y >= top + height) {
+    return false;
+  }
+  if (geometry.kind == ShapeKind::rectangle) {
+    return true;
+  }
+  if (geometry.kind == ShapeKind::ellipse) {
+    const auto radius_x = width * 0.5;
+    const auto radius_y = height * 0.5;
+    const auto normalized_x = (sample_x - (left + radius_x)) / radius_x;
+    const auto normalized_y = (sample_y - (top + radius_y)) / radius_y;
+    return normalized_x * normalized_x + normalized_y * normalized_y <= 1.0;
+  }
+
+  const auto radius =
+      std::clamp(geometry.corner_radius - inset, 0.0, std::min(width, height) * 0.5);
+  if (radius == 0.0) {
+    return true;
+  }
+  const auto closest_x = std::clamp(sample_x, left + radius, left + width - radius);
+  const auto closest_y = std::clamp(sample_y, top + radius, top + height - radius);
+  const auto offset_x = sample_x - closest_x;
+  const auto offset_y = sample_y - closest_y;
+  return offset_x * offset_x + offset_y * offset_y <= radius * radius;
+}
+
+Surface render_shape(const ShapeGeometry& geometry, const Color& fill,
+                     const std::optional<ShapeStroke>& stroke, std::int32_t width,
+                     std::int32_t height) {
+  constexpr int samples_per_axis = 4;
+  constexpr float sample_weight = 1.0F / 16.0F;
+  const auto fill_pixel = premultiply(fill);
+  const auto stroke_pixel = stroke ? premultiply(stroke->color) : Pixel{};
+  Surface output(width, height);
+  for (std::int32_t y = 0; y < height; ++y) {
+    for (std::int32_t x = 0; x < width; ++x) {
+      Pixel pixel{};
+      for (int sample_y = 0; sample_y < samples_per_axis; ++sample_y) {
+        for (int sample_x = 0; sample_x < samples_per_axis; ++sample_x) {
+          const auto position_x = static_cast<double>(x) +
+                                  (static_cast<double>(sample_x) + 0.5) /
+                                      static_cast<double>(samples_per_axis);
+          const auto position_y = static_cast<double>(y) +
+                                  (static_cast<double>(sample_y) + 0.5) /
+                                      static_cast<double>(samples_per_axis);
+          if (!shape_contains(geometry, position_x, position_y, 0.0)) {
+            continue;
+          }
+          const auto& paint =
+              stroke && !shape_contains(geometry, position_x, position_y, stroke->width)
+                  ? stroke_pixel
+                  : fill_pixel;
+          pixel.red += paint.red * sample_weight;
+          pixel.green += paint.green * sample_weight;
+          pixel.blue += paint.blue * sample_weight;
+          pixel.alpha += paint.alpha * sample_weight;
+        }
+      }
+      output.pixel(x, y) = pixel;
+    }
+  }
+  return output;
+}
+
 struct CpuRenderContext::Impl {
   std::unordered_map<std::string, std::unique_ptr<VideoDecoder>> decoders;
   std::unordered_map<std::string, Surface> images;
@@ -362,6 +433,16 @@ Surface CpuRenderContext::execute(const ExecutionPlan& plan) {
           result.pixels()[index] =
               composite(effected.pixels()[index], result.pixels()[index], solid->blend_mode);
         }
+      }
+      continue;
+    }
+    if (const auto* shape = std::get_if<CompositeShapeOperation>(&operation)) {
+      auto source_surface = render_shape(shape->geometry, shape->fill, shape->stroke,
+                                         result.width(), result.height());
+      source_surface = apply_effect_program_cpu(std::move(source_surface), shape->effects);
+      for (std::size_t index = 0; index < result.size(); ++index) {
+        result.pixels()[index] = composite(source_surface.pixels()[index],
+                                           result.pixels()[index], shape->blend_mode);
       }
       continue;
     }

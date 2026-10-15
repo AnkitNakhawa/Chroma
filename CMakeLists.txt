@@ -218,6 +218,11 @@ if(CHROMA_BUILD_TESTS)
   )
 
   add_test(
+    NAME chroma_cli_validates_shapes_example
+    COMMAND chroma_cli validate ${CMAKE_CURRENT_SOURCE_DIR}/examples/shapes.json
+  )
+
+  add_test(
     NAME chroma_cli_inspects_example_plan
     COMMAND chroma_cli inspect-plan ${CMAKE_CURRENT_SOURCE_DIR}/examples/solid.json --frame 0
   )

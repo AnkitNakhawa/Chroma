@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "canvas": {
+    "width": 320,
+    "height": 180,
+    "frame_rate": {"numerator": 30, "denominator": 1},
+    "duration_frames": 60
+  },
+  "layers": [
+    {
+      "id": "background",
+      "type": "solid",
+      "start_frame": 0,
+      "end_frame": 60,
+      "color": [0.03, 0.04, 0.09, 1.0]
+    },
+    {
+      "id": "card",
+      "type": "shape",
+      "shape": "rounded_rectangle",
+      "start_frame": 0,
+      "end_frame": 60,
+      "bounds": [48, 36, 224, 108],
+      "corner_radius": 18,
+      "fill": [0.1, 0.25, 0.8, 0.9],
+      "stroke": {"color": [0.7, 0.85, 1.0, 1.0], "width": 3}
+    },
+    {
+      "id": "accent",
+      "type": "shape",
+      "shape": "ellipse",
+      "start_frame": 0,
+      "end_frame": 60,
+      "bounds": [128, 66, 64, 48],
+      "fill": [1.0, 0.35, 0.1, 1.0],
+      "effects": [{"type": "opacity", "value": 0.8}]
+    }
+  ]
+}

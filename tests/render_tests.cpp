@@ -369,6 +369,55 @@ void image_layers_decode_once_and_execute_effects(const char* path) {
   CHECK(first.pixel(0, 0).blue < 0.05F);
 }
 
+chroma::Surface render_test_shape(chroma::ShapeGeometry geometry,
+                                  std::optional<chroma::ShapeStroke> stroke = std::nullopt) {
+  const chroma::Composition composition(
+      1, 8, 8, chroma::FrameRate(chroma::Rational(30)),
+      chroma::FrameRange(chroma::FrameIndex(0), chroma::FrameIndex(1)),
+      std::vector<chroma::VideoAsset>{}, std::vector<chroma::ImageAsset>{},
+      {chroma::ShapeLayer{
+          .id = "shape",
+          .range = chroma::FrameRange(chroma::FrameIndex(0), chroma::FrameIndex(1)),
+          .geometry = geometry,
+          .fill = {.red = 0.0, .green = 0.0, .blue = 1.0, .alpha = 1.0},
+          .stroke = stroke}});
+  return chroma::render_frame_cpu(composition, chroma::FrameIndex(0));
+}
+
+void native_shapes_render_fill_stroke_and_coverage() {
+  const auto rectangle = render_test_shape(
+      {.kind = chroma::ShapeKind::rectangle,
+       .x = 1.0,
+       .y = 1.0,
+       .width = 6.0,
+       .height = 6.0},
+      chroma::ShapeStroke{
+          .color = {.red = 1.0, .green = 0.0, .blue = 0.0, .alpha = 1.0}, .width = 1.0});
+  CHECK(rectangle.pixel(0, 0) == chroma::Pixel{});
+  CHECK(near(rectangle.pixel(1, 1).red, 1.0F));
+  CHECK(near(rectangle.pixel(1, 1).blue, 0.0F));
+  CHECK(near(rectangle.pixel(3, 3).red, 0.0F));
+  CHECK(near(rectangle.pixel(3, 3).blue, 1.0F));
+
+  const auto rounded = render_test_shape({.kind = chroma::ShapeKind::rounded_rectangle,
+                                          .x = 1.0,
+                                          .y = 1.0,
+                                          .width = 6.0,
+                                          .height = 6.0,
+                                          .corner_radius = 2.0});
+  CHECK(rounded.pixel(1, 1).alpha > 0.0F);
+  CHECK(rounded.pixel(1, 1).alpha < 1.0F);
+  CHECK(near(rounded.pixel(3, 3).alpha, 1.0F));
+
+  const auto ellipse = render_test_shape({.kind = chroma::ShapeKind::ellipse,
+                                          .x = 1.0,
+                                          .y = 1.0,
+                                          .width = 6.0,
+                                          .height = 6.0});
+  CHECK(ellipse.pixel(1, 1).alpha < 1.0F);
+  CHECK(near(ellipse.pixel(3, 3).alpha, 1.0F));
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -387,6 +436,7 @@ int main(int argc, char** argv) {
   blend_modes_follow_premultiplied_source_over_semantics();
   composition_effects_execute_through_the_frame_plan();
   parsed_effects_execute_end_to_end();
+  native_shapes_render_fill_stroke_and_coverage();
   if (argc >= 2) {
     video_layers_decode_into_the_cpu_plan(argv[1]);
   }
