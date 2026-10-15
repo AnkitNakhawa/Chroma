@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "canvas": {
+    "width": 320,
+    "height": 180,
+    "frame_rate": {"numerator": 30, "denominator": 1},
+    "duration_frames": 60
+  },
+  "layers": [
+    {
+      "id": "outgoing",
+      "type": "solid",
+      "start_frame": 0,
+      "end_frame": 60,
+      "color": [0.05, 0.25, 0.95, 1.0]
+    },
+    {
+      "id": "incoming",
+      "type": "solid",
+      "start_frame": 0,
+      "end_frame": 60,
+      "color": [0.95, 0.15, 0.2, 1.0],
+      "effects": [{"type": "opacity", "keyframes": [
+        {"frame": 0, "value": 0.0},
+        {"frame": 20, "value": 0.0, "easing": "ease_in_out"},
+        {"frame": 40, "value": 1.0}
+      ]}]
+    }
+  ]
+}

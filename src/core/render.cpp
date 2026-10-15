@@ -156,6 +156,47 @@ void apply_opacity(Surface& surface, const OpacityEffect& opacity) noexcept {
   }
 }
 
+bool mask_contains(const MaskEffect& mask, double sample_x, double sample_y) noexcept {
+  if (mask.shape == MaskShape::rectangle) {
+    return sample_x >= mask.x && sample_x < mask.x + mask.width && sample_y >= mask.y &&
+           sample_y < mask.y + mask.height;
+  }
+  const auto normalized_x = (sample_x - (mask.x + mask.width * 0.5)) / (mask.width * 0.5);
+  const auto normalized_y = (sample_y - (mask.y + mask.height * 0.5)) / (mask.height * 0.5);
+  return normalized_x * normalized_x + normalized_y * normalized_y <= 1.0;
+}
+
+void apply_mask(Surface& surface, const MaskEffect& mask) noexcept {
+  constexpr std::int32_t samples_per_axis = 4;
+  constexpr float reciprocal_sample_count =
+      1.0F / static_cast<float>(samples_per_axis * samples_per_axis);
+  for (std::int32_t y = 0; y < surface.height(); ++y) {
+    for (std::int32_t x = 0; x < surface.width(); ++x) {
+      std::int32_t inside_samples = 0;
+      for (std::int32_t sample_y = 0; sample_y < samples_per_axis; ++sample_y) {
+        for (std::int32_t sample_x = 0; sample_x < samples_per_axis; ++sample_x) {
+          const auto position_x = static_cast<double>(x) +
+                                  (static_cast<double>(sample_x) + 0.5) /
+                                      static_cast<double>(samples_per_axis);
+          const auto position_y = static_cast<double>(y) +
+                                  (static_cast<double>(sample_y) + 0.5) /
+                                      static_cast<double>(samples_per_axis);
+          inside_samples += static_cast<std::int32_t>(mask_contains(mask, position_x, position_y));
+        }
+      }
+      auto coverage = static_cast<float>(inside_samples) * reciprocal_sample_count;
+      if (mask.inverted) {
+        coverage = 1.0F - coverage;
+      }
+      auto& pixel = surface.pixel(x, y);
+      pixel.red *= coverage;
+      pixel.green *= coverage;
+      pixel.blue *= coverage;
+      pixel.alpha *= coverage;
+    }
+  }
+}
+
 void apply_color_matrix(Pixel& pixel, const ColorMatrixEffect& matrix) noexcept {
   const auto alpha = static_cast<double>(pixel.alpha);
   const auto reciprocal_alpha = alpha > 0.0 ? 1.0 / alpha : 0.0;
@@ -406,6 +447,8 @@ Surface apply_effect_program_cpu(Surface source, const EffectProgram& program) {
             apply_crop(source, typed);
           } else if constexpr (std::is_same_v<Type, OpacityEffect>) {
             apply_opacity(source, typed);
+          } else if constexpr (std::is_same_v<Type, MaskEffect>) {
+            apply_mask(source, typed);
           } else if constexpr (std::is_same_v<Type, ColorMatrixEffect>) {
             apply_color_matrix(source, typed);
           } else if constexpr (std::is_same_v<Type, GaussianBlurEffect>) {

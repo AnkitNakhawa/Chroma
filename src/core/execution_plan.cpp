@@ -98,6 +98,7 @@ bool preserves_transparency(const Effect& effect) noexcept {
         return std::is_same_v<Type, Transform2DEffect> || std::is_same_v<Type, CropEffect> ||
                std::is_same_v<Type, OpacityEffect> ||
                std::is_same_v<Type, AnimatedOpacityEffect> ||
+               std::is_same_v<Type, MaskEffect> ||
                std::is_same_v<Type, GaussianBlurEffect>;
       },
       effect);

@@ -472,6 +472,47 @@ std::optional<EffectProgram> parse_effects(const Json* value, std::string_view p
       }
       continue;
     }
+    if (*type == "mask") {
+      const auto shape = string_value(required_member(effect, "shape", base, diagnostics),
+                                      base + "/shape", diagnostics);
+      const auto bounds = parse_number_array<4>(
+          required_member(effect, "bounds", base, diagnostics), base + "/bounds", diagnostics);
+      bool inverted = false;
+      bool mask_valid = shape.has_value() && bounds.has_value();
+      if (const auto* inverted_value = optional_member(effect, "inverted")) {
+        if (inverted_value->is_boolean()) {
+          inverted = inverted_value->get<bool>();
+        } else {
+          add_diagnostic(diagnostics, "schema.type", base + "/inverted",
+                         "expected a boolean");
+          mask_valid = false;
+        }
+      }
+      MaskShape mask_shape = MaskShape::rectangle;
+      if (shape && *shape == "ellipse") {
+        mask_shape = MaskShape::ellipse;
+      } else if (shape && *shape != "rectangle") {
+        add_diagnostic(diagnostics, "effect.invalid_mask_shape", base + "/shape",
+                       "mask shape must be rectangle or ellipse");
+        mask_valid = false;
+      }
+      if (bounds && ((*bounds)[2] <= 0.0 || (*bounds)[3] <= 0.0)) {
+        add_diagnostic(diagnostics, "effect.invalid_mask_bounds", base + "/bounds",
+                       "mask width and height must be positive");
+        mask_valid = false;
+      }
+      if (mask_valid) {
+        effects.emplace_back(MaskEffect{.shape = mask_shape,
+                                        .x = (*bounds)[0],
+                                        .y = (*bounds)[1],
+                                        .width = (*bounds)[2],
+                                        .height = (*bounds)[3],
+                                        .inverted = inverted});
+      } else {
+        valid = false;
+      }
+      continue;
+    }
     if (*type == "color_matrix") {
       const auto matrix = parse_number_array<20>(
           required_member(effect, "matrix", base, diagnostics), base + "/matrix", diagnostics);
@@ -497,7 +538,7 @@ std::optional<EffectProgram> parse_effects(const Json* value, std::string_view p
       continue;
     }
     add_diagnostic(diagnostics, "effect.unsupported_type", base + "/type",
-                   "supported effects are transform_2d, crop, opacity, color_matrix, and "
+                   "supported effects are transform_2d, crop, opacity, mask, color_matrix, and "
                    "gaussian_blur");
     valid = false;
   }

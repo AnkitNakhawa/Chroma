@@ -497,6 +497,53 @@ void animated_opacity_is_normalized_and_validated() {
   CHECK(has_code(invalid_result, "effect.invalid_easing"));
 }
 
+void masks_are_normalized_and_validated() {
+  constexpr std::string_view source = R"json(
+  {
+    "schema_version": 1,
+    "canvas": {"width": 8, "height": 8,
+      "frame_rate": {"numerator": 30, "denominator": 1}, "duration_frames": 10},
+    "layers": [
+      {"id": "masked", "type": "solid", "start_frame": 0, "end_frame": 10,
+       "color": [1, 1, 1, 1],
+       "effects": [{"type": "mask", "shape": "ellipse",
+         "bounds": [1, 2, 6, 4], "inverted": true}]}
+    ]
+  }
+  )json";
+  const auto result = chroma::parse_composition(source);
+  CHECK(result.valid());
+  if (result.composition) {
+    const auto& solid = std::get<chroma::SolidLayer>(result.composition->layers().front());
+    const auto* mask = std::get_if<chroma::MaskEffect>(&solid.effects.effects().front());
+    CHECK(mask != nullptr);
+    if (mask != nullptr) {
+      CHECK(mask->shape == chroma::MaskShape::ellipse);
+      CHECK(mask->width == 6.0);
+      CHECK(mask->inverted);
+    }
+  }
+
+  constexpr std::string_view invalid = R"json(
+  {
+    "schema_version": 1,
+    "canvas": {"width": 8, "height": 8,
+      "frame_rate": {"numerator": 30, "denominator": 1}, "duration_frames": 10},
+    "layers": [
+      {"id": "bad", "type": "solid", "start_frame": 0, "end_frame": 10,
+       "color": [1, 1, 1, 1],
+       "effects": [{"type": "mask", "shape": "triangle",
+         "bounds": [0, 0, 0, 4], "inverted": 1}]}
+    ]
+  }
+  )json";
+  const auto invalid_result = chroma::parse_composition(invalid);
+  CHECK(!invalid_result.valid());
+  CHECK(has_code(invalid_result, "effect.invalid_mask_shape"));
+  CHECK(has_code(invalid_result, "effect.invalid_mask_bounds"));
+  CHECK(has_code(invalid_result, "schema.type"));
+}
+
 }  // namespace
 
 int main() {
@@ -507,6 +554,7 @@ int main() {
   diagnostics_are_machine_readable();
   oversized_canvases_are_rejected_before_rendering();
   animated_opacity_is_normalized_and_validated();
+  masks_are_normalized_and_validated();
   video_assets_and_layers_are_normalized();
   invalid_video_references_are_reported();
   image_assets_and_layers_are_normalized();

@@ -243,6 +243,64 @@ void gaussian_blur_spreads_premultiplied_pixels_symmetrically() {
   CHECK(blurred.pixel(0, 0).alpha > 0.0F);
 }
 
+void analytic_masks_apply_antialiased_premultiplied_coverage() {
+  const auto white = chroma::Pixel{.red = 1.0F, .green = 1.0F, .blue = 1.0F, .alpha = 1.0F};
+  const auto rectangle = chroma::apply_effect_program_cpu(
+      chroma::Surface(4, 4, white),
+      chroma::EffectProgram({chroma::MaskEffect{.shape = chroma::MaskShape::rectangle,
+                                                .x = 1.0,
+                                                .y = 1.0,
+                                                .width = 2.0,
+                                                .height = 2.0}}));
+  CHECK(rectangle.pixel(0, 0) == chroma::Pixel{});
+  CHECK(rectangle.pixel(1, 1) == white);
+  CHECK(rectangle.pixel(2, 2) == white);
+  CHECK(rectangle.pixel(3, 3) == chroma::Pixel{});
+
+  const auto ellipse = chroma::apply_effect_program_cpu(
+      chroma::Surface(4, 4, white),
+      chroma::EffectProgram({chroma::MaskEffect{.shape = chroma::MaskShape::ellipse,
+                                                .x = 0.0,
+                                                .y = 0.0,
+                                                .width = 4.0,
+                                                .height = 4.0}}));
+  CHECK(ellipse.pixel(0, 0).alpha > 0.0F);
+  CHECK(ellipse.pixel(0, 0).alpha < 1.0F);
+  CHECK(ellipse.pixel(1, 1) == white);
+
+  const auto inverted = chroma::apply_effect_program_cpu(
+      chroma::Surface(4, 4, white),
+      chroma::EffectProgram({chroma::MaskEffect{.shape = chroma::MaskShape::rectangle,
+                                                .x = 1.0,
+                                                .y = 1.0,
+                                                .width = 2.0,
+                                                .height = 2.0,
+                                                .inverted = true}}));
+  CHECK(inverted.pixel(0, 0) == white);
+  CHECK(inverted.pixel(1, 1) == chroma::Pixel{});
+}
+
+void animated_opacity_builds_an_opaque_source_over_crossfade() {
+  const chroma::Composition composition(
+      1, 1, 1, chroma::FrameRate(chroma::Rational(30)),
+      chroma::FrameRange(chroma::FrameIndex(0), chroma::FrameIndex(10)),
+      {chroma::SolidLayer{
+           .id = "outgoing",
+           .range = chroma::FrameRange(chroma::FrameIndex(0), chroma::FrameIndex(10)),
+           .color = chroma::Color{.red = 0.0, .green = 0.0, .blue = 1.0, .alpha = 1.0}},
+       chroma::SolidLayer{
+           .id = "incoming",
+           .range = chroma::FrameRange(chroma::FrameIndex(0), chroma::FrameIndex(10)),
+           .color = chroma::Color{.red = 1.0, .green = 0.0, .blue = 0.0, .alpha = 1.0},
+           .effects = chroma::EffectProgram({chroma::AnimatedOpacityEffect{
+               .keyframes = {{.frame = 0, .value = 0.0},
+                             {.frame = 10, .value = 1.0}}}})}});
+  const auto frame = chroma::render_frame_cpu(composition, chroma::FrameIndex(5));
+  CHECK(near(frame.pixel(0, 0).red, 0.5F));
+  CHECK(near(frame.pixel(0, 0).blue, 0.5F));
+  CHECK(near(frame.pixel(0, 0).alpha, 1.0F));
+}
+
 void unavailable_cpu_effects_fail_explicitly() {
   CHECK_THROWS_AS(
       chroma::apply_effect_program_cpu(
@@ -570,6 +628,8 @@ int main(int argc, char** argv) {
   singular_transforms_produce_transparency();
   source_placement_modes_map_into_the_canvas();
   gaussian_blur_spreads_premultiplied_pixels_symmetrically();
+  analytic_masks_apply_antialiased_premultiplied_coverage();
+  animated_opacity_builds_an_opaque_source_over_crossfade();
   unavailable_cpu_effects_fail_explicitly();
   blend_modes_follow_premultiplied_source_over_semantics();
   composition_effects_execute_through_the_frame_plan();

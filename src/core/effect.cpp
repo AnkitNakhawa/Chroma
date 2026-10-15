@@ -108,6 +108,12 @@ void validate_effect(const Effect& effect) {
             }
             previous_frame = keyframe.frame;
           }
+        } else if constexpr (std::is_same_v<Type, MaskEffect>) {
+          if (mask_shape_name(typed.shape) == "unknown" || !std::isfinite(typed.x) ||
+              !std::isfinite(typed.y) || !std::isfinite(typed.width) ||
+              !std::isfinite(typed.height) || typed.width <= 0.0 || typed.height <= 0.0) {
+            throw std::invalid_argument("mask effect geometry is invalid");
+          }
         } else if constexpr (std::is_same_v<Type, ColorMatrixEffect>) {
           for (const auto value : typed.values) {
             if (!std::isfinite(value)) {
@@ -152,6 +158,10 @@ nlohmann::json effect_json(const Effect& effect) {
                                             {"value", keyframe.value},
                                             {"easing", easing_curve_name(keyframe.easing)}});
           }
+        } else if constexpr (std::is_same_v<Type, MaskEffect>) {
+          output["shape"] = mask_shape_name(typed.shape);
+          output["bounds"] = {typed.x, typed.y, typed.width, typed.height};
+          output["inverted"] = typed.inverted;
         } else if constexpr (std::is_same_v<Type, ColorMatrixEffect>) {
           output["matrix"] = typed.values;
         } else if constexpr (std::is_same_v<Type, GaussianBlurEffect>) {
@@ -213,6 +223,7 @@ EffectTraits effect_traits(const Effect& effect) {
                   .gpu_fusible = true,
                   .deterministic = true};
         } else if constexpr (std::is_same_v<Type, OpacityEffect> ||
+                             std::is_same_v<Type, MaskEffect> ||
                              std::is_same_v<Type, ColorMatrixEffect>) {
           return {.domain = EffectDomain::pointwise,
                   .spatial_radius = 0,
@@ -258,6 +269,7 @@ std::string_view effect_name(const Effect& effect) noexcept {
         if constexpr (std::is_same_v<Type, CropEffect>) return "crop";
         if constexpr (std::is_same_v<Type, OpacityEffect>) return "opacity";
         if constexpr (std::is_same_v<Type, AnimatedOpacityEffect>) return "animated_opacity";
+        if constexpr (std::is_same_v<Type, MaskEffect>) return "mask";
         if constexpr (std::is_same_v<Type, ColorMatrixEffect>) return "color_matrix";
         if constexpr (std::is_same_v<Type, GaussianBlurEffect>) return "gaussian_blur";
         if constexpr (std::is_same_v<Type, TemporalSampleEffect>) return "temporal_sample";
@@ -272,6 +284,14 @@ std::string_view easing_curve_name(EasingCurve easing) noexcept {
     case EasingCurve::ease_in: return "ease_in";
     case EasingCurve::ease_out: return "ease_out";
     case EasingCurve::ease_in_out: return "ease_in_out";
+  }
+  return "unknown";
+}
+
+std::string_view mask_shape_name(MaskShape shape) noexcept {
+  switch (shape) {
+    case MaskShape::rectangle: return "rectangle";
+    case MaskShape::ellipse: return "ellipse";
   }
   return "unknown";
 }

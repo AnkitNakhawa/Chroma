@@ -78,6 +78,22 @@ struct AnimatedOpacityEffect {
   friend bool operator==(const AnimatedOpacityEffect&, const AnimatedOpacityEffect&) = default;
 };
 
+enum class MaskShape {
+  rectangle,
+  ellipse,
+};
+
+struct MaskEffect {
+  MaskShape shape{MaskShape::rectangle};
+  double x;
+  double y;
+  double width;
+  double height;
+  bool inverted{false};
+
+  friend bool operator==(const MaskEffect&, const MaskEffect&) = default;
+};
+
 // Row-major 4x5 matrix applied to unpremultiplied RGBA plus a constant column.
 struct ColorMatrixEffect {
   std::array<double, 20> values;
@@ -105,8 +121,8 @@ struct ExternalEffect {
 };
 
 using Effect = std::variant<Transform2DEffect, CropEffect, OpacityEffect, AnimatedOpacityEffect,
-                            ColorMatrixEffect, GaussianBlurEffect, TemporalSampleEffect,
-                            ExternalEffect>;
+                            MaskEffect, ColorMatrixEffect, GaussianBlurEffect,
+                            TemporalSampleEffect, ExternalEffect>;
 
 class EffectProgram {
  public:
@@ -152,6 +168,7 @@ class OptimizedEffectProgram {
 [[nodiscard]] std::string_view effect_name(const Effect& effect) noexcept;
 [[nodiscard]] std::string_view effect_domain_name(EffectDomain domain) noexcept;
 [[nodiscard]] std::string_view easing_curve_name(EasingCurve easing) noexcept;
+[[nodiscard]] std::string_view mask_shape_name(MaskShape shape) noexcept;
 [[nodiscard]] double evaluate_easing(EasingCurve easing, double progress) noexcept;
 [[nodiscard]] double evaluate_animated_opacity(const AnimatedOpacityEffect& effect,
                                                std::int64_t local_frame) noexcept;

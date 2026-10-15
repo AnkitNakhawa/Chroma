@@ -39,6 +39,8 @@ void check_throws(Operation operation, std::string_view expression, int line) {
 void traits_describe_fusion_boundaries() {
   const chroma::Effect transform = chroma::Transform2DEffect{};
   const chroma::Effect opacity = chroma::OpacityEffect{.opacity = 0.5};
+  const chroma::Effect mask = chroma::MaskEffect{
+      .shape = chroma::MaskShape::ellipse, .x = 0.0, .y = 0.0, .width = 10.0, .height = 10.0};
   const chroma::Effect blur = chroma::GaussianBlurEffect{.radius = 2.0};
   const chroma::Effect temporal = chroma::TemporalSampleEffect{.radius = 2};
   const chroma::Effect external =
@@ -48,6 +50,8 @@ void traits_describe_fusion_boundaries() {
   CHECK(chroma::effect_traits(transform).gpu_fusible);
   CHECK(chroma::effect_traits(opacity).domain == chroma::EffectDomain::pointwise);
   CHECK(chroma::effect_traits(opacity).gpu_fusible);
+  CHECK(chroma::effect_traits(mask).domain == chroma::EffectDomain::pointwise);
+  CHECK(chroma::effect_traits(mask).gpu_fusible);
   CHECK(chroma::effect_traits(blur).domain == chroma::EffectDomain::neighborhood);
   CHECK(chroma::effect_traits(blur).spatial_radius == 6);
   CHECK(!chroma::effect_traits(blur).gpu_fusible);
@@ -125,6 +129,13 @@ void invalid_effects_are_rejected() {
                                                             .width = 0, .height = 1}}),
                   std::invalid_argument);
   CHECK_THROWS_AS(chroma::EffectProgram({chroma::TemporalSampleEffect{.radius = 0}}),
+                  std::invalid_argument);
+  CHECK_THROWS_AS(chroma::EffectProgram({chroma::MaskEffect{
+                      .shape = chroma::MaskShape::rectangle,
+                      .x = 0.0,
+                      .y = 0.0,
+                      .width = 0.0,
+                      .height = 1.0}}),
                   std::invalid_argument);
   CHECK_THROWS_AS(chroma::EffectProgram({chroma::ExternalEffect{.implementation = "",
                                                                 .deterministic = true}}),

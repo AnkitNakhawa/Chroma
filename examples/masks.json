@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "canvas": {
+    "width": 320,
+    "height": 180,
+    "frame_rate": {"numerator": 30, "denominator": 1},
+    "duration_frames": 60
+  },
+  "layers": [
+    {
+      "id": "background",
+      "type": "solid",
+      "start_frame": 0,
+      "end_frame": 60,
+      "color": [0.03, 0.04, 0.1, 1.0]
+    },
+    {
+      "id": "masked-card",
+      "type": "solid",
+      "start_frame": 0,
+      "end_frame": 60,
+      "color": [0.1, 0.75, 1.0, 1.0],
+      "effects": [
+        {"type": "mask", "shape": "ellipse", "bounds": [80, 20, 160, 140]},
+        {"type": "opacity", "value": 0.9}
+      ]
+    }
+  ]
+}

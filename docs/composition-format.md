@@ -153,6 +153,7 @@ Solid, image, shape, text, and video layers may declare an ordered `effects` arr
 - `crop` retains pixels inside the half-open integer rectangle `[x, x + width) × [y, y + height)` and makes the remainder transparent.
 - `opacity` accepts either a static `value` from 0 through 1 or a `keyframes` array. It scales premultiplied color and alpha.
 - `gaussian_blur` accepts a `radius` from 0 through 4096. Radius is the Gaussian standard deviation in canvas pixels; samples outside the surface are transparent.
+- `mask` accepts `shape` (`rectangle` or `ellipse`), canvas-space `bounds` (`[x, y, width, height]`), and optional boolean `inverted`. The deterministic CPU reference uses 4×4 coverage sampling at mask edges.
 - Opacity keyframes use nonnegative, strictly increasing integer `frame` offsets relative to the layer's `start_frame`. Values before the first and after the last keyframe clamp to the nearest endpoint.
 - A keyframe's optional `easing` controls its segment to the next keyframe. Supported curves are `linear` (the default), `ease_in`, `ease_out`, and `ease_in_out` using deterministic cubic equations.
 - `color_matrix` requires 20 finite row-major values defining a 4×5 matrix over straight linear RGBA. The result is clamped and premultiplied again.
@@ -169,3 +170,5 @@ For example, this fades in during the first 12 frames of a layer:
   {"frame": 12, "value": 1.0}
 ]}
 ```
+
+Simple transitions are compositions of existing primitives rather than a separate execution type. For a source-over crossfade between opaque layers, keep the outgoing layer opaque underneath and animate the incoming layer's opacity from 0 to 1; this preserves full output alpha while interpolating the colors. See `examples/crossfade.json`.

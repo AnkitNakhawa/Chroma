@@ -333,6 +333,34 @@ if(CHROMA_BUILD_TESTS)
   )
 
   add_test(
+    NAME chroma_cli_validates_mask_example
+    COMMAND chroma_cli validate ${CMAKE_CURRENT_SOURCE_DIR}/examples/masks.json
+  )
+
+  add_test(
+    NAME chroma_cli_inspects_mask_fusion
+    COMMAND chroma_cli inspect-optimized-plan ${CMAKE_CURRENT_SOURCE_DIR}/examples/masks.json
+            --frame 0
+  )
+  set_tests_properties(chroma_cli_inspects_mask_fusion PROPERTIES
+    PASS_REGULAR_EXPRESSION "mask"
+  )
+
+  add_test(
+    NAME chroma_cli_validates_crossfade_example
+    COMMAND chroma_cli validate ${CMAKE_CURRENT_SOURCE_DIR}/examples/crossfade.json
+  )
+
+  add_test(
+    NAME chroma_cli_resolves_crossfade
+    COMMAND chroma_cli inspect-plan ${CMAKE_CURRENT_SOURCE_DIR}/examples/crossfade.json
+            --frame 30
+  )
+  set_tests_properties(chroma_cli_resolves_crossfade PROPERTIES
+    PASS_REGULAR_EXPRESSION "opacity[^0-9]*0.5"
+  )
+
+  add_test(
     NAME chroma_cli_inspects_example_plan
     COMMAND chroma_cli inspect-plan ${CMAKE_CURRENT_SOURCE_DIR}/examples/solid.json --frame 0
   )
