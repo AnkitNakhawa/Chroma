@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "chroma/core/composition.hpp"
+#include "chroma/media/telemetry.hpp"
 
 namespace chroma {
 
@@ -16,6 +17,9 @@ struct VideoRenderResult {
   std::int64_t execute_nanoseconds;
   std::int64_t encode_nanoseconds;
   std::int64_t total_nanoseconds;
+  std::int64_t composition_nanoseconds;
+  DecodeTelemetry decode;
+  EncodeTelemetry encode;
 };
 
 [[nodiscard]] VideoRenderResult render_video_cpu(const Composition& composition,

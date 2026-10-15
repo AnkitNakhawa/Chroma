@@ -73,7 +73,7 @@ Run the reproducible Release CPU benchmark:
 ./benchmarks/run_cpu.sh build 5
 ```
 
-The report separates setup, plan compilation, execution/decode/compositing, encoding/muxing, and total throughput. Results are machine-specific and are not presented as general performance claims.
+The report separates setup, plan compilation, decode, decode conversion, composition, linear-float-to-RGB, RGB-to-YUV, codec/mux, and total throughput. It also reports decoded/converted frame counts and estimated bytes crossing each representation boundary. Results are machine-specific and are not presented as general performance claims.
 
 Render the current solid-layer example:
 

@@ -209,6 +209,8 @@ chroma benchmark composition.json
 
 `inspect-plan` prints the executable typed CPU plan. `inspect-optimized-plan` prints deterministic planning-only JSON containing algebraic rewrite counts and proposed fusion candidates. Both structures are internal rather than version-stable public contracts. Probe, decode, frame, render, and benchmark commands are also implemented for the current narrow feature set.
 
+Benchmark output retains aggregate `execute` and `encode` timings while decomposing them into decode, decode conversion, composition, linear-float-to-RGB, RGB-to-YUV, and codec/mux time. Dependency-neutral telemetry also counts decode requests, decoded frames, conversions, and estimated bytes written or read at the native, RGBA8, linear RGBA, RGB24, and YUV420 boundaries. Native decoded byte counts use FFmpeg's packed-size estimate and are diagnostic rather than allocator-resident byte measurements.
+
 ### C API
 
 The stable ABI should expose opaque handles for engine, composition, validation result, and render job. Callers supply configuration, cancellation, progress, and diagnostic callbacks. C++ and dependency-specific types do not cross the ABI.

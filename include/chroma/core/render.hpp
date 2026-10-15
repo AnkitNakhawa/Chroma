@@ -6,6 +6,8 @@
 #include <memory>
 #include <vector>
 
+#include "chroma/media/telemetry.hpp"
+
 #include "chroma/core/execution_plan.hpp"
 
 namespace chroma {
@@ -49,6 +51,7 @@ struct CpuExecutionStats {
   std::size_t reference_operations{0};
   std::size_t full_frame_intermediates_avoided{0};
   std::size_t full_frame_intermediates_materialized{0};
+  DecodeTelemetry decode;
 
   friend bool operator==(const CpuExecutionStats&, const CpuExecutionStats&) = default;
 };

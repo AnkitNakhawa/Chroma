@@ -689,6 +689,7 @@ Surface CpuRenderContext::execute(const ExecutionPlan& plan, CpuExecutionMode mo
         decoder = std::make_unique<VideoDecoder>(video->asset_path);
       }
       auto decoded = decoder->frame_at(video->source_time);
+      last_execution_stats_.decode += decoded.telemetry;
       source_surface = std::move(decoded.surface);
       placement = video->placement;
       effects = &video->effects;
@@ -698,7 +699,9 @@ Surface CpuRenderContext::execute(const ExecutionPlan& plan, CpuExecutionMode mo
       const auto key = prepared_image_request_key(image.asset_path);
       auto found = impl_->images.find(key);
       if (found == impl_->images.end()) {
-        found = impl_->images.emplace(key, decode_image(image.asset_path)).first;
+        auto decoded = decode_video_frame(image.asset_path, Rational(0));
+        last_execution_stats_.decode += decoded.telemetry;
+        found = impl_->images.emplace(key, std::move(decoded.surface)).first;
       }
       source_surface = found->second;
       placement = image.placement;

@@ -55,10 +55,31 @@ nlohmann::json profile_json(const VideoRenderResult& result) {
   return {{"frames_encoded", result.frames_encoded},
           {"frames_per_second",
            frames_per_second(result.frames_encoded, result.total_nanoseconds)},
+          {"counts",
+           {{"decode_requests", result.decode.frame_requests},
+            {"frames_decoded", result.decode.frames_decoded},
+            {"decode_conversions", result.decode.frames_converted},
+            {"encode_conversions", result.encode.frames_converted}}},
+          {"bytes",
+           {{"decoded_native_estimate", result.decode.native_bytes_estimated},
+            {"decode_rgba8_written", result.decode.rgba8_bytes_written},
+            {"decode_linear_rgba_written", result.decode.linear_rgba_bytes_written},
+            {"encode_linear_rgba_read", result.encode.linear_rgba_bytes_read},
+            {"encode_rgb24_written", result.encode.rgb24_bytes_written},
+            {"encode_yuv420_written", result.encode.yuv420_bytes_written}}},
           {"milliseconds",
            {{"setup", milliseconds(result.setup_nanoseconds)},
             {"compile", milliseconds(result.compile_nanoseconds)},
+            {"decode", milliseconds(result.decode.decode_nanoseconds)},
+            {"decode_conversion", milliseconds(result.decode.conversion_nanoseconds)},
+            {"composition", milliseconds(result.composition_nanoseconds)},
             {"execute", milliseconds(result.execute_nanoseconds)},
+            {"linear_to_rgb", milliseconds(result.encode.linear_to_rgb_nanoseconds)},
+            {"rgb_to_yuv", milliseconds(result.encode.rgb_to_yuv_nanoseconds)},
+            {"encode_conversion",
+             milliseconds(result.encode.linear_to_rgb_nanoseconds +
+                          result.encode.rgb_to_yuv_nanoseconds)},
+            {"codec_mux", milliseconds(result.encode.codec_mux_nanoseconds)},
             {"encode", milliseconds(result.encode_nanoseconds)},
             {"total", milliseconds(result.total_nanoseconds)}}}};
 }
@@ -282,6 +303,9 @@ VideoRenderResult render_video_cpu(const Composition& composition,
   std::int64_t compile_nanoseconds = 0;
   std::int64_t execute_nanoseconds = 0;
   std::int64_t encode_nanoseconds = 0;
+  std::int64_t composition_nanoseconds = 0;
+  DecodeTelemetry decode_telemetry;
+  EncodeTelemetry encode_telemetry;
   CpuRenderContext render_context;
   for (auto index = composition.range().start().value();
        index < composition.range().end().value(); ++index) {
@@ -291,7 +315,14 @@ VideoRenderResult render_video_cpu(const Composition& composition,
     const auto surface = render_context.execute(plan);
     const auto execute_end = Clock::now();
     compile_nanoseconds += elapsed_nanoseconds(compile_start, compile_end);
-    execute_nanoseconds += elapsed_nanoseconds(compile_end, execute_end);
+    const auto frame_execute_nanoseconds = elapsed_nanoseconds(compile_end, execute_end);
+    execute_nanoseconds += frame_execute_nanoseconds;
+    const auto& execution_stats = render_context.last_execution_stats();
+    decode_telemetry += execution_stats.decode;
+    const auto frame_decode_nanoseconds = execution_stats.decode.decode_nanoseconds +
+                                          execution_stats.decode.conversion_nanoseconds;
+    composition_nanoseconds += std::max<std::int64_t>(
+        0, frame_execute_nanoseconds - frame_decode_nanoseconds);
 
     const auto encode_start = Clock::now();
     for (std::size_t pixel_index = 0; pixel_index < surface.size(); ++pixel_index) {
@@ -300,6 +331,9 @@ VideoRenderResult render_video_cpu(const Composition& composition,
       rgb[pixel_index * 3U + 1U] = linear_to_byte(pixel.green);
       rgb[pixel_index * 3U + 2U] = linear_to_byte(pixel.blue);
     }
+    const auto linear_to_rgb_end = Clock::now();
+    encode_telemetry.linear_to_rgb_nanoseconds +=
+        elapsed_nanoseconds(encode_start, linear_to_rgb_end);
 
     status = av_frame_make_writable(frame.get());
     if (status < 0) {
@@ -308,11 +342,21 @@ VideoRenderResult render_video_cpu(const Composition& composition,
     }
     const std::uint8_t* input_data[] = {rgb.data(), nullptr, nullptr, nullptr};
     const int input_lines[] = {static_cast<int>(row_bytes), 0, 0, 0};
+    const auto rgb_to_yuv_start = Clock::now();
     const auto rows = sws_scale(scale.get(), input_data, input_lines, 0, codec->height,
                                 frame->data, frame->linesize);
+    const auto rgb_to_yuv_end = Clock::now();
     if (rows != codec->height) {
       throw std::runtime_error("encoder color conversion returned an incomplete frame");
     }
+    ++encode_telemetry.frames_converted;
+    const auto pixel_count = static_cast<std::uint64_t>(codec->width) *
+                             static_cast<std::uint64_t>(codec->height);
+    encode_telemetry.linear_rgba_bytes_read += pixel_count * sizeof(Pixel);
+    encode_telemetry.rgb24_bytes_written += pixel_count * 3U;
+    encode_telemetry.yuv420_bytes_written += pixel_count * 3U / 2U;
+    encode_telemetry.rgb_to_yuv_nanoseconds +=
+        elapsed_nanoseconds(rgb_to_yuv_start, rgb_to_yuv_end);
     frame->pts = encoded;
     frame->duration = 1;
     submit_frame(codec.get(), format.get(), stream, packet.get(), frame.get());
@@ -330,12 +374,18 @@ VideoRenderResult render_video_cpu(const Composition& composition,
   output_guard.commit();
   const auto total_end = Clock::now();
   encode_nanoseconds += elapsed_nanoseconds(finalize_start, total_end);
+  encode_telemetry.codec_mux_nanoseconds = std::max<std::int64_t>(
+      0, encode_nanoseconds - encode_telemetry.linear_to_rgb_nanoseconds -
+             encode_telemetry.rgb_to_yuv_nanoseconds);
   return VideoRenderResult{.frames_encoded = encoded,
                            .setup_nanoseconds = elapsed_nanoseconds(total_start, setup_end),
                            .compile_nanoseconds = compile_nanoseconds,
                            .execute_nanoseconds = execute_nanoseconds,
                            .encode_nanoseconds = encode_nanoseconds,
-                           .total_nanoseconds = elapsed_nanoseconds(total_start, total_end)};
+                           .total_nanoseconds = elapsed_nanoseconds(total_start, total_end),
+                           .composition_nanoseconds = composition_nanoseconds,
+                           .decode = decode_telemetry,
+                           .encode = encode_telemetry};
 #else
   static_cast<void>(composition);
   static_cast<void>(output_path);
@@ -360,6 +410,9 @@ std::string video_benchmark_json(const std::vector<VideoRenderResult>& iteration
   std::int64_t total_compile = 0;
   std::int64_t total_execute = 0;
   std::int64_t total_encode = 0;
+  std::int64_t total_composition = 0;
+  DecodeTelemetry total_decode;
+  EncodeTelemetry total_encode_telemetry;
   nlohmann::json runs = nlohmann::json::array();
   for (const auto& iteration : iterations) {
     totals.push_back(iteration.total_nanoseconds);
@@ -369,6 +422,9 @@ std::string video_benchmark_json(const std::vector<VideoRenderResult>& iteration
     total_compile += iteration.compile_nanoseconds;
     total_execute += iteration.execute_nanoseconds;
     total_encode += iteration.encode_nanoseconds;
+    total_composition += iteration.composition_nanoseconds;
+    total_decode += iteration.decode;
+    total_encode_telemetry += iteration.encode;
     runs.push_back(profile_json(iteration));
   }
   std::sort(totals.begin(), totals.end());
@@ -376,12 +432,46 @@ std::string video_benchmark_json(const std::vector<VideoRenderResult>& iteration
   return nlohmann::json{
       {"backend", "cpu"},
       {"iteration_count", iterations.size()},
+      {"telemetry_totals",
+       {{"counts",
+         {{"decode_requests", total_decode.frame_requests},
+          {"frames_decoded", total_decode.frames_decoded},
+          {"decode_conversions", total_decode.frames_converted},
+          {"encode_conversions", total_encode_telemetry.frames_converted}}},
+        {"bytes",
+         {{"decoded_native_estimate", total_decode.native_bytes_estimated},
+          {"decode_rgba8_written", total_decode.rgba8_bytes_written},
+          {"decode_linear_rgba_written", total_decode.linear_rgba_bytes_written},
+          {"encode_linear_rgba_read", total_encode_telemetry.linear_rgba_bytes_read},
+          {"encode_rgb24_written", total_encode_telemetry.rgb24_bytes_written},
+          {"encode_yuv420_written", total_encode_telemetry.yuv420_bytes_written}}}}},
       {"summary",
        {{"frames_per_second", frames_per_second(total_frames, total_time)},
         {"milliseconds",
          {{"setup_mean", milliseconds(static_cast<std::int64_t>(total_setup / count))},
           {"compile_mean", milliseconds(static_cast<std::int64_t>(total_compile / count))},
+          {"decode_mean",
+           milliseconds(static_cast<std::int64_t>(total_decode.decode_nanoseconds / count))},
+          {"decode_conversion_mean",
+           milliseconds(
+               static_cast<std::int64_t>(total_decode.conversion_nanoseconds / count))},
+          {"composition_mean",
+           milliseconds(static_cast<std::int64_t>(total_composition / count))},
           {"execute_mean", milliseconds(static_cast<std::int64_t>(total_execute / count))},
+          {"linear_to_rgb_mean",
+           milliseconds(static_cast<std::int64_t>(
+               total_encode_telemetry.linear_to_rgb_nanoseconds / count))},
+          {"rgb_to_yuv_mean",
+           milliseconds(static_cast<std::int64_t>(
+               total_encode_telemetry.rgb_to_yuv_nanoseconds / count))},
+          {"encode_conversion_mean",
+           milliseconds(static_cast<std::int64_t>(
+               (total_encode_telemetry.linear_to_rgb_nanoseconds +
+                total_encode_telemetry.rgb_to_yuv_nanoseconds) /
+               count))},
+          {"codec_mux_mean",
+           milliseconds(static_cast<std::int64_t>(
+               total_encode_telemetry.codec_mux_nanoseconds / count))},
           {"encode_mean", milliseconds(static_cast<std::int64_t>(total_encode / count))},
           {"total_mean", milliseconds(static_cast<std::int64_t>(total_time / count))},
           {"total_min", milliseconds(totals.front())},

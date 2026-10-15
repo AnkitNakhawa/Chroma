@@ -5,12 +5,14 @@
 
 #include "chroma/core/rational.hpp"
 #include "chroma/core/render.hpp"
+#include "chroma/media/telemetry.hpp"
 
 namespace chroma {
 
 struct DecodedVideoFrame {
   Surface surface;
   Rational presentation_time;
+  DecodeTelemetry telemetry;
 };
 
 class VideoDecoder {

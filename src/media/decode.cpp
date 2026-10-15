@@ -1,6 +1,7 @@
 #include "chroma/media/decode.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <limits>
@@ -19,6 +20,7 @@ extern "C" {
 #include <libavcodec/avcodec.h>
 #include <libavformat/avformat.h>
 #include <libavutil/error.h>
+#include <libavutil/imgutils.h>
 #include <libswscale/swscale.h>
 }
 #endif
@@ -27,6 +29,12 @@ namespace chroma {
 namespace {
 
 #if CHROMA_HAS_FFMPEG
+using Clock = std::chrono::steady_clock;
+
+std::int64_t elapsed_nanoseconds(Clock::time_point start, Clock::time_point end) {
+  return std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count();
+}
+
 std::string ffmpeg_error(int status) {
   char buffer[AV_ERROR_MAX_STRING_SIZE]{};
   if (av_strerror(status, buffer, sizeof(buffer)) < 0) {
@@ -208,7 +216,7 @@ struct VideoDecoder::Impl {
     flush_sent = false;
   }
 
-  FramePointer next_frame() {
+  FramePointer next_frame(DecodeTelemetry& telemetry) {
     while (true) {
       const auto receive_status = avcodec_receive_frame(codec.get(), receive_frame.get());
       if (receive_status >= 0) {
@@ -216,6 +224,12 @@ struct VideoDecoder::Impl {
         av_frame_unref(receive_frame.get());
         if (!output) {
           throw std::runtime_error("unable to retain decoded video frame");
+        }
+        ++telemetry.frames_decoded;
+        const auto native_bytes = av_image_get_buffer_size(
+            static_cast<AVPixelFormat>(output->format), output->width, output->height, 1);
+        if (native_bytes > 0) {
+          telemetry.native_bytes_estimated += static_cast<std::uint64_t>(native_bytes);
         }
         return output;
       }
@@ -265,6 +279,8 @@ struct VideoDecoder::Impl {
   }
 
   DecodedVideoFrame frame_at(Rational time) {
+    DecodeTelemetry telemetry{.frame_requests = 1};
+    const auto decode_start = Clock::now();
     if (time < Rational(0)) {
       throw std::invalid_argument("requested media time must be non-negative");
     }
@@ -284,7 +300,7 @@ struct VideoDecoder::Impl {
       }
     }
     while (!pending) {
-      auto decoded = next_frame();
+      auto decoded = next_frame(telemetry);
       if (!decoded) {
         break;
       }
@@ -298,12 +314,24 @@ struct VideoDecoder::Impl {
     if (!current) {
       throw std::out_of_range("requested time is outside the decodable video range");
     }
+    const auto conversion_start = Clock::now();
+    telemetry.decode_nanoseconds = elapsed_nanoseconds(decode_start, conversion_start);
+    auto surface = convert_frame(*current, scale);
+    const auto conversion_end = Clock::now();
+    ++telemetry.frames_converted;
+    telemetry.rgba8_bytes_written += static_cast<std::uint64_t>(current->width) *
+                                     static_cast<std::uint64_t>(current->height) * 4U;
+    telemetry.linear_rgba_bytes_written +=
+        static_cast<std::uint64_t>(surface.size()) * sizeof(Pixel);
+    telemetry.conversion_nanoseconds =
+        elapsed_nanoseconds(conversion_start, conversion_end);
     const auto timestamp = current->best_effort_timestamp;
     return DecodedVideoFrame{
-        .surface = convert_frame(*current, scale),
+        .surface = std::move(surface),
         .presentation_time = timestamp == AV_NOPTS_VALUE
                                  ? time
-                                 : timestamp_time(timestamp, stream->time_base, stream_start)};
+                                 : timestamp_time(timestamp, stream->time_base, stream_start),
+        .telemetry = telemetry};
   }
 
   std::string path_string;
