@@ -55,6 +55,29 @@ struct OpacityEffect {
   friend bool operator==(const OpacityEffect&, const OpacityEffect&) = default;
 };
 
+enum class EasingCurve {
+  linear,
+  ease_in,
+  ease_out,
+  ease_in_out,
+};
+
+struct ScalarKeyframe {
+  std::int64_t frame;
+  double value;
+  EasingCurve easing{EasingCurve::linear};
+
+  friend bool operator==(const ScalarKeyframe&, const ScalarKeyframe&) = default;
+};
+
+// Keyframe frames are offsets from the owning layer's start frame. The easing
+// on a keyframe controls interpolation from that keyframe to the next one.
+struct AnimatedOpacityEffect {
+  std::vector<ScalarKeyframe> keyframes;
+
+  friend bool operator==(const AnimatedOpacityEffect&, const AnimatedOpacityEffect&) = default;
+};
+
 // Row-major 4x5 matrix applied to unpremultiplied RGBA plus a constant column.
 struct ColorMatrixEffect {
   std::array<double, 20> values;
@@ -81,8 +104,9 @@ struct ExternalEffect {
   friend bool operator==(const ExternalEffect&, const ExternalEffect&) = default;
 };
 
-using Effect = std::variant<Transform2DEffect, CropEffect, OpacityEffect, ColorMatrixEffect,
-                            GaussianBlurEffect, TemporalSampleEffect, ExternalEffect>;
+using Effect = std::variant<Transform2DEffect, CropEffect, OpacityEffect, AnimatedOpacityEffect,
+                            ColorMatrixEffect, GaussianBlurEffect, TemporalSampleEffect,
+                            ExternalEffect>;
 
 class EffectProgram {
  public:
@@ -127,6 +151,10 @@ class OptimizedEffectProgram {
 [[nodiscard]] EffectTraits effect_traits(const Effect& effect);
 [[nodiscard]] std::string_view effect_name(const Effect& effect) noexcept;
 [[nodiscard]] std::string_view effect_domain_name(EffectDomain domain) noexcept;
+[[nodiscard]] std::string_view easing_curve_name(EasingCurve easing) noexcept;
+[[nodiscard]] double evaluate_easing(EasingCurve easing, double progress) noexcept;
+[[nodiscard]] double evaluate_animated_opacity(const AnimatedOpacityEffect& effect,
+                                               std::int64_t local_frame) noexcept;
 [[nodiscard]] OptimizedEffectProgram optimize_effect_program(const EffectProgram& program);
 [[nodiscard]] std::string effect_program_json(const EffectProgram& program);
 [[nodiscard]] std::string optimized_effect_program_json(const OptimizedEffectProgram& program);

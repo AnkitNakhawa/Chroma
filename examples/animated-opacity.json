@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "canvas": {
+    "width": 320,
+    "height": 180,
+    "frame_rate": {"numerator": 30, "denominator": 1},
+    "duration_frames": 60
+  },
+  "layers": [
+    {
+      "id": "background",
+      "type": "solid",
+      "start_frame": 0,
+      "end_frame": 60,
+      "color": [0.03, 0.05, 0.12, 1.0]
+    },
+    {
+      "id": "fade-card",
+      "type": "shape",
+      "shape": "rounded_rectangle",
+      "start_frame": 10,
+      "end_frame": 50,
+      "bounds": [60, 40, 200, 100],
+      "corner_radius": 16,
+      "fill": [0.1, 0.65, 1.0, 1.0],
+      "effects": [
+        {
+          "type": "opacity",
+          "keyframes": [
+            {"frame": 0, "value": 0.0, "easing": "ease_out"},
+            {"frame": 12, "value": 1.0, "easing": "linear"},
+            {"frame": 28, "value": 1.0, "easing": "ease_in"},
+            {"frame": 39, "value": 0.0}
+          ]
+        }
+      ]
+    }
+  ]
+}

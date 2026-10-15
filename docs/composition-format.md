@@ -151,9 +151,20 @@ Solid, image, shape, text, and video layers may declare an ordered `effects` arr
 - Effects execute in declaration order.
 - `transform_2d` uses the affine matrix `[m00, m01, m02, m10, m11, m12]`, maps source pixel centers into a same-sized destination, samples bilinearly, and treats pixels outside the source as transparent.
 - `crop` retains pixels inside the half-open integer rectangle `[x, x + width) × [y, y + height)` and makes the remainder transparent.
-- `opacity` accepts a value from 0 through 1 and scales premultiplied color and alpha.
+- `opacity` accepts either a static `value` from 0 through 1 or a `keyframes` array. It scales premultiplied color and alpha.
+- Opacity keyframes use nonnegative, strictly increasing integer `frame` offsets relative to the layer's `start_frame`. Values before the first and after the last keyframe clamp to the nearest endpoint.
+- A keyframe's optional `easing` controls its segment to the next keyframe. Supported curves are `linear` (the default), `ease_in`, `ease_out`, and `ease_in_out` using deterministic cubic equations.
 - `color_matrix` requires 20 finite row-major values defining a 4×5 matrix over straight linear RGBA. The result is clamped and premultiplied again.
 - Supported blend modes are `source_over` (default), `multiply`, `screen`, and `plus`.
 - At most 64 effects may be declared on a layer in the experimental schema.
 - Video layers retain the legacy top-level `opacity` field. When it differs from 1, it is applied after the ordered `effects` array.
-- Blur, temporal, external/plugin, and animated effects are not accepted by the JSON schema yet.
+- Blur, temporal, and external/plugin effects are not accepted by the JSON schema yet. Animated opacity is accepted and resolves to a static opacity node for each compiled frame before algebraic optimization and fusion planning.
+
+For example, this fades in during the first 12 frames of a layer:
+
+```json
+{"type": "opacity", "keyframes": [
+  {"frame": 0, "value": 0.0, "easing": "ease_out"},
+  {"frame": 12, "value": 1.0}
+]}
+```

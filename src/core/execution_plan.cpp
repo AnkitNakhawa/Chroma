@@ -69,9 +69,18 @@ nlohmann::json shape_geometry_json(const ShapeGeometry& geometry) {
           {"corner_radius", geometry.corner_radius}};
 }
 
-OptimizedEffectProgram compile_effects(const EffectProgram& program,
+OptimizedEffectProgram compile_effects(const EffectProgram& program, std::int64_t local_frame,
                                        std::optional<double> final_opacity = std::nullopt) {
-  auto effects = program.effects();
+  std::vector<Effect> effects;
+  effects.reserve(program.effects().size() + static_cast<std::size_t>(final_opacity.has_value()));
+  for (const auto& effect : program.effects()) {
+    if (const auto* animated = std::get_if<AnimatedOpacityEffect>(&effect)) {
+      effects.emplace_back(
+          OpacityEffect{.opacity = evaluate_animated_opacity(*animated, local_frame)});
+    } else {
+      effects.push_back(effect);
+    }
+  }
   if (final_opacity && *final_opacity != 1.0) {
     effects.emplace_back(OpacityEffect{.opacity = *final_opacity});
   }
@@ -88,6 +97,7 @@ bool preserves_transparency(const Effect& effect) noexcept {
         }
         return std::is_same_v<Type, Transform2DEffect> || std::is_same_v<Type, CropEffect> ||
                std::is_same_v<Type, OpacityEffect> ||
+               std::is_same_v<Type, AnimatedOpacityEffect> ||
                std::is_same_v<Type, GaussianBlurEffect>;
       },
       effect);
@@ -342,7 +352,8 @@ ExecutionPlan compile_frame(const Composition& composition, FrameIndex frame) {
   for (const auto& layer_variant : composition.layers()) {
     if (const auto* solid = std::get_if<SolidLayer>(&layer_variant)) {
       if (solid->range.contains(frame)) {
-        const auto optimized = compile_effects(solid->effects);
+        const auto local_frame = frame.value() - solid->range.start().value();
+        const auto optimized = compile_effects(solid->effects, local_frame);
         if (definitely_transparent(optimized.program(), solid->color.alpha == 0.0)) {
           continue;
         }
@@ -369,7 +380,8 @@ ExecutionPlan compile_frame(const Composition& composition, FrameIndex frame) {
         throw std::logic_error("validated video layer references a missing asset");
       }
       const auto source_frame = checked_source_frame(*video, frame);
-      const auto optimized = compile_effects(video->effects, video->opacity);
+      const auto local_frame = frame.value() - video->range.start().value();
+      const auto optimized = compile_effects(video->effects, local_frame, video->opacity);
       if (definitely_transparent(optimized.program(), false)) {
         continue;
       }
@@ -392,7 +404,8 @@ ExecutionPlan compile_frame(const Composition& composition, FrameIndex frame) {
       if (asset == nullptr) {
         throw std::logic_error("validated image layer references a missing asset");
       }
-      const auto optimized = compile_effects(image->effects);
+      const auto local_frame = frame.value() - image->range.start().value();
+      const auto optimized = compile_effects(image->effects, local_frame);
       if (definitely_transparent(optimized.program(), false)) {
         continue;
       }
@@ -410,7 +423,8 @@ ExecutionPlan compile_frame(const Composition& composition, FrameIndex frame) {
       if (!shape->range.contains(frame)) {
         continue;
       }
-      const auto optimized = compile_effects(shape->effects);
+      const auto local_frame = frame.value() - shape->range.start().value();
+      const auto optimized = compile_effects(shape->effects, local_frame);
       const auto transparent_paint =
           shape->fill.alpha == 0.0 && (!shape->stroke || shape->stroke->color.alpha == 0.0);
       if (definitely_transparent(optimized.program(), transparent_paint)) {
@@ -433,7 +447,8 @@ ExecutionPlan compile_frame(const Composition& composition, FrameIndex frame) {
       if (font == nullptr) {
         throw std::logic_error("validated text layer references a missing font asset");
       }
-      const auto optimized = compile_effects(text.effects);
+      const auto local_frame = frame.value() - text.range.start().value();
+      const auto optimized = compile_effects(text.effects, local_frame);
       if (definitely_transparent(optimized.program(), text.color.alpha == 0.0)) {
         continue;
       }

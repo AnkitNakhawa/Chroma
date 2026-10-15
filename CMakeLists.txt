@@ -305,6 +305,20 @@ if(CHROMA_BUILD_TESTS)
   )
 
   add_test(
+    NAME chroma_cli_validates_animated_opacity_example
+    COMMAND chroma_cli validate ${CMAKE_CURRENT_SOURCE_DIR}/examples/animated-opacity.json
+  )
+
+  add_test(
+    NAME chroma_cli_resolves_animated_opacity
+    COMMAND chroma_cli inspect-plan
+            ${CMAKE_CURRENT_SOURCE_DIR}/examples/animated-opacity.json --frame 16
+  )
+  set_tests_properties(chroma_cli_resolves_animated_opacity PROPERTIES
+    PASS_REGULAR_EXPRESSION "opacity[^0-9]*0.875"
+  )
+
+  add_test(
     NAME chroma_cli_inspects_example_plan
     COMMAND chroma_cli inspect-plan ${CMAKE_CURRENT_SOURCE_DIR}/examples/solid.json --frame 0
   )

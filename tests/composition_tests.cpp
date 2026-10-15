@@ -443,6 +443,56 @@ void oversized_canvases_are_rejected_before_rendering() {
   CHECK(has_code(result, "canvas.too_large"));
 }
 
+void animated_opacity_is_normalized_and_validated() {
+  constexpr std::string_view source = R"json(
+  {
+    "schema_version": 1,
+    "canvas": {"width": 8, "height": 8,
+      "frame_rate": {"numerator": 30, "denominator": 1}, "duration_frames": 20},
+    "layers": [
+      {"id": "animated", "type": "solid", "start_frame": 5, "end_frame": 15,
+       "color": [1, 1, 1, 1],
+       "effects": [{"type": "opacity", "keyframes": [
+         {"frame": 0, "value": 0, "easing": "ease_out"},
+         {"frame": 5, "value": 1}
+       ]}]}
+    ]
+  }
+  )json";
+  const auto result = chroma::parse_composition(source);
+  CHECK(result.valid());
+  if (result.composition) {
+    const auto& solid = std::get<chroma::SolidLayer>(result.composition->layers().front());
+    const auto* animated =
+        std::get_if<chroma::AnimatedOpacityEffect>(&solid.effects.effects().front());
+    CHECK(animated != nullptr);
+    if (animated != nullptr) {
+      CHECK(animated->keyframes.size() == 2);
+      CHECK(animated->keyframes.front().easing == chroma::EasingCurve::ease_out);
+    }
+  }
+
+  constexpr std::string_view invalid = R"json(
+  {
+    "schema_version": 1,
+    "canvas": {"width": 8, "height": 8,
+      "frame_rate": {"numerator": 30, "denominator": 1}, "duration_frames": 10},
+    "layers": [
+      {"id": "bad", "type": "solid", "start_frame": 0, "end_frame": 10,
+       "color": [1, 1, 1, 1],
+       "effects": [{"type": "opacity", "keyframes": [
+         {"frame": 4, "value": 0}, {"frame": 4, "value": 2, "easing": "bounce"}
+       ]}]}
+    ]
+  }
+  )json";
+  const auto invalid_result = chroma::parse_composition(invalid);
+  CHECK(!invalid_result.valid());
+  CHECK(has_code(invalid_result, "effect.invalid_keyframe_order"));
+  CHECK(has_code(invalid_result, "effect.invalid_opacity"));
+  CHECK(has_code(invalid_result, "effect.invalid_easing"));
+}
+
 }  // namespace
 
 int main() {
@@ -452,6 +502,7 @@ int main() {
   duplicate_and_out_of_bounds_layers_are_reported();
   diagnostics_are_machine_readable();
   oversized_canvases_are_rejected_before_rendering();
+  animated_opacity_is_normalized_and_validated();
   video_assets_and_layers_are_normalized();
   invalid_video_references_are_reported();
   image_assets_and_layers_are_normalized();

@@ -85,9 +85,9 @@ The first useful product target is template-style programmatic video: a backgrou
 1. [complete] Define an immutable effect IR and effect-trait contract covering identity, pointwise, coordinate-transform, neighborhood, temporal, and external/barrier operations. Add stable optimized-plan inspection.
 2. [complete] Implement transforms, crop/fit, opacity, color matrices, and blend modes in the CPU reference backend. Video source placement now supports explicit none/contain/cover/fill sampling and normalized alignment before the optimized effect chain. Optimized programs are authoritative for execution, provably transparent layers are removed, and opaque full-canvas solids cull hidden work.
 3. [complete] Partition the optimized graph into fusible groups and explicit barriers. Add pass-count, intermediate-surface, estimated-byte-traffic, physical-buffer-reuse, and cache-decision diagnostics; prove the planner with tests before GPU code generation.
-4. [pending] Add image layers plus text and basic shapes. Prefer a narrow text shaping/raster dependency, cache static raster results, and avoid adopting a general compositor dependency at this stage.
+4. [complete] Add image layers plus text and basic shapes. Prefer a narrow text shaping/raster dependency, cache static raster results, and avoid adopting a general compositor dependency at this stage.
 5. [pending] Build the first Linux/NVIDIA CUDA vertical slice: retain decoded surfaces on the GPU where supported and fuse sample/transform/color/opacity/composite for the benchmark-critical path. Compare output against the CPU reference backend.
-6. [pending] Add keyframes/easing, simple masks, blur, and transitions. Use blur as the first neighborhood-effect barrier and validate fusion on both sides of it.
+6. [in_progress] Add keyframes/easing, simple masks, blur, and transitions. Keyframed opacity and cubic easing are complete; masks, blur execution, and transition examples remain. Use blur as the first neighborhood-effect barrier and validate fusion on both sides of it.
 7. [pending] Add audio input, trim, gain, simple mixing, and muxing through FFmpeg to complete the useful basic-video path.
 8. [pending] Publish benchmark comparisons against equivalent FFmpeg and GPU-configured Remotion workloads. Report end-to-end time, GPU/CPU transfer bytes, peak memory, kernel/pass count, and warm/cold behavior.
 
@@ -143,7 +143,7 @@ Each item is a separate test-and-commit gate.
 2. [complete] Introduce a dependency-neutral resident-frame descriptor and ownership contract without leaking FFmpeg or CUDA types across Chroma's core/public boundary.
 3. [complete] Implement and benchmark the first safe CPU conversion reduction, retaining the current path as a correctness oracle and avoiding premature color-management claims.
 4. [complete] Specify and scaffold the Linux/NVIDIA hardware-frame path, including runtime CUDA/device/decoder/NVENC readiness checks and explicit unimplemented status. Actual kernels remain gated on a capable Linux/NVIDIA environment and CPU-reference comparison.
-5. [in_progress] Resume the user-visible MVP sequence: keyframes/easing, masks/blur/transitions, audio, bounded caches, stable C API, packaging, and published comparison corpus.
+5. [in_progress] Resume the user-visible MVP sequence: keyframes/easing is implemented; masks/blur/transitions, audio, bounded caches, stable C API, packaging, and published comparison corpus remain.
 
 ### Dependency policy for these slices
 

@@ -1,5 +1,6 @@
 #include "chroma/core/effect.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <stdexcept>
 #include <type_traits>
@@ -91,6 +92,22 @@ void validate_effect(const Effect& effect) {
           if (!std::isfinite(typed.opacity) || typed.opacity < 0.0 || typed.opacity > 1.0) {
             throw std::invalid_argument("opacity effect must be between zero and one");
           }
+        } else if constexpr (std::is_same_v<Type, AnimatedOpacityEffect>) {
+          if (typed.keyframes.empty() || typed.keyframes.size() > 1024) {
+            throw std::invalid_argument("animated opacity must contain 1 to 1024 keyframes");
+          }
+          std::int64_t previous_frame = -1;
+          for (const auto& keyframe : typed.keyframes) {
+            if (keyframe.frame < 0 || keyframe.frame <= previous_frame) {
+              throw std::invalid_argument(
+                  "animated opacity keyframe frames must be nonnegative and strictly increasing");
+            }
+            if (!std::isfinite(keyframe.value) || keyframe.value < 0.0 ||
+                keyframe.value > 1.0 || easing_curve_name(keyframe.easing) == "unknown") {
+              throw std::invalid_argument("animated opacity keyframe is invalid");
+            }
+            previous_frame = keyframe.frame;
+          }
         } else if constexpr (std::is_same_v<Type, ColorMatrixEffect>) {
           for (const auto value : typed.values) {
             if (!std::isfinite(value)) {
@@ -128,6 +145,13 @@ nlohmann::json effect_json(const Effect& effect) {
                             {"width", typed.width}, {"height", typed.height}};
         } else if constexpr (std::is_same_v<Type, OpacityEffect>) {
           output["opacity"] = typed.opacity;
+        } else if constexpr (std::is_same_v<Type, AnimatedOpacityEffect>) {
+          output["keyframes"] = nlohmann::json::array();
+          for (const auto& keyframe : typed.keyframes) {
+            output["keyframes"].push_back({{"frame", keyframe.frame},
+                                            {"value", keyframe.value},
+                                            {"easing", easing_curve_name(keyframe.easing)}});
+          }
         } else if constexpr (std::is_same_v<Type, ColorMatrixEffect>) {
           output["matrix"] = typed.values;
         } else if constexpr (std::is_same_v<Type, GaussianBlurEffect>) {
@@ -195,6 +219,14 @@ EffectTraits effect_traits(const Effect& effect) {
                   .temporal_radius = 0,
                   .gpu_fusible = true,
                   .deterministic = true};
+        } else if constexpr (std::is_same_v<Type, AnimatedOpacityEffect>) {
+          // A local frame is required before a backend can execute this node.
+          // Per-frame compilation lowers it to a normal fusible opacity effect.
+          return {.domain = EffectDomain::pointwise,
+                  .spatial_radius = 0,
+                  .temporal_radius = 0,
+                  .gpu_fusible = false,
+                  .deterministic = true};
         } else if constexpr (std::is_same_v<Type, GaussianBlurEffect>) {
           return {.domain = EffectDomain::neighborhood,
                   .spatial_radius = static_cast<std::int32_t>(std::ceil(typed.radius * 3.0)),
@@ -225,12 +257,63 @@ std::string_view effect_name(const Effect& effect) noexcept {
         if constexpr (std::is_same_v<Type, Transform2DEffect>) return "transform_2d";
         if constexpr (std::is_same_v<Type, CropEffect>) return "crop";
         if constexpr (std::is_same_v<Type, OpacityEffect>) return "opacity";
+        if constexpr (std::is_same_v<Type, AnimatedOpacityEffect>) return "animated_opacity";
         if constexpr (std::is_same_v<Type, ColorMatrixEffect>) return "color_matrix";
         if constexpr (std::is_same_v<Type, GaussianBlurEffect>) return "gaussian_blur";
         if constexpr (std::is_same_v<Type, TemporalSampleEffect>) return "temporal_sample";
         return "external";
       },
       effect);
+}
+
+std::string_view easing_curve_name(EasingCurve easing) noexcept {
+  switch (easing) {
+    case EasingCurve::linear: return "linear";
+    case EasingCurve::ease_in: return "ease_in";
+    case EasingCurve::ease_out: return "ease_out";
+    case EasingCurve::ease_in_out: return "ease_in_out";
+  }
+  return "unknown";
+}
+
+double evaluate_easing(EasingCurve easing, double progress) noexcept {
+  const auto value = std::clamp(progress, 0.0, 1.0);
+  switch (easing) {
+    case EasingCurve::linear: return value;
+    case EasingCurve::ease_in: return value * value * value;
+    case EasingCurve::ease_out: {
+      const auto inverse = 1.0 - value;
+      return 1.0 - inverse * inverse * inverse;
+    }
+    case EasingCurve::ease_in_out:
+      if (value < 0.5) {
+        return 4.0 * value * value * value;
+      }
+      return 1.0 - std::pow(-2.0 * value + 2.0, 3.0) / 2.0;
+  }
+  return value;
+}
+
+double evaluate_animated_opacity(const AnimatedOpacityEffect& effect,
+                                 std::int64_t local_frame) noexcept {
+  if (effect.keyframes.empty()) {
+    return 1.0;
+  }
+  if (local_frame <= effect.keyframes.front().frame) {
+    return effect.keyframes.front().value;
+  }
+  if (local_frame >= effect.keyframes.back().frame) {
+    return effect.keyframes.back().value;
+  }
+  const auto next = std::upper_bound(
+      effect.keyframes.begin(), effect.keyframes.end(), local_frame,
+      [](std::int64_t frame, const ScalarKeyframe& keyframe) { return frame < keyframe.frame; });
+  const auto& right = *next;
+  const auto& left = *(next - 1);
+  const auto progress = static_cast<double>(local_frame - left.frame) /
+                        static_cast<double>(right.frame - left.frame);
+  const auto eased = evaluate_easing(left.easing, progress);
+  return left.value + (right.value - left.value) * eased;
 }
 
 std::string_view effect_domain_name(EffectDomain domain) noexcept {

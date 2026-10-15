@@ -622,6 +622,37 @@ void physical_planner_splits_barriers_and_tracks_resources() {
   }
 }
 
+void animated_opacity_resolves_in_layer_time_before_optimization() {
+  const chroma::Composition composition(
+      1, 4, 2, chroma::FrameRate(chroma::Rational(30)),
+      chroma::FrameRange(chroma::FrameIndex(0), chroma::FrameIndex(30)),
+      {chroma::SolidLayer{
+          .id = "animated",
+          .range = chroma::FrameRange(chroma::FrameIndex(10), chroma::FrameIndex(20)),
+          .color = chroma::Color{.red = 1.0, .green = 1.0, .blue = 1.0, .alpha = 1.0},
+          .effects = chroma::EffectProgram(
+              {chroma::AnimatedOpacityEffect{
+                   .keyframes = {{.frame = 0, .value = 0.2},
+                                 {.frame = 10, .value = 0.8}}},
+               chroma::OpacityEffect{.opacity = 0.5}})}});
+
+  const auto plan = chroma::compile_frame(composition, chroma::FrameIndex(15));
+  CHECK(plan.operations().size() == 2);
+  const auto* solid = std::get_if<chroma::CompositeSolidOperation>(&plan.operations().back());
+  CHECK(solid != nullptr);
+  if (solid != nullptr) {
+    CHECK(solid->effects.effects().size() == 1);
+    const auto* opacity = std::get_if<chroma::OpacityEffect>(&solid->effects.effects().front());
+    CHECK(opacity != nullptr);
+    if (opacity != nullptr) {
+      CHECK(opacity->opacity == 0.25);
+    }
+    CHECK(solid->effect_rewrite_count == 1);
+  }
+  const auto json = chroma::execution_plan_json(plan);
+  CHECK(json.find("animated_opacity") == std::string::npos);
+}
+
 }  // namespace
 
 int main() {
@@ -644,6 +675,7 @@ int main() {
   opaque_full_canvas_solids_cull_hidden_layers();
   optimized_plan_exposes_rewrites_without_changing_execution();
   physical_planner_splits_barriers_and_tracks_resources();
+  animated_opacity_resolves_in_layer_time_before_optimization();
 
   if (failures != 0) {
     std::cerr << failures << " test assertion(s) failed\n";

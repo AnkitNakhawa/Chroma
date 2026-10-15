@@ -303,6 +303,79 @@ std::optional<std::int32_t> effect_integer(const Json* value, std::string_view p
   return static_cast<std::int32_t>(*integer);
 }
 
+std::optional<EasingCurve> parse_easing(const Json* value, std::string_view path,
+                                        std::vector<Diagnostic>& diagnostics) {
+  if (value == nullptr) {
+    return EasingCurve::linear;
+  }
+  const auto name = string_value(value, path, diagnostics);
+  if (!name) {
+    return std::nullopt;
+  }
+  if (*name == "linear") return EasingCurve::linear;
+  if (*name == "ease_in") return EasingCurve::ease_in;
+  if (*name == "ease_out") return EasingCurve::ease_out;
+  if (*name == "ease_in_out") return EasingCurve::ease_in_out;
+  add_diagnostic(diagnostics, "effect.invalid_easing", std::string(path),
+                 "easing must be linear, ease_in, ease_out, or ease_in_out");
+  return std::nullopt;
+}
+
+std::optional<AnimatedOpacityEffect> parse_animated_opacity(
+    const Json* value, std::string_view path, std::vector<Diagnostic>& diagnostics) {
+  if (value == nullptr || !value->is_array()) {
+    if (value != nullptr) {
+      add_diagnostic(diagnostics, "schema.type", std::string(path), "expected an array");
+    }
+    return std::nullopt;
+  }
+  if (value->empty() || value->size() > 1024) {
+    add_diagnostic(diagnostics, "effect.invalid_keyframes", std::string(path),
+                   "keyframes must contain between 1 and 1024 entries");
+    return std::nullopt;
+  }
+
+  std::vector<ScalarKeyframe> keyframes;
+  keyframes.reserve(value->size());
+  bool valid = true;
+  std::int64_t previous_frame = -1;
+  for (std::size_t index = 0; index < value->size(); ++index) {
+    const auto& item = (*value)[index];
+    const auto item_path = std::string(path) + "/" + std::to_string(index);
+    if (!item.is_object()) {
+      add_diagnostic(diagnostics, "schema.type", item_path, "expected an object");
+      valid = false;
+      continue;
+    }
+    const auto frame = integer_value(required_member(item, "frame", item_path, diagnostics),
+                                     item_path + "/frame", diagnostics);
+    const auto opacity = number_value(required_member(item, "value", item_path, diagnostics),
+                                      item_path + "/value", diagnostics);
+    const auto easing = parse_easing(optional_member(item, "easing"), item_path + "/easing",
+                                     diagnostics);
+    if (frame && (*frame < 0 || *frame <= previous_frame)) {
+      add_diagnostic(diagnostics, "effect.invalid_keyframe_order", item_path + "/frame",
+                     "keyframe frames must be nonnegative and strictly increasing");
+      valid = false;
+    }
+    if (opacity && (*opacity < 0.0 || *opacity > 1.0)) {
+      add_diagnostic(diagnostics, "effect.invalid_opacity", item_path + "/value",
+                     "opacity must be between 0 and 1");
+      valid = false;
+    }
+    if (!frame || !opacity || !easing) {
+      valid = false;
+      continue;
+    }
+    previous_frame = *frame;
+    keyframes.push_back(ScalarKeyframe{.frame = *frame, .value = *opacity, .easing = *easing});
+  }
+  if (!valid) {
+    return std::nullopt;
+  }
+  return AnimatedOpacityEffect{.keyframes = std::move(keyframes)};
+}
+
 std::optional<EffectProgram> parse_effects(const Json* value, std::string_view path,
                                            std::vector<Diagnostic>& diagnostics) {
   if (value == nullptr) {
@@ -371,16 +444,31 @@ std::optional<EffectProgram> parse_effects(const Json* value, std::string_view p
       continue;
     }
     if (*type == "opacity") {
-      const auto opacity = number_value(required_member(effect, "value", base, diagnostics),
-                                        base + "/value", diagnostics);
-      if (opacity && *opacity >= 0.0 && *opacity <= 1.0) {
-        effects.emplace_back(OpacityEffect{.opacity = *opacity});
-      } else {
-        if (opacity) {
-          add_diagnostic(diagnostics, "effect.invalid_opacity", base + "/value",
-                         "opacity must be between 0 and 1");
-        }
+      const auto* value_member = optional_member(effect, "value");
+      const auto* keyframes_member = optional_member(effect, "keyframes");
+      if ((value_member == nullptr) == (keyframes_member == nullptr)) {
+        add_diagnostic(diagnostics, "effect.opacity_source", base,
+                       "opacity requires exactly one of value or keyframes");
         valid = false;
+      } else if (value_member != nullptr) {
+        const auto opacity = number_value(value_member, base + "/value", diagnostics);
+        if (opacity && *opacity >= 0.0 && *opacity <= 1.0) {
+          effects.emplace_back(OpacityEffect{.opacity = *opacity});
+        } else {
+          if (opacity) {
+            add_diagnostic(diagnostics, "effect.invalid_opacity", base + "/value",
+                           "opacity must be between 0 and 1");
+          }
+          valid = false;
+        }
+      } else {
+        const auto animated =
+            parse_animated_opacity(keyframes_member, base + "/keyframes", diagnostics);
+        if (animated) {
+          effects.emplace_back(*animated);
+        } else {
+          valid = false;
+        }
       }
       continue;
     }

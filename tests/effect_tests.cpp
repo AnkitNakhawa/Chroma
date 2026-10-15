@@ -1,4 +1,5 @@
 #include <cstdlib>
+#include <cmath>
 #include <iostream>
 #include <stdexcept>
 #include <string>
@@ -147,6 +148,38 @@ void inspection_is_stable_and_includes_groups() {
   CHECK(first.find("gaussian_blur") != std::string::npos);
 }
 
+void easing_and_animated_opacity_are_deterministic() {
+  CHECK(chroma::evaluate_easing(chroma::EasingCurve::linear, 0.25) == 0.25);
+  CHECK(chroma::evaluate_easing(chroma::EasingCurve::ease_in, 0.5) == 0.125);
+  CHECK(chroma::evaluate_easing(chroma::EasingCurve::ease_out, 0.5) == 0.875);
+  CHECK(chroma::evaluate_easing(chroma::EasingCurve::ease_in_out, 0.5) == 0.5);
+  CHECK(chroma::evaluate_easing(chroma::EasingCurve::ease_out, -1.0) == 0.0);
+  CHECK(chroma::evaluate_easing(chroma::EasingCurve::ease_in, 2.0) == 1.0);
+
+  const chroma::AnimatedOpacityEffect animation{
+      .keyframes = {{.frame = 3, .value = 0.0, .easing = chroma::EasingCurve::ease_out},
+                    {.frame = 7, .value = 1.0, .easing = chroma::EasingCurve::linear}}};
+  CHECK(chroma::evaluate_animated_opacity(animation, 0) == 0.0);
+  CHECK(chroma::evaluate_animated_opacity(animation, 3) == 0.0);
+  CHECK(chroma::evaluate_animated_opacity(animation, 5) == 0.875);
+  CHECK(chroma::evaluate_animated_opacity(animation, 7) == 1.0);
+  CHECK(chroma::evaluate_animated_opacity(animation, 20) == 1.0);
+  CHECK(!chroma::effect_traits(chroma::Effect{animation}).gpu_fusible);
+}
+
+void invalid_animations_are_rejected() {
+  CHECK_THROWS_AS(chroma::EffectProgram({chroma::AnimatedOpacityEffect{}}),
+                  std::invalid_argument);
+  CHECK_THROWS_AS(
+      chroma::EffectProgram({chroma::AnimatedOpacityEffect{
+          .keyframes = {{.frame = 1, .value = 0.0}, {.frame = 1, .value = 1.0}}}}),
+      std::invalid_argument);
+  CHECK_THROWS_AS(
+      chroma::EffectProgram({chroma::AnimatedOpacityEffect{
+          .keyframes = {{.frame = 0, .value = std::nan("")}}}}),
+      std::invalid_argument);
+}
+
 }  // namespace
 
 int main() {
@@ -156,6 +189,8 @@ int main() {
   barriers_partition_fusible_effects();
   invalid_effects_are_rejected();
   inspection_is_stable_and_includes_groups();
+  easing_and_animated_opacity_are_deterministic();
+  invalid_animations_are_rejected();
 
   if (failures != 0) {
     std::cerr << failures << " test assertion(s) failed\n";
