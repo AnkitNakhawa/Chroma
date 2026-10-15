@@ -77,3 +77,4 @@
 - Started the sequential codec/color residency track. The first gate adds observable conversion counts, byte estimates, and timing before changing pixel representations or introducing CUDA-specific ownership.
 - Completed conversion telemetry: benchmark JSON now reports decode, decode-conversion, composition, linear-to-RGB, RGB-to-YUV, codec/mux, frame counts, and boundary byte estimates. A real render test validates accounting; the initial Release measurement shows conversion work dominates codec/mux time.
 - Added and validated a dependency-neutral `ResidentFrame` ownership contract covering dimensions, pixel/color semantics, host or accelerator domains, plane layouts, and shared lifetime retention without FFmpeg or CUDA public types.
+- Added a pixel-exact 256-entry RGBA8 sRGB-to-linear decode lookup with an explicit reference mode. The 640×360 corpus improved from ~262 to ~313 fps across 16 Release samples while decode conversion time fell 51.8%.

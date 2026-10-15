@@ -141,8 +141,8 @@ Each item is a separate test-and-commit gate.
 
 1. [complete] Instrument decoded/converted/encoded frame counts, estimated transfer bytes, and conversion time separately from decode, composition, and codec time; expose stable benchmark JSON and regression tests.
 2. [complete] Introduce a dependency-neutral resident-frame descriptor and ownership contract without leaking FFmpeg or CUDA types across Chroma's core/public boundary.
-3. [in_progress] Implement and benchmark the first safe CPU conversion reduction, retaining the current path as a correctness oracle and avoiding premature color-management claims.
-4. [pending] Specify and scaffold the Linux/NVIDIA hardware-frame path, then implement it only in an environment with CUDA/NVDEC/NVENC capability and CPU-reference comparison.
+3. [complete] Implement and benchmark the first safe CPU conversion reduction, retaining the current path as a correctness oracle and avoiding premature color-management claims.
+4. [in_progress] Specify and scaffold the Linux/NVIDIA hardware-frame path, then implement it only in an environment with CUDA/NVDEC/NVENC capability and CPU-reference comparison.
 5. [pending] Resume the user-visible MVP sequence: keyframes/easing, masks/blur/transitions, audio, bounded caches, stable C API, packaging, and published comparison corpus.
 
 ### Dependency policy for these slices
@@ -187,3 +187,4 @@ Each item is a separate test-and-commit gate.
 | The fused-render baseline aggregation expected nested `mean` fields that the one-iteration report does not contain | 1 | Inspected the report schema and selected the scalar summary fields directly. |
 | The first per-pixel effect-variant dispatch made the transformed color workload slower | 1 | Specialized the legal kernel, measured individual chains, and narrowed the authoritative profitability gate rather than enabling all planner candidates. |
 | Color-matrix and small placement fusion remained slower after hot-loop specialization | 1 | Kept both on the materializing reference path and documented the negative results; only the measured-positive leading-transform subset is authoritative. |
+| The first decode-LUT baseline run configured the generated composition but had not built its media fixture target | 1 | Built `chroma_benchmark_fixture` in the detached baseline worktree before rerunning only the missing baseline batches. |

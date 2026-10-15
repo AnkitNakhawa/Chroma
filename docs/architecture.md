@@ -163,6 +163,8 @@ The dependency-neutral `ResidentFrame` contract is the ownership seam for future
 
 Single-frame decode accepts an exact rational time. The implementation seeks backward to a keyframe, decodes in presentation order, selects the latest frame presented at or before the request, and reports the actual presentation time. It converts through libswscale to RGBA and then into the CPU backend's linear premultiplied float surface. The current transfer conversion assumes sRGB-like RGB output; metadata-driven video color management remains a required follow-up before claiming broad fidelity.
 
+RGBA8 decode conversion uses a 256-entry sRGB-to-linear table because every possible channel input is known. The table is generated from the same reference transfer function and matches the original output exactly; callers and tests can explicitly select the slower reference mode. This reduces compute time but does not eliminate either the RGBA8 or linear-float materialization.
+
 Audio remains CPU-side in v1 and is scheduled independently from video until muxing.
 
 The implemented CPU video writer renders surfaces in memory, converts linear premultiplied RGB over black to 8-bit RGB, converts to YUV420P with libswscale, encodes H.264, and muxes directly to the requested container. It assigns explicit frame and stream durations so rational frame rates survive muxing. The initial writer is sequential, requires even dimensions, and has no audio path yet.

@@ -1,6 +1,7 @@
 #include "chroma/media/decode.hpp"
 
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cmath>
 #include <cstdint>
@@ -103,7 +104,19 @@ float srgb_to_linear(float value) noexcept {
   return std::pow((value + 0.055F) / 1.055F, 2.4F);
 }
 
-Surface convert_frame(const AVFrame& frame, ScalePointer& scale) {
+const std::array<float, 256>& srgb_to_linear_lookup() {
+  static const auto lookup = [] {
+    std::array<float, 256> values{};
+    for (std::size_t index = 0; index < values.size(); ++index) {
+      values[index] = srgb_to_linear(static_cast<float>(index) / 255.0F);
+    }
+    return values;
+  }();
+  return lookup;
+}
+
+Surface convert_frame(const AVFrame& frame, ScalePointer& scale,
+                      CpuDecodeConversionMode conversion_mode) {
   if (frame.width <= 0 || frame.height <= 0) {
     throw std::runtime_error("decoder produced a frame with invalid dimensions");
   }
@@ -125,20 +138,29 @@ Surface convert_frame(const AVFrame& frame, ScalePointer& scale) {
     throw std::runtime_error("FFmpeg pixel conversion returned an incomplete frame");
   }
 
-  Surface surface(frame.width, frame.height);
-  for (std::int32_t y = 0; y < frame.height; ++y) {
-    for (std::int32_t x = 0; x < frame.width; ++x) {
-      const auto offset = static_cast<std::size_t>(y) * row_bytes +
-                          static_cast<std::size_t>(x) * 4U;
-      const auto alpha = static_cast<float>(rgba[offset + 3]) / 255.0F;
-      surface.pixel(x, y) =
-          Pixel{.red = srgb_to_linear(static_cast<float>(rgba[offset]) / 255.0F) * alpha,
-                .green = srgb_to_linear(static_cast<float>(rgba[offset + 1]) / 255.0F) * alpha,
-                .blue = srgb_to_linear(static_cast<float>(rgba[offset + 2]) / 255.0F) * alpha,
-                .alpha = alpha};
+  const auto& lookup = srgb_to_linear_lookup();
+  const auto build_surface = [&](const auto& linear) {
+    Surface surface(frame.width, frame.height);
+    for (std::int32_t y = 0; y < frame.height; ++y) {
+      for (std::int32_t x = 0; x < frame.width; ++x) {
+        const auto offset = static_cast<std::size_t>(y) * row_bytes +
+                            static_cast<std::size_t>(x) * 4U;
+        const auto alpha = static_cast<float>(rgba[offset + 3]) / 255.0F;
+        surface.pixel(x, y) =
+            Pixel{.red = linear(rgba[offset]) * alpha,
+                  .green = linear(rgba[offset + 1]) * alpha,
+                  .blue = linear(rgba[offset + 2]) * alpha,
+                  .alpha = alpha};
+      }
     }
+    return surface;
+  };
+  if (conversion_mode == CpuDecodeConversionMode::lookup_table) {
+    return build_surface([&lookup](std::uint8_t value) { return lookup[value]; });
   }
-  return surface;
+  return build_surface([](std::uint8_t value) {
+    return srgb_to_linear(static_cast<float>(value) / 255.0F);
+  });
 }
 
 Rational timestamp_time(std::int64_t timestamp, AVRational time_base,
@@ -151,7 +173,8 @@ Rational timestamp_time(std::int64_t timestamp, AVRational time_base,
 
 struct VideoDecoder::Impl {
 #if CHROMA_HAS_FFMPEG
-  explicit Impl(const std::filesystem::path& path) : path_string(path.string()) {
+  explicit Impl(const std::filesystem::path& path, CpuDecodeConversionMode mode)
+      : path_string(path.string()), conversion_mode(mode) {
     AVFormatContext* raw_format = nullptr;
     auto status = avformat_open_input(&raw_format, path_string.c_str(), nullptr, nullptr);
     if (status < 0) {
@@ -316,7 +339,7 @@ struct VideoDecoder::Impl {
     }
     const auto conversion_start = Clock::now();
     telemetry.decode_nanoseconds = elapsed_nanoseconds(decode_start, conversion_start);
-    auto surface = convert_frame(*current, scale);
+    auto surface = convert_frame(*current, scale, conversion_mode);
     const auto conversion_end = Clock::now();
     ++telemetry.frames_converted;
     telemetry.rgba8_bytes_written += static_cast<std::uint64_t>(current->width) *
@@ -349,8 +372,9 @@ struct VideoDecoder::Impl {
   std::optional<std::int64_t> last_target;
   bool demux_eof = false;
   bool flush_sent = false;
+  CpuDecodeConversionMode conversion_mode;
 #else
-  explicit Impl(const std::filesystem::path&) {}
+  explicit Impl(const std::filesystem::path&, CpuDecodeConversionMode) {}
 
   DecodedVideoFrame frame_at(Rational) {
     throw std::runtime_error("Chroma was built without FFmpeg media support");
@@ -358,8 +382,9 @@ struct VideoDecoder::Impl {
 #endif
 };
 
-VideoDecoder::VideoDecoder(const std::filesystem::path& path)
-    : impl_(std::make_unique<Impl>(path)) {}
+VideoDecoder::VideoDecoder(const std::filesystem::path& path,
+                           CpuDecodeConversionMode conversion_mode)
+    : impl_(std::make_unique<Impl>(path, conversion_mode)) {}
 
 VideoDecoder::~VideoDecoder() = default;
 VideoDecoder::VideoDecoder(VideoDecoder&&) noexcept = default;
@@ -369,8 +394,9 @@ DecodedVideoFrame VideoDecoder::frame_at(Rational time) {
   return impl_->frame_at(time);
 }
 
-DecodedVideoFrame decode_video_frame(const std::filesystem::path& path, Rational time) {
-  VideoDecoder decoder(path);
+DecodedVideoFrame decode_video_frame(const std::filesystem::path& path, Rational time,
+                                     CpuDecodeConversionMode conversion_mode) {
+  VideoDecoder decoder(path, conversion_mode);
   return decoder.frame_at(time);
 }
 

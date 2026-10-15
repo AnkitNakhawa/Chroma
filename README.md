@@ -69,6 +69,8 @@ Render a complete composition directly to H.264/MP4 without intermediate image f
 
 The current encoder path is CPU-only, uses 8-bit YUV420P, requires even canvas dimensions, and does not yet include audio.
 
+CPU decode uses a pixel-exact 256-entry sRGB-to-linear lookup for RGBA8 input; `CpuDecodeConversionMode::reference` retains the original transfer-function implementation as a correctness oracle.
+
 Run the reproducible Release CPU benchmark:
 
 ```sh

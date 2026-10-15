@@ -116,6 +116,8 @@ void fixture_can_be_probed_and_decoded(const char* path) {
   CHECK(info.duration == chroma::Rational(2));
 
   const auto start = chroma::decode_video_frame(path, chroma::Rational(0));
+  const auto reference_start = chroma::decode_video_frame(
+      path, chroma::Rational(0), chroma::CpuDecodeConversionMode::reference);
   const auto middle = chroma::decode_video_frame(path, chroma::Rational(1));
   const auto middle_again = chroma::decode_video_frame(path, chroma::Rational(1));
   CHECK(start.surface.width() == 64);
@@ -123,6 +125,7 @@ void fixture_can_be_probed_and_decoded(const char* path) {
   CHECK(start.presentation_time == chroma::Rational(0));
   CHECK(middle.presentation_time == chroma::Rational(1));
   CHECK(start.surface.pixels() != middle.surface.pixels());
+  CHECK(start.surface.pixels() == reference_start.surface.pixels());
   CHECK(middle.surface.pixels() == middle_again.surface.pixels());
   CHECK(start.telemetry.frame_requests == 1);
   CHECK(start.telemetry.frames_decoded > 0);

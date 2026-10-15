@@ -9,6 +9,11 @@
 
 namespace chroma {
 
+enum class CpuDecodeConversionMode {
+  lookup_table,
+  reference,
+};
+
 struct DecodedVideoFrame {
   Surface surface;
   Rational presentation_time;
@@ -17,7 +22,9 @@ struct DecodedVideoFrame {
 
 class VideoDecoder {
  public:
-  explicit VideoDecoder(const std::filesystem::path& path);
+  explicit VideoDecoder(
+      const std::filesystem::path& path,
+      CpuDecodeConversionMode conversion_mode = CpuDecodeConversionMode::lookup_table);
   ~VideoDecoder();
 
   VideoDecoder(VideoDecoder&&) noexcept;
@@ -33,7 +40,9 @@ class VideoDecoder {
 };
 
 [[nodiscard]] DecodedVideoFrame decode_video_frame(const std::filesystem::path& path,
-                                                    Rational time);
+                                                    Rational time,
+                                                    CpuDecodeConversionMode conversion_mode =
+                                                        CpuDecodeConversionMode::lookup_table);
 [[nodiscard]] Surface decode_image(const std::filesystem::path& path);
 
 }  // namespace chroma
