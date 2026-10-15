@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "canvas": {
+    "width": 640,
+    "height": 360,
+    "frame_rate": {"numerator": 30, "denominator": 1},
+    "duration_frames": 120
+  },
+  "assets": [
+    {"id": "fixture", "type": "video", "path": "@CHROMA_BENCHMARK_MEDIA@"}
+  ],
+  "layers": [
+    {
+      "id": "video",
+      "type": "video",
+      "asset": "fixture",
+      "start_frame": 0,
+      "end_frame": 120,
+      "source_start_frame": 0,
+      "opacity": 1.0,
+      "effects": [
+        {"type": "transform_2d", "matrix": [0.96, 0.03, 8.0, -0.02, 0.97, 6.0]},
+        {"type": "crop", "x": 4, "y": 4, "width": 632, "height": 352},
+        {"type": "opacity", "value": 0.84}
+      ]
+    }
+  ]
+}

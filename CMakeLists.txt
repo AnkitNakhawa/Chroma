@@ -121,6 +121,8 @@ if(CHROMA_HAS_FFMPEG AND CHROMA_FFMPEG_EXECUTABLE)
   add_custom_target(chroma_benchmark_fixture DEPENDS ${CHROMA_BENCHMARK_MEDIA})
   configure_file(benchmarks/video-composition.json.in
                  ${CHROMA_BENCHMARK_DIRECTORY}/video-composition.json @ONLY)
+  configure_file(benchmarks/fused-video-composition.json.in
+                 ${CHROMA_BENCHMARK_DIRECTORY}/fused-video-composition.json @ONLY)
 endif()
 
 if(CHROMA_BUILD_TESTS)

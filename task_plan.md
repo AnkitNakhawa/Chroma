@@ -128,6 +128,13 @@ Each item is an independent test-and-commit gate; work proceeds strictly in orde
 3. [complete] Isolate prepared image/text reuse with a controlled cache-disabled comparison so any claimed speedup is attributable rather than inferred.
 4. [complete] Record the methodology, raw reports, result, and limitations; do not describe planner-only fusion diagnostics as runtime acceleration.
 
+### Active authoritative fused-execution checkpoint
+
+1. [complete] Implement an authoritative CPU fused path for the measured-profitable subset of source sampling, one leading coordinate transform, crop, opacity, and compositing without a full-frame transform intermediate. Color and placement-only fusion remain reference-only after negative measurements.
+2. [complete] Preserve the existing reference path for barriers, unsupported/unsafe orderings, and unprofitable programs, with exact pixel-equivalence and fallback tests.
+3. [complete] Benchmark the fused path against the prior renderer and report intermediate reduction plus end-to-end and execution-stage timing, including negative and regression controls.
+4. [complete] Define the first CUDA kernel candidate independently from the remaining codec/color-conversion residency boundary; do not over-scope that conversion work into this CPU slice.
+
 ### Dependency policy for these slices
 
 - Keep FFmpeg as the media decode, encode, mux, and initial audio boundary.
@@ -167,3 +174,6 @@ Each item is an independent test-and-commit gate; work proceeds strictly in orde
 | Text cache test tried to place its temporary font beside a read-only system font | 1 | Moved the disposable font copy into the writable system temporary directory. |
 | The first approximate FFmpeg timing loop used `rm -f` for temporary outputs and was rejected by the command safety layer | 1 | Reused one explicit `/tmp` output path without deleting it during the timing loop. |
 | The four-batch video A/B command exceeded the tool's 30-second output window while its final batch continued | 1 | Confirmed the exact remaining process and waited for that already-running batch to finish before aggregating results. |
+| The fused-render baseline aggregation expected nested `mean` fields that the one-iteration report does not contain | 1 | Inspected the report schema and selected the scalar summary fields directly. |
+| The first per-pixel effect-variant dispatch made the transformed color workload slower | 1 | Specialized the legal kernel, measured individual chains, and narrowed the authoritative profitability gate rather than enabling all planner candidates. |
+| Color-matrix and small placement fusion remained slower after hot-loop specialization | 1 | Kept both on the materializing reference path and documented the negative results; only the measured-positive leading-transform subset is authoritative. |
