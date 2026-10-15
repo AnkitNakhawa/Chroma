@@ -405,7 +405,7 @@ void fused_image_sampling_and_effects_match_the_reference_path(const char* path)
       {.fit = chroma::FitMode::contain, .position_x = 0.2, .position_y = 0.8},
       chroma::EffectProgram({
           chroma::CropEffect{.x = 2, .y = 3, .width = 17, .height = 11},
-          chroma::OpacityEffect{.opacity = 0.63}, test_color_matrix()}));
+          chroma::OpacityEffect{.opacity = 0.63}}));
   const auto plan = chroma::compile_frame(composition, chroma::FrameIndex(0));
   chroma::CpuRenderContext fused_context;
   chroma::CpuRenderContext reference_context;
@@ -415,6 +415,7 @@ void fused_image_sampling_and_effects_match_the_reference_path(const char* path)
   CHECK(fused.pixels() == reference.pixels());
   CHECK(fused_context.last_execution_stats().fused_operations == 1);
   CHECK(fused_context.last_execution_stats().reference_operations == 0);
+  CHECK(fused_context.last_execution_stats().full_frame_intermediates_avoided == 1);
   CHECK(reference_context.last_execution_stats().fused_operations == 0);
   CHECK(reference_context.last_execution_stats().reference_operations == 1);
 }
@@ -426,7 +427,7 @@ void fused_transform_matches_reference_and_unsafe_order_falls_back(const char* p
           chroma::Transform2DEffect{.m00 = 0.95, .m01 = 0.1, .m02 = 0.25,
                                     .m10 = -0.05, .m11 = 0.9, .m12 = 1.5},
           chroma::CropEffect{.x = 1, .y = 2, .width = 28, .height = 26},
-          test_color_matrix(), chroma::OpacityEffect{.opacity = 0.7}}));
+          chroma::OpacityEffect{.opacity = 0.7}}));
   const auto fused_plan = chroma::compile_frame(fused_composition, chroma::FrameIndex(0));
   chroma::CpuRenderContext fused_context;
   chroma::CpuRenderContext reference_context;
@@ -435,6 +436,7 @@ void fused_transform_matches_reference_and_unsafe_order_falls_back(const char* p
       reference_context.execute(fused_plan, chroma::CpuExecutionMode::reference);
   CHECK(fused.pixels() == reference.pixels());
   CHECK(fused_context.last_execution_stats().fused_operations == 1);
+  CHECK(fused_context.last_execution_stats().full_frame_intermediates_avoided == 1);
 
   const auto fallback_composition = image_effect_composition(
       path, 32, 32, {.fit = chroma::FitMode::fill},
@@ -452,6 +454,20 @@ void fused_transform_matches_reference_and_unsafe_order_falls_back(const char* p
   CHECK(fallback.pixels() == fallback_reference.pixels());
   CHECK(fallback_context.last_execution_stats().fused_operations == 0);
   CHECK(fallback_context.last_execution_stats().reference_operations == 1);
+
+  const auto color_composition = image_effect_composition(
+      path, 32, 32, {.fit = chroma::FitMode::fill},
+      chroma::EffectProgram({chroma::CropEffect{.x = 2, .y = 2, .width = 28, .height = 28},
+                             test_color_matrix()}));
+  const auto color_plan = chroma::compile_frame(color_composition, chroma::FrameIndex(0));
+  chroma::CpuRenderContext color_context;
+  chroma::CpuRenderContext color_reference_context;
+  const auto color = color_context.execute(color_plan);
+  const auto color_reference =
+      color_reference_context.execute(color_plan, chroma::CpuExecutionMode::reference);
+  CHECK(color.pixels() == color_reference.pixels());
+  CHECK(color_context.last_execution_stats().fused_operations == 0);
+  CHECK(color_context.last_execution_stats().reference_operations == 1);
 }
 
 chroma::Surface render_test_shape(chroma::ShapeGeometry geometry,

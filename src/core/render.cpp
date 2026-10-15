@@ -156,14 +156,6 @@ void apply_opacity(Surface& surface, const OpacityEffect& opacity) noexcept {
   }
 }
 
-void apply_opacity(Pixel& pixel, const OpacityEffect& opacity) noexcept {
-  const auto factor = static_cast<float>(opacity.opacity);
-  pixel.red *= factor;
-  pixel.green *= factor;
-  pixel.blue *= factor;
-  pixel.alpha *= factor;
-}
-
 void apply_color_matrix(Pixel& pixel, const ColorMatrixEffect& matrix) noexcept {
   const auto alpha = static_cast<double>(pixel.alpha);
   const auto reciprocal_alpha = alpha > 0.0 ? 1.0 / alpha : 0.0;
@@ -377,6 +369,8 @@ Surface apply_effect_program_cpu(Surface source, const EffectProgram& program) {
 bool fused_program_supported(const Surface& source, const Surface& destination,
                              const EffectProgram& program) noexcept {
   std::size_t transform_count = 0;
+  std::size_t opacity_count = 0;
+  bool pointwise_started = false;
   for (std::size_t index = 0; index < program.effects().size(); ++index) {
     const auto& effect = program.effects()[index];
     if (std::holds_alternative<Transform2DEffect>(effect)) {
@@ -387,13 +381,38 @@ bool fused_program_supported(const Surface& source, const Surface& destination,
       }
       continue;
     }
-    if (!std::holds_alternative<CropEffect>(effect) &&
-        !std::holds_alternative<OpacityEffect>(effect) &&
-        !std::holds_alternative<ColorMatrixEffect>(effect)) {
+    if (std::holds_alternative<CropEffect>(effect)) {
+      if (pointwise_started) {
+        return false;
+      }
+      continue;
+    }
+    pointwise_started = true;
+    if (std::holds_alternative<ColorMatrixEffect>(effect)) {
+      return false;
+    }
+    if (!std::holds_alternative<OpacityEffect>(effect)) {
+      return false;
+    }
+    ++opacity_count;
+    if (opacity_count > 1) {
       return false;
     }
   }
   return true;
+}
+
+std::size_t full_frame_intermediate_count(const Surface& source, const Surface& destination,
+                                          const EffectProgram& program) noexcept {
+  const auto placement_surface = source.width() == destination.width() &&
+                                         source.height() == destination.height()
+                                     ? std::size_t{0}
+                                     : std::size_t{1};
+  return placement_surface +
+         static_cast<std::size_t>(std::count_if(
+             program.effects().begin(), program.effects().end(), [](const Effect& effect) {
+               return std::holds_alternative<Transform2DEffect>(effect);
+             }));
 }
 
 bool composite_fused_source(const Surface& source, Surface& destination,
@@ -424,10 +443,36 @@ bool composite_fused_source(const Surface& source, Surface& destination,
     }
   }
 
+
+  const auto first_effect = transform != nullptr ? std::size_t{1} : std::size_t{0};
+  std::int64_t crop_left = 0;
+  std::int64_t crop_top = 0;
+  std::int64_t crop_right = destination.width();
+  std::int64_t crop_bottom = destination.height();
+  float opacity = 1.0F;
+  for (std::size_t index = first_effect; index < program.effects().size(); ++index) {
+    const auto& effect = program.effects()[index];
+    if (const auto* crop = std::get_if<CropEffect>(&effect)) {
+      crop_left = std::max(crop_left, static_cast<std::int64_t>(crop->x));
+      crop_top = std::max(crop_top, static_cast<std::int64_t>(crop->y));
+      crop_right = std::min(crop_right,
+                            static_cast<std::int64_t>(crop->x) + crop->width);
+      crop_bottom = std::min(crop_bottom,
+                             static_cast<std::int64_t>(crop->y) + crop->height);
+    } else if (const auto* opacity_effect = std::get_if<OpacityEffect>(&effect)) {
+      opacity = static_cast<float>(opacity_effect->opacity);
+    }
+  }
+
   const bool native_placement =
       source.width() == destination.width() && source.height() == destination.height();
+  const auto width = static_cast<std::size_t>(destination.width());
+  const auto& source_pixels = source.pixels();
+  auto& destination_pixels = destination.pixels();
   for (std::int32_t y = 0; y < destination.height(); ++y) {
     for (std::int32_t x = 0; x < destination.width(); ++x) {
+      const auto pixel_index = static_cast<std::size_t>(y) * width +
+                               static_cast<std::size_t>(x);
       Pixel pixel{};
       if (transform != nullptr && !singular_transform) {
         const auto destination_x = static_cast<double>(x) + 0.5;
@@ -438,30 +483,22 @@ bool composite_fused_source(const Surface& source, Surface& destination,
         const auto source_y = inverse10 * translated_x + inverse11 * translated_y - 0.5;
         pixel = sample_bilinear(source, source_x, source_y);
       } else if (transform == nullptr) {
-        pixel = native_placement ? source.pixel(x, y)
+        pixel = native_placement ? source_pixels[pixel_index]
                                  : sample_placed_surface(source, placement_mapping, x, y);
       }
 
-      const auto first_effect = transform != nullptr ? std::size_t{1} : std::size_t{0};
-      for (std::size_t index = first_effect; index < program.effects().size(); ++index) {
-        const auto& effect = program.effects()[index];
-        if (const auto* crop = std::get_if<CropEffect>(&effect)) {
-          const auto right = static_cast<std::int64_t>(crop->x) + crop->width;
-          const auto bottom = static_cast<std::int64_t>(crop->y) + crop->height;
-          if (static_cast<std::int64_t>(x) < crop->x ||
-              static_cast<std::int64_t>(x) >= right ||
-              static_cast<std::int64_t>(y) < crop->y ||
-              static_cast<std::int64_t>(y) >= bottom) {
-            pixel = {};
-          }
-        } else if (const auto* opacity = std::get_if<OpacityEffect>(&effect)) {
-          apply_opacity(pixel, *opacity);
-        } else if (const auto* matrix = std::get_if<ColorMatrixEffect>(&effect)) {
-          apply_color_matrix(pixel, *matrix);
-        }
+      if (static_cast<std::int64_t>(x) < crop_left ||
+          static_cast<std::int64_t>(x) >= crop_right ||
+          static_cast<std::int64_t>(y) < crop_top ||
+          static_cast<std::int64_t>(y) >= crop_bottom) {
+        pixel = {};
       }
+      pixel.red *= opacity;
+      pixel.green *= opacity;
+      pixel.blue *= opacity;
+      pixel.alpha *= opacity;
 
-      auto& output = destination.pixel(x, y);
+      auto& output = destination_pixels[pixel_index];
       output = composite(pixel, output, blend_mode);
     }
   }
@@ -669,9 +706,13 @@ Surface CpuRenderContext::execute(const ExecutionPlan& plan, CpuExecutionMode mo
     if (mode == CpuExecutionMode::fused &&
         composite_fused_source(source_surface, result, placement, *effects, blend_mode)) {
       ++last_execution_stats_.fused_operations;
+      last_execution_stats_.full_frame_intermediates_avoided +=
+          full_frame_intermediate_count(source_surface, result, *effects);
       continue;
     }
     ++last_execution_stats_.reference_operations;
+    last_execution_stats_.full_frame_intermediates_materialized +=
+        full_frame_intermediate_count(source_surface, result, *effects);
     source_surface = place_surface_cpu(std::move(source_surface), result.width(),
                                        result.height(), placement);
     source_surface = apply_effect_program_cpu(std::move(source_surface), *effects);

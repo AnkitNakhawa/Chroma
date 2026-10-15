@@ -47,6 +47,8 @@ enum class CpuExecutionMode {
 struct CpuExecutionStats {
   std::size_t fused_operations{0};
   std::size_t reference_operations{0};
+  std::size_t full_frame_intermediates_avoided{0};
+  std::size_t full_frame_intermediates_materialized{0};
 
   friend bool operator==(const CpuExecutionStats&, const CpuExecutionStats&) = default;
 };
