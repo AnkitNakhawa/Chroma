@@ -1,9 +1,11 @@
 #include "chroma/core/execution_plan.hpp"
 
 #include <cmath>
-#include <stdexcept>
-#include <utility>
 #include <limits>
+#include <optional>
+#include <stdexcept>
+#include <type_traits>
+#include <utility>
 
 #include <nlohmann/json.hpp>
 
@@ -39,12 +41,43 @@ bool valid_blend_mode(BlendMode mode) noexcept {
   return blend_mode_name(mode) != "unknown";
 }
 
-EffectProgram video_effects(const VideoLayer& layer) {
-  auto effects = layer.effects.effects();
-  if (layer.opacity != 1.0) {
-    effects.emplace_back(OpacityEffect{.opacity = layer.opacity});
+OptimizedEffectProgram compile_effects(const EffectProgram& program,
+                                       std::optional<double> final_opacity = std::nullopt) {
+  auto effects = program.effects();
+  if (final_opacity && *final_opacity != 1.0) {
+    effects.emplace_back(OpacityEffect{.opacity = *final_opacity});
   }
-  return EffectProgram(std::move(effects));
+  return optimize_effect_program(EffectProgram(std::move(effects)));
+}
+
+bool preserves_transparency(const Effect& effect) noexcept {
+  return std::visit(
+      [](const auto& typed) noexcept {
+        using Type = std::decay_t<decltype(typed)>;
+        if constexpr (std::is_same_v<Type, ColorMatrixEffect>) {
+          return typed.values[4] == 0.0 && typed.values[9] == 0.0 &&
+                 typed.values[14] == 0.0 && typed.values[19] == 0.0;
+        }
+        return std::is_same_v<Type, Transform2DEffect> || std::is_same_v<Type, CropEffect> ||
+               std::is_same_v<Type, OpacityEffect> ||
+               std::is_same_v<Type, GaussianBlurEffect>;
+      },
+      effect);
+}
+
+bool definitely_transparent(const EffectProgram& program, bool source_is_transparent) noexcept {
+  auto transparent = source_is_transparent;
+  for (const auto& effect : program.effects()) {
+    if (const auto* opacity = std::get_if<OpacityEffect>(&effect);
+        opacity != nullptr && opacity->opacity == 0.0) {
+      transparent = true;
+      continue;
+    }
+    if (transparent && !preserves_transparency(effect)) {
+      transparent = false;
+    }
+  }
+  return transparent;
 }
 
 nlohmann::json effects_json(const EffectProgram& program) {
@@ -113,9 +146,19 @@ ExecutionPlan compile_frame(const Composition& composition, FrameIndex frame) {
   for (const auto& layer_variant : composition.layers()) {
     if (const auto* solid = std::get_if<SolidLayer>(&layer_variant)) {
       if (solid->range.contains(frame)) {
+        const auto optimized = compile_effects(solid->effects);
+        if (definitely_transparent(optimized.program(), solid->color.alpha == 0.0)) {
+          continue;
+        }
+        if (solid->color.alpha == 1.0 && optimized.program().effects().empty() &&
+            solid->blend_mode == BlendMode::source_over) {
+          operations.resize(1);
+        }
         operations.emplace_back(CompositeSolidOperation{.source_id = solid->id,
                                                         .color = solid->color,
-                                                        .effects = solid->effects,
+                                                        .effects = optimized.program(),
+                                                        .effect_rewrite_count =
+                                                            optimized.rewrite_count(),
                                                         .blend_mode = solid->blend_mode});
       }
       continue;
@@ -128,11 +171,16 @@ ExecutionPlan compile_frame(const Composition& composition, FrameIndex frame) {
         throw std::logic_error("validated video layer references a missing asset");
       }
       const auto source_frame = checked_source_frame(video, frame);
+      const auto optimized = compile_effects(video.effects, video.opacity);
+      if (definitely_transparent(optimized.program(), false)) {
+        continue;
+      }
       operations.emplace_back(CompositeVideoFrameOperation{
           .source_id = video.id,
           .asset_path = asset->path,
           .source_time = composition.frame_rate().time_at(FrameIndex(source_frame)),
-          .effects = video_effects(video),
+          .effects = optimized.program(),
+          .effect_rewrite_count = optimized.rewrite_count(),
           .blend_mode = video.blend_mode});
     }
   }
@@ -152,6 +200,7 @@ std::string execution_plan_json(const ExecutionPlan& plan) {
                             {"source_id", solid->source_id},
                             {"color", color_json(solid->color)},
                             {"effects", effects_json(solid->effects)},
+                            {"effect_rewrite_count", solid->effect_rewrite_count},
                             {"blend_mode", blend_mode_name(solid->blend_mode)}});
       continue;
     }
@@ -163,6 +212,7 @@ std::string execution_plan_json(const ExecutionPlan& plan) {
          {"source_time", {{"numerator", video.source_time.numerator()},
                           {"denominator", video.source_time.denominator()}}},
          {"effects", effects_json(video.effects)},
+         {"effect_rewrite_count", video.effect_rewrite_count},
          {"blend_mode", blend_mode_name(video.blend_mode)}});
   }
 
@@ -189,15 +239,18 @@ std::string optimized_execution_plan_json(const ExecutionPlan& plan) {
     std::string source_id;
     std::string source_node;
     std::vector<Effect> effects;
+    std::size_t compiled_rewrite_count = 0;
     if (const auto* solid = std::get_if<CompositeSolidOperation>(&operation)) {
       source_id = solid->source_id;
       source_node = "solid_source";
       effects = solid->effects.effects();
+      compiled_rewrite_count = solid->effect_rewrite_count;
     } else {
       const auto& video = std::get<CompositeVideoFrameOperation>(operation);
       source_id = video.source_id;
       source_node = "video_sample";
       effects = video.effects.effects();
+      compiled_rewrite_count = video.effect_rewrite_count;
     }
 
     const auto optimized = optimize_effect_program(EffectProgram(std::move(effects)));
@@ -231,7 +284,7 @@ std::string optimized_execution_plan_json(const ExecutionPlan& plan) {
                                                      : "multi_pass_required"},
                       {"source_id", source_id},
                       {"gpu_fusible", entire_chain_fusible},
-                      {"rewrite_count", optimized.rewrite_count()},
+                      {"rewrite_count", compiled_rewrite_count + optimized.rewrite_count()},
                       {"nodes", std::move(nodes)},
                       {"effect_groups", std::move(effect_groups)}});
   }

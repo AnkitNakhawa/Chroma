@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <string>
@@ -21,6 +22,7 @@ struct CompositeSolidOperation {
   std::string source_id;
   Color color;
   EffectProgram effects;
+  std::size_t effect_rewrite_count{0};
   BlendMode blend_mode{BlendMode::source_over};
 
   friend bool operator==(const CompositeSolidOperation&, const CompositeSolidOperation&) = default;
@@ -31,6 +33,7 @@ struct CompositeVideoFrameOperation {
   std::filesystem::path asset_path;
   Rational source_time;
   EffectProgram effects;
+  std::size_t effect_rewrite_count{0};
   BlendMode blend_mode{BlendMode::source_over};
 
   friend bool operator==(const CompositeVideoFrameOperation&,

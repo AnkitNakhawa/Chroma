@@ -204,13 +204,14 @@ void composition_effects_execute_through_the_frame_plan() {
            .color = chroma::Color{.red = 1.0, .green = 0.0, .blue = 0.0, .alpha = 1.0},
            .effects = chroma::EffectProgram(
                {chroma::CropEffect{.x = 1, .y = 0, .width = 1, .height = 1},
+                chroma::OpacityEffect{.opacity = 0.5},
                 chroma::OpacityEffect{.opacity = 0.5}})}});
   const auto surface = chroma::render_frame_cpu(composition, chroma::FrameIndex(0));
   CHECK(surface.pixel(0, 0) ==
         (chroma::Pixel{.red = 0.0F, .green = 0.0F, .blue = 1.0F, .alpha = 1.0F}));
-  CHECK(near(surface.pixel(1, 0).red, 0.5F));
+  CHECK(near(surface.pixel(1, 0).red, 0.25F));
   CHECK(near(surface.pixel(1, 0).green, 0.0F));
-  CHECK(near(surface.pixel(1, 0).blue, 0.5F));
+  CHECK(near(surface.pixel(1, 0).blue, 0.75F));
   CHECK(near(surface.pixel(1, 0).alpha, 1.0F));
 }
 

@@ -83,7 +83,7 @@ The first useful product target is template-style programmatic video: a backgrou
 ### Ordered implementation slices
 
 1. [complete] Define an immutable effect IR and effect-trait contract covering identity, pointwise, coordinate-transform, neighborhood, temporal, and external/barrier operations. Add stable optimized-plan inspection.
-2. [in_progress] Implement transforms, crop/fit, opacity, color matrices, and blend modes in the CPU reference backend. Transform, crop, opacity, color-matrix, and four blend modes now execute end to end; fit helpers and broader dead-node simplification remain.
+2. [in_progress] Implement transforms, crop/fit, opacity, color matrices, and blend modes in the CPU reference backend. Transform, crop, opacity, color-matrix, and four blend modes now execute end to end. Optimized programs are authoritative for execution, provably transparent layers are removed, and opaque full-canvas solids cull hidden work; fit helpers and broader graph simplification remain.
 3. [pending] Partition the optimized graph into fusible groups and explicit barriers. Add pass-count, intermediate-surface, estimated-byte-traffic, and cache-decision diagnostics; prove the planner with tests before GPU code generation.
 4. [pending] Add image layers plus text and basic shapes. Prefer a narrow text shaping/raster dependency, cache static raster results, and avoid adopting a general compositor dependency at this stage.
 5. [pending] Build the first Linux/NVIDIA CUDA vertical slice: retain decoded surfaces on the GPU where supported and fuse sample/transform/color/opacity/composite for the benchmark-critical path. Compare output against the CPU reference backend.

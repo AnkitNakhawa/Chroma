@@ -29,7 +29,7 @@ Chroma is not intended to be a visual editor, preview platform, hosted rendering
 
 ## Status
 
-Post-baseline compiler spike. Chroma can parse and validate solid/video compositions, resolve assets, probe and decode media at exact rational times, compile typed per-frame plans, render through a persistent CPU execution context, write PPM frames, encode H.264/MP4 directly, and emit per-stage benchmark JSON. Composition layers can now request transform, crop, opacity, and color-matrix effects plus source-over, multiply, screen, and plus blending. The compiler preserves executable effect programs and separately reports conservative algebraic rewrites and fusion groups. CUDA execution, audio, text, image assets, fit/placement helpers, production color management, caching, parallel scheduling, and language bindings are not implemented yet.
+Post-baseline compiler spike. Chroma can parse and validate solid/video compositions, resolve assets, probe and decode media at exact rational times, compile typed per-frame plans, render through a persistent CPU execution context, write PPM frames, encode H.264/MP4 directly, and emit per-stage benchmark JSON. Composition layers can now request transform, crop, opacity, and color-matrix effects plus source-over, multiply, screen, and plus blending. The compiler makes conservative algebraic rewrites authoritative for execution, records those rewrites for inspection, removes provably transparent layers, culls work hidden by an opaque full-canvas solid, and reports fusion groups. CUDA execution, audio, text, image assets, fit/placement helpers, production color management, caching, parallel scheduling, and language bindings are not implemented yet.
 
 ## Build and test
 

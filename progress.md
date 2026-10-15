@@ -50,3 +50,6 @@
 - Normalized legacy video opacity into the same effect chain while removing identity opacity before execution.
 - Added parser/compiler/renderer seam tests, invalid-input diagnostics, fusion-barrier inspection coverage, and a reproducible effects composition.
 - Rendered and visually inspected a 320×180 effects frame, then encoded and probed a 60-frame, 30 fps, exactly two-second H.264 demo.
+- Made optimized effect programs authoritative in the typed execution plan while retaining rewrite counts in both exact and optimized inspection output.
+- Added conservative dead-layer elimination for provably transparent effect chains and backward culling when an unaffected opaque full-canvas solid completely replaces earlier work.
+- Added regression tests for combined opacity execution, rewrite diagnostics, transparent-layer safety, alpha-restoring color matrices, and opaque-cover culling.

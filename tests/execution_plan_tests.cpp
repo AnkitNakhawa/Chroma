@@ -189,6 +189,98 @@ void layer_effects_and_blends_lower_into_the_plan() {
   CHECK(json.find("\"screen\"") != std::string::npos);
 }
 
+void compilation_optimizes_effects_and_records_rewrites() {
+  const chroma::Composition composition(
+      1, 4, 2, chroma::FrameRate(chroma::Rational(30)),
+      chroma::FrameRange(chroma::FrameIndex(0), chroma::FrameIndex(10)),
+      {chroma::SolidLayer{
+          .id = "effected",
+          .range = chroma::FrameRange(chroma::FrameIndex(0), chroma::FrameIndex(10)),
+          .color = chroma::Color{.red = 1.0, .green = 0.0, .blue = 0.0, .alpha = 0.5},
+          .effects = chroma::EffectProgram({chroma::OpacityEffect{.opacity = 0.5},
+                                            chroma::OpacityEffect{.opacity = 0.25}})}});
+  const auto plan = chroma::compile_frame(composition, chroma::FrameIndex(0));
+  const auto* solid = std::get_if<chroma::CompositeSolidOperation>(&plan.operations().back());
+  CHECK(solid != nullptr);
+  if (solid != nullptr) {
+    CHECK(solid->effects.effects().size() == 1);
+    CHECK(solid->effect_rewrite_count == 1);
+    const auto* opacity = std::get_if<chroma::OpacityEffect>(&solid->effects.effects().front());
+    CHECK(opacity != nullptr);
+    if (opacity != nullptr) {
+      CHECK(opacity->opacity == 0.125);
+    }
+  }
+  const auto json = chroma::execution_plan_json(plan);
+  CHECK(json.find("\"effect_rewrite_count\": 1") != std::string::npos);
+  const auto optimized_json = chroma::optimized_execution_plan_json(plan);
+  CHECK(optimized_json.find("\"rewrite_count\": 1") != std::string::npos);
+}
+
+void compilation_eliminates_definitely_transparent_layers() {
+  const chroma::Composition composition(
+      1, 4, 2, chroma::FrameRate(chroma::Rational(30)),
+      chroma::FrameRange(chroma::FrameIndex(0), chroma::FrameIndex(10)),
+      {chroma::SolidLayer{
+          .id = "invisible",
+          .range = chroma::FrameRange(chroma::FrameIndex(0), chroma::FrameIndex(10)),
+          .color = chroma::Color{.red = 1.0, .green = 0.0, .blue = 0.0, .alpha = 1.0},
+          .effects = chroma::EffectProgram({chroma::OpacityEffect{.opacity = 0.0}})}});
+  const auto plan = chroma::compile_frame(composition, chroma::FrameIndex(0));
+  CHECK(plan.operations().size() == 1);
+  CHECK(std::holds_alternative<chroma::ClearOperation>(plan.operations().front()));
+
+  const chroma::Composition video_composition(
+      1, 4, 2, chroma::FrameRate(chroma::Rational(30)),
+      chroma::FrameRange(chroma::FrameIndex(0), chroma::FrameIndex(10)),
+      {chroma::VideoAsset{.id = "clip", .path = "unused.mkv"}},
+      {chroma::VideoLayer{
+          .id = "invisible-video",
+          .range = chroma::FrameRange(chroma::FrameIndex(0), chroma::FrameIndex(10)),
+          .asset_id = "clip",
+          .source_start = chroma::FrameIndex(0),
+          .opacity = 0.0}});
+  const auto video_plan = chroma::compile_frame(video_composition, chroma::FrameIndex(0));
+  CHECK(video_plan.operations().size() == 1);
+}
+
+void compilation_keeps_layers_that_can_restore_alpha() {
+  auto matrix = chroma::identity_color_matrix();
+  matrix.values[19] = 1.0;
+  const chroma::Composition composition(
+      1, 4, 2, chroma::FrameRate(chroma::Rational(30)),
+      chroma::FrameRange(chroma::FrameIndex(0), chroma::FrameIndex(10)),
+      {chroma::SolidLayer{
+          .id = "restored",
+          .range = chroma::FrameRange(chroma::FrameIndex(0), chroma::FrameIndex(10)),
+          .color = chroma::Color{.red = 1.0, .green = 0.0, .blue = 0.0, .alpha = 1.0},
+          .effects = chroma::EffectProgram({chroma::OpacityEffect{.opacity = 0.0}, matrix})}});
+  const auto plan = chroma::compile_frame(composition, chroma::FrameIndex(0));
+  CHECK(plan.operations().size() == 2);
+  CHECK(std::holds_alternative<chroma::CompositeSolidOperation>(plan.operations().back()));
+}
+
+void opaque_full_canvas_solids_cull_hidden_layers() {
+  const chroma::Composition composition(
+      1, 4, 2, chroma::FrameRate(chroma::Rational(30)),
+      chroma::FrameRange(chroma::FrameIndex(0), chroma::FrameIndex(10)),
+      {chroma::SolidLayer{
+           .id = "hidden",
+           .range = chroma::FrameRange(chroma::FrameIndex(0), chroma::FrameIndex(10)),
+           .color = chroma::Color{.red = 1.0, .green = 0.0, .blue = 0.0, .alpha = 0.5}},
+       chroma::SolidLayer{
+           .id = "cover",
+           .range = chroma::FrameRange(chroma::FrameIndex(0), chroma::FrameIndex(10)),
+           .color = chroma::Color{.red = 0.0, .green = 0.0, .blue = 1.0, .alpha = 1.0}}});
+  const auto plan = chroma::compile_frame(composition, chroma::FrameIndex(0));
+  CHECK(plan.operations().size() == 2);
+  const auto* cover = std::get_if<chroma::CompositeSolidOperation>(&plan.operations().back());
+  CHECK(cover != nullptr);
+  if (cover != nullptr) {
+    CHECK(cover->source_id == "cover");
+  }
+}
+
 void optimized_plan_exposes_rewrites_without_changing_execution() {
   const chroma::Composition composition(
       1, 64, 36, chroma::FrameRate(chroma::Rational(30)),
@@ -237,6 +329,10 @@ int main() {
   plans_reject_invalid_operations();
   video_layers_compile_to_exact_source_times();
   layer_effects_and_blends_lower_into_the_plan();
+  compilation_optimizes_effects_and_records_rewrites();
+  compilation_eliminates_definitely_transparent_layers();
+  compilation_keeps_layers_that_can_restore_alpha();
+  opaque_full_canvas_solids_cull_hidden_layers();
   optimized_plan_exposes_rewrites_without_changing_execution();
   optimizer_inspection_marks_barrier_chains_as_multi_pass();
 
