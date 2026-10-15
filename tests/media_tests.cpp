@@ -74,6 +74,7 @@ void resident_frame_contract_validates_layout_and_lifetime() {
                    .matrix = chroma::FrameColorMatrix::identity}},
         {{.address = reinterpret_cast<std::uintptr_t>(storage->data()),
           .byte_size = storage->size(),
+          .row_bytes = 32,
           .row_stride_bytes = 32,
           .row_count = 2}},
         storage);
@@ -95,7 +96,12 @@ void resident_frame_contract_validates_layout_and_lifetime() {
            .memory_domain = chroma::FrameMemoryDomain::host,
            .pixel_format = chroma::FramePixelFormat::yuv420p8,
            .color = {}},
-          {{.address = 1, .byte_size = 4, .row_stride_bytes = 2, .row_count = 2}}, owner),
+          {{.address = 1,
+            .byte_size = 4,
+            .row_bytes = 2,
+            .row_stride_bytes = 2,
+            .row_count = 2}},
+          owner),
       std::invalid_argument);
   CHECK_THROWS_AS(
       chroma::ResidentFrame(
@@ -104,8 +110,26 @@ void resident_frame_contract_validates_layout_and_lifetime() {
            .memory_domain = chroma::FrameMemoryDomain::host,
            .pixel_format = chroma::FramePixelFormat::rgba8_srgb,
            .color = {}},
-          {{.address = 1, .byte_size = 16, .row_stride_bytes = 8, .row_count = 2}},
+          {{.address = 1,
+            .byte_size = 16,
+            .row_bytes = 8,
+            .row_stride_bytes = 8,
+            .row_count = 2}},
           std::shared_ptr<const void>{}),
+      std::invalid_argument);
+  CHECK_THROWS_AS(
+      chroma::ResidentFrame(
+          {.width = 2,
+           .height = 2,
+           .memory_domain = chroma::FrameMemoryDomain::host,
+           .pixel_format = chroma::FramePixelFormat::rgba8_srgb,
+           .color = {}},
+          {{.address = 1,
+            .byte_size = 15,
+            .row_bytes = 8,
+            .row_stride_bytes = 8,
+            .row_count = 2}},
+          owner),
       std::invalid_argument);
 }
 
@@ -161,6 +185,9 @@ void fixture_can_be_probed_and_decoded(const char* path) {
   CHECK(sequential_middle.surface.pixels() == middle.surface.pixels());
   CHECK(rewound.surface.pixels() == start.surface.pixels());
   CHECK_THROWS_AS(decoder.frame_at(chroma::Rational(2)), std::out_of_range);
+  CHECK_THROWS_AS(
+      chroma::VideoDecoder(path, static_cast<chroma::CpuDecodeConversionMode>(999)),
+      std::invalid_argument);
 }
 
 void render_profiles_are_machine_readable() {

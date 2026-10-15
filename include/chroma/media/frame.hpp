@@ -63,6 +63,7 @@ struct ResidentFrameDescriptor {
 struct ResidentFramePlane {
   std::uintptr_t address;
   std::uint64_t byte_size;
+  std::uint64_t row_bytes;
   std::int64_t row_stride_bytes;
   std::uint32_t row_count;
 

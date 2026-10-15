@@ -37,9 +37,20 @@ ResidentFrame::ResidentFrame(ResidentFrameDescriptor descriptor,
     throw std::invalid_argument("resident frame plane count does not match its pixel format");
   }
   for (const auto& plane : planes_) {
-    if (plane.address == 0 || plane.byte_size == 0 || plane.row_stride_bytes == 0 ||
-        plane.row_count == 0) {
+    if (plane.address == 0 || plane.byte_size == 0 || plane.row_bytes == 0 ||
+        plane.row_stride_bytes == 0 || plane.row_count == 0 ||
+        plane.row_stride_bytes == std::numeric_limits<std::int64_t>::min()) {
       throw std::invalid_argument("resident frame planes must describe non-empty storage");
+    }
+    const auto stride = static_cast<std::uint64_t>(
+        plane.row_stride_bytes < 0 ? -plane.row_stride_bytes : plane.row_stride_bytes);
+    if (plane.row_bytes > stride) {
+      throw std::invalid_argument("resident frame active row bytes exceed its stride");
+    }
+    const auto preceding_rows = static_cast<std::uint64_t>(plane.row_count - 1U);
+    if (preceding_rows > (std::numeric_limits<std::uint64_t>::max() - plane.row_bytes) / stride ||
+        preceding_rows * stride + plane.row_bytes > plane.byte_size) {
+      throw std::invalid_argument("resident frame plane storage is smaller than its layout");
     }
     if (plane.byte_size > std::numeric_limits<std::uint64_t>::max() - total_bytes_) {
       throw std::overflow_error("resident frame byte size overflows");

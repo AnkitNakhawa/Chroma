@@ -384,7 +384,13 @@ struct VideoDecoder::Impl {
 
 VideoDecoder::VideoDecoder(const std::filesystem::path& path,
                            CpuDecodeConversionMode conversion_mode)
-    : impl_(std::make_unique<Impl>(path, conversion_mode)) {}
+    : impl_([&] {
+        if (conversion_mode != CpuDecodeConversionMode::lookup_table &&
+            conversion_mode != CpuDecodeConversionMode::reference) {
+          throw std::invalid_argument("CPU decode conversion mode is invalid");
+        }
+        return std::make_unique<Impl>(path, conversion_mode);
+      }()) {}
 
 VideoDecoder::~VideoDecoder() = default;
 VideoDecoder::VideoDecoder(VideoDecoder&&) noexcept = default;
