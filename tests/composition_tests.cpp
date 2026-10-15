@@ -308,6 +308,7 @@ void effects_and_blend_modes_are_normalized() {
           {"type": "transform_2d", "matrix": [1, 0, 2, 0, 1, 1]},
           {"type": "crop", "x": 2, "y": 1, "width": 4, "height": 2},
           {"type": "opacity", "value": 0.5},
+          {"type": "gaussian_blur", "radius": 1.5},
           {"type": "color_matrix", "matrix": [
             1, 0, 0, 0, 0,
             0, 1, 0, 0, 0,
@@ -328,11 +329,12 @@ void effects_and_blend_modes_are_normalized() {
   CHECK(layer != nullptr);
   if (layer != nullptr) {
     CHECK(layer->blend_mode == chroma::BlendMode::multiply);
-    CHECK(layer->effects.effects().size() == 4);
+    CHECK(layer->effects.effects().size() == 5);
     CHECK(std::holds_alternative<chroma::Transform2DEffect>(layer->effects.effects()[0]));
     CHECK(std::holds_alternative<chroma::CropEffect>(layer->effects.effects()[1]));
     CHECK(std::holds_alternative<chroma::OpacityEffect>(layer->effects.effects()[2]));
-    CHECK(std::holds_alternative<chroma::ColorMatrixEffect>(layer->effects.effects()[3]));
+    CHECK(std::holds_alternative<chroma::GaussianBlurEffect>(layer->effects.effects()[3]));
+    CHECK(std::holds_alternative<chroma::ColorMatrixEffect>(layer->effects.effects()[4]));
   }
 }
 
@@ -356,7 +358,8 @@ void invalid_effects_and_blends_are_reported() {
         "blend_mode": "difference",
         "effects": [
           {"type": "transform_2d", "matrix": [1, 0]},
-          {"type": "blur", "radius": 2}
+          {"type": "blur", "radius": 2},
+          {"type": "gaussian_blur", "radius": -1}
         ]
       }
     ]
@@ -367,6 +370,7 @@ void invalid_effects_and_blends_are_reported() {
   CHECK(has_code(result, "layer.unsupported_blend_mode"));
   CHECK(has_code(result, "effect.invalid_array"));
   CHECK(has_code(result, "effect.unsupported_type"));
+  CHECK(has_code(result, "effect.invalid_blur"));
 }
 
 void invalid_json_is_reported() {

@@ -482,8 +482,23 @@ std::optional<EffectProgram> parse_effects(const Json* value, std::string_view p
       }
       continue;
     }
+    if (*type == "gaussian_blur") {
+      const auto radius = number_value(required_member(effect, "radius", base, diagnostics),
+                                       base + "/radius", diagnostics);
+      if (radius && *radius >= 0.0 && *radius <= 4096.0) {
+        effects.emplace_back(GaussianBlurEffect{.radius = *radius});
+      } else {
+        if (radius) {
+          add_diagnostic(diagnostics, "effect.invalid_blur", base + "/radius",
+                         "blur radius must be between 0 and 4096");
+        }
+        valid = false;
+      }
+      continue;
+    }
     add_diagnostic(diagnostics, "effect.unsupported_type", base + "/type",
-                   "supported effects are transform_2d, crop, opacity, and color_matrix");
+                   "supported effects are transform_2d, crop, opacity, color_matrix, and "
+                   "gaussian_blur");
     valid = false;
   }
 

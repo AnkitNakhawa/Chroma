@@ -228,11 +228,26 @@ void source_placement_modes_map_into_the_canvas() {
       std::invalid_argument);
 }
 
+void gaussian_blur_spreads_premultiplied_pixels_symmetrically() {
+  chroma::Surface source(5, 5);
+  source.pixel(2, 2) = chroma::Pixel{.red = 1.0F, .alpha = 1.0F};
+  const auto blurred = chroma::apply_effect_program_cpu(
+      std::move(source),
+      chroma::EffectProgram({chroma::GaussianBlurEffect{.radius = 1.0}}));
+  CHECK(blurred.pixel(2, 2).alpha > blurred.pixel(1, 2).alpha);
+  CHECK(blurred.pixel(1, 2) == blurred.pixel(3, 2));
+  CHECK(blurred.pixel(2, 1) == blurred.pixel(2, 3));
+  CHECK(near(blurred.pixel(1, 2).alpha, blurred.pixel(2, 1).alpha));
+  CHECK(near(blurred.pixel(1, 2).red, blurred.pixel(2, 1).red));
+  CHECK(blurred.pixel(2, 2).red == blurred.pixel(2, 2).alpha);
+  CHECK(blurred.pixel(0, 0).alpha > 0.0F);
+}
+
 void unavailable_cpu_effects_fail_explicitly() {
   CHECK_THROWS_AS(
       chroma::apply_effect_program_cpu(
           chroma::Surface(1, 1),
-          chroma::EffectProgram({chroma::GaussianBlurEffect{.radius = 1.0}})),
+          chroma::EffectProgram({chroma::TemporalSampleEffect{.radius = 1}})),
       std::runtime_error);
 }
 
@@ -554,6 +569,7 @@ int main(int argc, char** argv) {
   color_matrix_operates_on_straight_linear_rgba();
   singular_transforms_produce_transparency();
   source_placement_modes_map_into_the_canvas();
+  gaussian_blur_spreads_premultiplied_pixels_symmetrically();
   unavailable_cpu_effects_fail_explicitly();
   blend_modes_follow_premultiplied_source_over_semantics();
   composition_effects_execute_through_the_frame_plan();

@@ -87,7 +87,7 @@ The first useful product target is template-style programmatic video: a backgrou
 3. [complete] Partition the optimized graph into fusible groups and explicit barriers. Add pass-count, intermediate-surface, estimated-byte-traffic, physical-buffer-reuse, and cache-decision diagnostics; prove the planner with tests before GPU code generation.
 4. [complete] Add image layers plus text and basic shapes. Prefer a narrow text shaping/raster dependency, cache static raster results, and avoid adopting a general compositor dependency at this stage.
 5. [pending] Build the first Linux/NVIDIA CUDA vertical slice: retain decoded surfaces on the GPU where supported and fuse sample/transform/color/opacity/composite for the benchmark-critical path. Compare output against the CPU reference backend.
-6. [in_progress] Add keyframes/easing, simple masks, blur, and transitions. Keyframed opacity and cubic easing are complete; masks, blur execution, and transition examples remain. Use blur as the first neighborhood-effect barrier and validate fusion on both sides of it.
+6. [in_progress] Add keyframes/easing, simple masks, blur, and transitions. Keyframed opacity, cubic easing, and deterministic CPU Gaussian blur are complete; masks and transition examples remain. Blur is the first executable neighborhood-effect barrier, with fusion retained on both sides.
 7. [pending] Add audio input, trim, gain, simple mixing, and muxing through FFmpeg to complete the useful basic-video path.
 8. [pending] Publish benchmark comparisons against equivalent FFmpeg and GPU-configured Remotion workloads. Report end-to-end time, GPU/CPU transfer bytes, peak memory, kernel/pass count, and warm/cold behavior.
 

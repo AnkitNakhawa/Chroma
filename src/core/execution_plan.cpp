@@ -616,6 +616,18 @@ ExecutionPlanAnalysis analyze_execution_plan(const ExecutionPlan& plan) {
 
       for (auto index = group.begin; index < group.end; ++index) {
         const auto& effect = optimized.program().effects()[index];
+        if (std::holds_alternative<GaussianBlurEffect>(effect)) {
+          auto horizontal = next_temporary();
+          append_pass(RenderPassKind::barrier, BarrierReason::neighborhood_effect, source_id,
+                      false, pending_rewrites, {"gaussian_blur_horizontal"}, current_reads,
+                      horizontal);
+          pending_rewrites = 0;
+          auto vertical = next_temporary();
+          append_pass(RenderPassKind::barrier, BarrierReason::neighborhood_effect, source_id,
+                      false, 0, {"gaussian_blur_vertical"}, {std::move(horizontal)}, vertical);
+          current_reads = {std::move(vertical)};
+          continue;
+        }
         auto temporary = next_temporary();
         auto barrier_reads = current_reads;
         if (const auto* temporal = std::get_if<TemporalSampleEffect>(&effect)) {

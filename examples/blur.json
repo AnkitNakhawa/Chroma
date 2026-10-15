@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "canvas": {
+    "width": 320,
+    "height": 180,
+    "frame_rate": {"numerator": 30, "denominator": 1},
+    "duration_frames": 60
+  },
+  "layers": [
+    {
+      "id": "background",
+      "type": "solid",
+      "start_frame": 0,
+      "end_frame": 60,
+      "color": [0.02, 0.03, 0.08, 1.0]
+    },
+    {
+      "id": "glow",
+      "type": "shape",
+      "shape": "ellipse",
+      "start_frame": 0,
+      "end_frame": 60,
+      "bounds": [110, 40, 100, 100],
+      "fill": [0.1, 0.7, 1.0, 1.0],
+      "effects": [
+        {"type": "opacity", "value": 0.9},
+        {"type": "gaussian_blur", "radius": 8.0},
+        {"type": "opacity", "value": 0.75}
+      ]
+    }
+  ]
+}

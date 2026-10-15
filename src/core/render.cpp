@@ -182,6 +182,58 @@ void apply_color_matrix(Surface& surface, const ColorMatrixEffect& matrix) noexc
   }
 }
 
+Surface apply_gaussian_blur(const Surface& source, const GaussianBlurEffect& blur) {
+  if (blur.radius == 0.0) {
+    return source;
+  }
+  const auto kernel_radius = static_cast<std::int32_t>(std::ceil(blur.radius * 3.0));
+  std::vector<double> weights(static_cast<std::size_t>(kernel_radius) * 2U + 1U);
+  double weight_sum = 0.0;
+  for (std::int32_t offset = -kernel_radius; offset <= kernel_radius; ++offset) {
+    const auto distance = static_cast<double>(offset);
+    const auto weight = std::exp(-(distance * distance) / (2.0 * blur.radius * blur.radius));
+    weights[static_cast<std::size_t>(offset + kernel_radius)] = weight;
+    weight_sum += weight;
+  }
+  for (auto& weight : weights) {
+    weight /= weight_sum;
+  }
+
+  Surface horizontal(source.width(), source.height());
+  Surface output(source.width(), source.height());
+  const auto convolve = [&](const Surface& input, Surface& destination, bool horizontal_pass) {
+    for (std::int32_t y = 0; y < input.height(); ++y) {
+      for (std::int32_t x = 0; x < input.width(); ++x) {
+        double red = 0.0;
+        double green = 0.0;
+        double blue = 0.0;
+        double alpha = 0.0;
+        for (std::int32_t offset = -kernel_radius; offset <= kernel_radius; ++offset) {
+          const auto sample_x = horizontal_pass ? x + offset : x;
+          const auto sample_y = horizontal_pass ? y : y + offset;
+          if (sample_x < 0 || sample_y < 0 || sample_x >= input.width() ||
+              sample_y >= input.height()) {
+            continue;
+          }
+          const auto& pixel = input.pixel(sample_x, sample_y);
+          const auto weight = weights[static_cast<std::size_t>(offset + kernel_radius)];
+          red += static_cast<double>(pixel.red) * weight;
+          green += static_cast<double>(pixel.green) * weight;
+          blue += static_cast<double>(pixel.blue) * weight;
+          alpha += static_cast<double>(pixel.alpha) * weight;
+        }
+        destination.pixel(x, y) = Pixel{.red = static_cast<float>(red),
+                                        .green = static_cast<float>(green),
+                                        .blue = static_cast<float>(blue),
+                                        .alpha = static_cast<float>(alpha)};
+      }
+    }
+  };
+  convolve(source, horizontal, true);
+  convolve(horizontal, output, false);
+  return output;
+}
+
 }  // namespace
 
 Surface::Surface(std::int32_t width, std::int32_t height, Pixel fill)
@@ -356,6 +408,8 @@ Surface apply_effect_program_cpu(Surface source, const EffectProgram& program) {
             apply_opacity(source, typed);
           } else if constexpr (std::is_same_v<Type, ColorMatrixEffect>) {
             apply_color_matrix(source, typed);
+          } else if constexpr (std::is_same_v<Type, GaussianBlurEffect>) {
+            source = apply_gaussian_blur(source, typed);
           } else {
             throw std::runtime_error(std::string(effect_name(Effect{typed})) +
                                      " is not implemented by the CPU effect backend");

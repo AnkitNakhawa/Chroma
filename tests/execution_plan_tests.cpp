@@ -507,24 +507,25 @@ void physical_planner_splits_barriers_and_tracks_resources() {
                chroma::ExternalEffect{.implementation = "example", .deterministic = true}})}});
   const auto plan = chroma::compile_frame(composition, chroma::FrameIndex(0));
   const auto analysis = chroma::analyze_execution_plan(plan);
-  CHECK(analysis.passes.size() == 6);
-  CHECK(analysis.logical_temporary_surfaces == 4);
+  CHECK(analysis.passes.size() == 7);
+  CHECK(analysis.logical_temporary_surfaces == 5);
   CHECK(analysis.physical_temporary_buffers == 2);
   CHECK(analysis.physical_temporary_bytes == 256);
   CHECK(analysis.surface_bytes == 128);
-  CHECK(analysis.estimated_bytes_read == 640);
-  CHECK(analysis.estimated_bytes_written == 768);
+  CHECK(analysis.estimated_bytes_read == 768);
+  CHECK(analysis.estimated_bytes_written == 896);
   CHECK(analysis.peak_live_bytes == 384);
-  CHECK(analysis.temporary_allocations.size() == 4);
-  if (analysis.temporary_allocations.size() == 4) {
+  CHECK(analysis.temporary_allocations.size() == 5);
+  if (analysis.temporary_allocations.size() == 5) {
     CHECK(analysis.temporary_allocations[0].physical_buffer == 0);
     CHECK(analysis.temporary_allocations[1].physical_buffer == 1);
     CHECK(analysis.temporary_allocations[2].physical_buffer == 0);
     CHECK(analysis.temporary_allocations[3].physical_buffer == 1);
+    CHECK(analysis.temporary_allocations[4].physical_buffer == 0);
     CHECK(analysis.temporary_allocations[0].first_pass == 1);
     CHECK(analysis.temporary_allocations[0].last_pass == 2);
-    CHECK(analysis.temporary_allocations[3].first_pass == 4);
-    CHECK(analysis.temporary_allocations[3].last_pass == 5);
+    CHECK(analysis.temporary_allocations[4].first_pass == 5);
+    CHECK(analysis.temporary_allocations[4].last_pass == 6);
     for (std::size_t left = 0; left < analysis.temporary_allocations.size(); ++left) {
       for (std::size_t right = left + 1; right < analysis.temporary_allocations.size(); ++right) {
         const auto& first = analysis.temporary_allocations[left];
@@ -543,19 +544,25 @@ void physical_planner_splits_barriers_and_tracks_resources() {
           chroma::CacheReason::expensive_static_subgraph);
     CHECK(analysis.cache_opportunities[0].estimated_storage_bytes == 128);
   }
-  if (analysis.passes.size() == 6) {
+  if (analysis.passes.size() == 7) {
     CHECK(analysis.passes[1].nodes ==
           (std::vector<std::string>{"solid_source", "opacity"}));
     CHECK(analysis.passes[2].kind == chroma::RenderPassKind::barrier);
     CHECK(analysis.passes[2].barrier == chroma::BarrierReason::neighborhood_effect);
-    CHECK(analysis.passes[2].nodes == (std::vector<std::string>{"gaussian_blur"}));
-    CHECK(analysis.passes[3].nodes == (std::vector<std::string>{"crop"}));
-    CHECK(analysis.passes[4].kind == chroma::RenderPassKind::barrier);
-    CHECK(analysis.passes[4].barrier == chroma::BarrierReason::external_effect);
-    CHECK(analysis.passes[4].nodes == (std::vector<std::string>{"external"}));
-    CHECK(analysis.passes[5].nodes == (std::vector<std::string>{"source_over"}));
+    CHECK(analysis.passes[2].nodes ==
+          (std::vector<std::string>{"gaussian_blur_horizontal"}));
+    CHECK(analysis.passes[3].kind == chroma::RenderPassKind::barrier);
+    CHECK(analysis.passes[3].barrier == chroma::BarrierReason::neighborhood_effect);
+    CHECK(analysis.passes[3].nodes ==
+          (std::vector<std::string>{"gaussian_blur_vertical"}));
+    CHECK(analysis.passes[4].nodes == (std::vector<std::string>{"crop"}));
+    CHECK(analysis.passes[5].kind == chroma::RenderPassKind::barrier);
+    CHECK(analysis.passes[5].barrier == chroma::BarrierReason::external_effect);
+    CHECK(analysis.passes[5].nodes == (std::vector<std::string>{"external"}));
+    CHECK(analysis.passes[6].nodes == (std::vector<std::string>{"source_over"}));
     CHECK(analysis.passes[1].write_resource == analysis.passes[2].read_resources.front());
-    CHECK(analysis.passes[4].write_resource == analysis.passes[5].read_resources.front());
+    CHECK(analysis.passes[2].write_resource == analysis.passes[3].read_resources.front());
+    CHECK(analysis.passes[5].write_resource == analysis.passes[6].read_resources.front());
   }
   CHECK(analysis == chroma::analyze_execution_plan(plan));
 
