@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "canvas": {
+    "width": 320,
+    "height": 180,
+    "frame_rate": {"numerator": 30, "denominator": 1},
+    "duration_frames": 60
+  },
+  "assets": [
+    {"id": "body", "type": "font", "path": "fonts/Inter-Regular.ttf"}
+  ],
+  "layers": [
+    {
+      "id": "background",
+      "type": "solid",
+      "start_frame": 0,
+      "end_frame": 60,
+      "color": [0.03, 0.04, 0.09, 1.0]
+    },
+    {
+      "id": "title",
+      "type": "text",
+      "font": "body",
+      "text": "Hello Chroma",
+      "font_size": 40,
+      "position": [32, 92],
+      "color": [0.9, 0.95, 1.0, 1.0],
+      "start_frame": 0,
+      "end_frame": 60,
+      "effects": [{"type": "opacity", "value": 0.9}]
+    }
+  ]
+}

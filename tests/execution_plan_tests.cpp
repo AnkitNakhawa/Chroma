@@ -262,6 +262,41 @@ void shape_layers_compile_as_native_fusible_sources() {
   CHECK(chroma::execution_plan_json(plan).find("composite_shape") != std::string::npos);
 }
 
+void text_layers_compile_as_prepared_fusible_sources() {
+  const chroma::Composition composition(
+      1, 320, 180, chroma::FrameRate(chroma::Rational(30)),
+      chroma::FrameRange(chroma::FrameIndex(0), chroma::FrameIndex(10)),
+      std::vector<chroma::VideoAsset>{}, std::vector<chroma::ImageAsset>{},
+      {chroma::FontAsset{.id = "body", .path = "body.ttf"}},
+      {chroma::TextLayer{
+          .id = "title",
+          .range = chroma::FrameRange(chroma::FrameIndex(0), chroma::FrameIndex(10)),
+          .font_asset_id = "body",
+          .text = "Hello",
+          .font_size = 36.0,
+          .x = 24.0,
+          .y = 72.0,
+          .color = {.red = 1.0, .green = 1.0, .blue = 1.0, .alpha = 1.0},
+          .effects = chroma::EffectProgram({chroma::OpacityEffect{.opacity = 0.5}})}});
+  const auto plan = chroma::compile_frame(composition, chroma::FrameIndex(0));
+  CHECK(plan.operations().size() == 2);
+  CHECK(std::holds_alternative<chroma::CompositeTextOperation>(plan.operations().back()));
+  const auto analysis = chroma::analyze_execution_plan(plan);
+  CHECK(analysis.passes.size() == 2);
+  if (analysis.passes.size() == 2) {
+    CHECK(analysis.passes[1].nodes ==
+          (std::vector<std::string>{"text_raster", "opacity", "source_over"}));
+    CHECK(analysis.passes[1].gpu_fusible);
+  }
+  CHECK(analysis.cache_opportunities.size() == 1);
+  if (analysis.cache_opportunities.size() == 1) {
+    CHECK(analysis.cache_opportunities[0].decision ==
+          chroma::CacheDecision::cache_candidate);
+    CHECK(analysis.cache_opportunities[0].reason == chroma::CacheReason::static_resource);
+  }
+  CHECK(chroma::execution_plan_json(plan).find("composite_text") != std::string::npos);
+}
+
 void layer_effects_and_blends_lower_into_the_plan() {
   const chroma::Composition composition(
       1, 4, 2, chroma::FrameRate(chroma::Rational(30)),
@@ -555,6 +590,7 @@ int main() {
   video_layers_compile_to_exact_source_times();
   image_layers_compile_as_static_fusible_sources();
   shape_layers_compile_as_native_fusible_sources();
+  text_layers_compile_as_prepared_fusible_sources();
   layer_effects_and_blends_lower_into_the_plan();
   compilation_optimizes_effects_and_records_rewrites();
   compilation_eliminates_definitely_transparent_layers();

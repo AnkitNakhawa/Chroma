@@ -309,12 +309,22 @@ ExecutionPlan::ExecutionPlan(std::int32_t width, std::int32_t height, FrameIndex
       }
       continue;
     }
-    const auto& shape = std::get<CompositeShapeOperation>(operation);
-    if (!valid_shape_geometry(shape.geometry) || !valid_color(shape.fill) ||
-        (shape.stroke && (!valid_color(shape.stroke->color) ||
-                          !std::isfinite(shape.stroke->width) || shape.stroke->width <= 0.0)) ||
-        !valid_blend_mode(shape.blend_mode)) {
-      throw std::invalid_argument("execution plan shape operation is invalid");
+    if (const auto* shape = std::get_if<CompositeShapeOperation>(&operation)) {
+      if (!valid_shape_geometry(shape->geometry) || !valid_color(shape->fill) ||
+          (shape->stroke && (!valid_color(shape->stroke->color) ||
+                             !std::isfinite(shape->stroke->width) ||
+                             shape->stroke->width <= 0.0)) ||
+          !valid_blend_mode(shape->blend_mode)) {
+        throw std::invalid_argument("execution plan shape operation is invalid");
+      }
+      continue;
+    }
+    const auto& text = std::get<CompositeTextOperation>(operation);
+    if (text.font_path.empty() || text.text.empty() || text.text.size() > 16'384 ||
+        !std::isfinite(text.font_size) || text.font_size <= 0.0 || text.font_size > 4096.0 ||
+        !std::isfinite(text.x) || !std::isfinite(text.y) || !valid_color(text.color) ||
+        !valid_blend_mode(text.blend_mode)) {
+      throw std::invalid_argument("execution plan text operation is invalid");
     }
   }
 }
@@ -394,22 +404,48 @@ ExecutionPlan compile_frame(const Composition& composition, FrameIndex frame) {
       continue;
     }
 
-    const auto& shape = std::get<ShapeLayer>(layer_variant);
-    if (shape.range.contains(frame)) {
-      const auto optimized = compile_effects(shape.effects);
+    if (const auto* shape = std::get_if<ShapeLayer>(&layer_variant)) {
+      if (!shape->range.contains(frame)) {
+        continue;
+      }
+      const auto optimized = compile_effects(shape->effects);
       const auto transparent_paint =
-          shape.fill.alpha == 0.0 && (!shape.stroke || shape.stroke->color.alpha == 0.0);
+          shape->fill.alpha == 0.0 && (!shape->stroke || shape->stroke->color.alpha == 0.0);
       if (definitely_transparent(optimized.program(), transparent_paint)) {
         continue;
       }
       operations.emplace_back(CompositeShapeOperation{
-          .source_id = shape.id,
-          .geometry = shape.geometry,
-          .fill = shape.fill,
-          .stroke = shape.stroke,
+          .source_id = shape->id,
+          .geometry = shape->geometry,
+          .fill = shape->fill,
+          .stroke = shape->stroke,
           .effects = optimized.program(),
           .effect_rewrite_count = optimized.rewrite_count(),
-          .blend_mode = shape.blend_mode});
+          .blend_mode = shape->blend_mode});
+      continue;
+    }
+
+    const auto& text = std::get<TextLayer>(layer_variant);
+    if (text.range.contains(frame)) {
+      const auto* font = composition.find_font_asset(text.font_asset_id);
+      if (font == nullptr) {
+        throw std::logic_error("validated text layer references a missing font asset");
+      }
+      const auto optimized = compile_effects(text.effects);
+      if (definitely_transparent(optimized.program(), text.color.alpha == 0.0)) {
+        continue;
+      }
+      operations.emplace_back(CompositeTextOperation{
+          .source_id = text.id,
+          .font_path = font->path,
+          .text = text.text,
+          .font_size = text.font_size,
+          .x = text.x,
+          .y = text.y,
+          .color = text.color,
+          .effects = optimized.program(),
+          .effect_rewrite_count = optimized.rewrite_count(),
+          .blend_mode = text.blend_mode});
     }
   }
 
@@ -496,14 +532,23 @@ ExecutionPlanAnalysis analyze_execution_plan(const ExecutionPlan& plan) {
       effects = image->effects.effects();
       pending_rewrites = image->effect_rewrite_count;
       blend_mode = image->blend_mode;
-    } else {
-      const auto& shape = std::get<CompositeShapeOperation>(operation);
-      source_id = shape.source_id;
-      source_node = "shape_" + std::string(shape_kind_name(shape.geometry.kind));
+    } else if (const auto* shape = std::get_if<CompositeShapeOperation>(&operation)) {
+      source_id = shape->source_id;
+      source_node = "shape_" + std::string(shape_kind_name(shape->geometry.kind));
       current_nodes.push_back(source_node);
-      effects = shape.effects.effects();
-      pending_rewrites = shape.effect_rewrite_count;
-      blend_mode = shape.blend_mode;
+      effects = shape->effects.effects();
+      pending_rewrites = shape->effect_rewrite_count;
+      blend_mode = shape->blend_mode;
+    } else {
+      const auto& text = std::get<CompositeTextOperation>(operation);
+      source_id = text.source_id;
+      source_node = "text_raster";
+      static_resource = true;
+      current_nodes.push_back(source_node);
+      current_reads.push_back("source:" + source_id);
+      effects = text.effects.effects();
+      pending_rewrites = text.effect_rewrite_count;
+      blend_mode = text.blend_mode;
     }
 
     const auto optimized = optimize_effect_program(EffectProgram(std::move(effects)));
@@ -602,19 +647,33 @@ std::string execution_plan_json(const ExecutionPlan& plan) {
                             {"blend_mode", blend_mode_name(image->blend_mode)}});
       continue;
     }
-    const auto& shape = std::get<CompositeShapeOperation>(operation);
-    nlohmann::json stroke = nullptr;
-    if (shape.stroke) {
-      stroke = {{"color", color_json(shape.stroke->color)}, {"width", shape.stroke->width}};
+    if (const auto* shape = std::get_if<CompositeShapeOperation>(&operation)) {
+      nlohmann::json stroke = nullptr;
+      if (shape->stroke) {
+        stroke = {{"color", color_json(shape->stroke->color)},
+                  {"width", shape->stroke->width}};
+      }
+      operations.push_back({{"op", "composite_shape"},
+                            {"source_id", shape->source_id},
+                            {"geometry", shape_geometry_json(shape->geometry)},
+                            {"fill", color_json(shape->fill)},
+                            {"stroke", std::move(stroke)},
+                            {"effects", effects_json(shape->effects)},
+                            {"effect_rewrite_count", shape->effect_rewrite_count},
+                            {"blend_mode", blend_mode_name(shape->blend_mode)}});
+      continue;
     }
-    operations.push_back({{"op", "composite_shape"},
-                          {"source_id", shape.source_id},
-                          {"geometry", shape_geometry_json(shape.geometry)},
-                          {"fill", color_json(shape.fill)},
-                          {"stroke", std::move(stroke)},
-                          {"effects", effects_json(shape.effects)},
-                          {"effect_rewrite_count", shape.effect_rewrite_count},
-                          {"blend_mode", blend_mode_name(shape.blend_mode)}});
+    const auto& text = std::get<CompositeTextOperation>(operation);
+    operations.push_back({{"op", "composite_text"},
+                          {"source_id", text.source_id},
+                          {"font_path", text.font_path.string()},
+                          {"text", text.text},
+                          {"font_size", text.font_size},
+                          {"position", {text.x, text.y}},
+                          {"color", color_json(text.color)},
+                          {"effects", effects_json(text.effects)},
+                          {"effect_rewrite_count", text.effect_rewrite_count},
+                          {"blend_mode", blend_mode_name(text.blend_mode)}});
   }
 
   return nlohmann::json{{"frame", plan.frame().value()},

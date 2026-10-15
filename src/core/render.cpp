@@ -12,6 +12,7 @@
 #include <variant>
 
 #include "chroma/media/decode.hpp"
+#include "chroma/text/text.hpp"
 
 namespace chroma {
 namespace {
@@ -403,9 +404,45 @@ Surface render_shape(const ShapeGeometry& geometry, const Color& fill,
   return output;
 }
 
+Surface render_prepared_text(const PreparedText& prepared, double baseline_x, double baseline_y,
+                             const Color& color, std::int32_t width, std::int32_t height) {
+  Surface output(width, height);
+  const auto paint = premultiply(color);
+  const auto origin_x = static_cast<std::int64_t>(std::floor(baseline_x));
+  const auto origin_y = static_cast<std::int64_t>(std::floor(baseline_y));
+  for (const auto& glyph : prepared.glyphs) {
+    for (std::int32_t y = 0; y < glyph.height; ++y) {
+      const auto destination_y = origin_y + glyph.y + y;
+      if (destination_y < 0 || destination_y >= height) {
+        continue;
+      }
+      for (std::int32_t x = 0; x < glyph.width; ++x) {
+        const auto destination_x = origin_x + glyph.x + x;
+        if (destination_x < 0 || destination_x >= width) {
+          continue;
+        }
+        const auto coverage = static_cast<float>(
+                                  glyph.coverage[static_cast<std::size_t>(y) *
+                                                     static_cast<std::size_t>(glyph.width) +
+                                                 static_cast<std::size_t>(x)]) /
+                              255.0F;
+        const auto source = Pixel{.red = paint.red * coverage,
+                                  .green = paint.green * coverage,
+                                  .blue = paint.blue * coverage,
+                                  .alpha = paint.alpha * coverage};
+        auto& destination = output.pixel(static_cast<std::int32_t>(destination_x),
+                                         static_cast<std::int32_t>(destination_y));
+        destination = composite_over(source, destination);
+      }
+    }
+  }
+  return output;
+}
+
 struct CpuRenderContext::Impl {
   std::unordered_map<std::string, std::unique_ptr<VideoDecoder>> decoders;
   std::unordered_map<std::string, Surface> images;
+  std::unordered_map<std::string, PreparedText> text;
 };
 
 CpuRenderContext::CpuRenderContext() : impl_(std::make_unique<Impl>()) {}
@@ -443,6 +480,24 @@ Surface CpuRenderContext::execute(const ExecutionPlan& plan) {
       for (std::size_t index = 0; index < result.size(); ++index) {
         result.pixels()[index] = composite(source_surface.pixels()[index],
                                            result.pixels()[index], shape->blend_mode);
+      }
+      continue;
+    }
+    if (const auto* text = std::get_if<CompositeTextOperation>(&operation)) {
+      const auto key = text->font_path.generic_string() + '\n' +
+                       std::to_string(text->font_size) + '\n' + text->text;
+      auto found = impl_->text.find(key);
+      if (found == impl_->text.end()) {
+        found = impl_->text
+                    .emplace(key, prepare_text(text->font_path, text->text, text->font_size))
+                    .first;
+      }
+      auto source_surface = render_prepared_text(found->second, text->x, text->y, text->color,
+                                                 result.width(), result.height());
+      source_surface = apply_effect_program_cpu(std::move(source_surface), text->effects);
+      for (std::size_t index = 0; index < result.size(); ++index) {
+        result.pixels()[index] = composite(source_surface.pixels()[index],
+                                           result.pixels()[index], text->blend_mode);
       }
       continue;
     }

@@ -29,7 +29,7 @@ Chroma is not intended to be a visual editor, preview platform, hosted rendering
 
 ## Status
 
-Post-baseline compiler spike. Chroma can parse and validate solid, static-image, native-shape, and video compositions; resolve assets; probe and decode media at exact rational times; compile typed per-frame plans; render through a persistent CPU execution context; write PPM frames; encode H.264/MP4 directly; and emit per-stage benchmark JSON. Image and video sources support `none`, `contain`, `cover`, and `fill` placement with normalized alignment. Native rectangles, rounded rectangles, and ellipses support fill and optional inside stroke. Composition layers can request transform, crop, opacity, and color-matrix effects plus source-over, multiply, screen, and plus blending. Static images decode once per render context while Chroma retains ownership of sampling, effects, and compositing. The compiler makes conservative algebraic rewrites authoritative for execution, removes provably dead work, and produces a typed physical-pass analysis with fusion candidates, explicit barriers, logical intermediate resources, reusable physical-buffer assignments, full-frame byte-traffic estimates, peak-live memory, and cache opportunities. CUDA execution, audio, text, production color management, persistent cross-job caching, parallel scheduling, and language bindings are not implemented yet.
+Post-baseline compiler spike. Chroma can parse and validate solid, static-image, native-shape, shaped-text, and video compositions; resolve assets; probe and decode media at exact rational times; compile typed per-frame plans; render through a persistent CPU execution context; write PPM frames; encode H.264/MP4 directly; and emit per-stage benchmark JSON. Image and video sources support `none`, `contain`, `cover`, and `fill` placement with normalized alignment. Native rectangles, rounded rectangles, and ellipses support fill and optional inside stroke. HarfBuzz shapes UTF-8 text and FreeType rasterizes glyph coverage into Chroma-owned prepared resources. Composition layers can request transform, crop, opacity, and color-matrix effects plus source-over, multiply, screen, and plus blending. Static images and prepared text are reused within a render context while Chroma retains ownership of effects and compositing. The compiler makes conservative algebraic rewrites authoritative for execution, removes provably dead work, and produces a typed physical-pass analysis with fusion candidates, explicit barriers, logical intermediate resources, reusable physical-buffer assignments, full-frame byte-traffic estimates, peak-live memory, and cache opportunities. CUDA execution, audio, production color management, persistent cross-job caching, parallel scheduling, and language bindings are not implemented yet.
 
 ## Build and test
 
@@ -44,6 +44,8 @@ FFmpeg media support is enabled automatically when its development libraries are
 ```sh
 cmake -S . -B build -DCHROMA_ENABLE_FFMPEG=OFF
 ```
+
+HarfBuzz/FreeType text support is also discovered through `pkg-config` and can be disabled independently with `-DCHROMA_ENABLE_TEXT=OFF`. Composition parsing and plan inspection remain available, while CPU execution of a text operation fails explicitly in that configuration.
 
 Inspect a media file without exposing FFmpeg types through Chroma's public API:
 
@@ -120,6 +122,18 @@ Basic shapes remain native compiler nodes and accept canvas-space `[x, y, width,
  "start_frame": 0, "end_frame": 60, "bounds": [40, 30, 240, 120],
  "corner_radius": 18, "fill": [0.1, 0.2, 0.8, 1],
  "stroke": {"color": [1, 1, 1, 1], "width": 2}}
+```
+
+Text declares a font asset and uses a canvas-space baseline position:
+
+```json
+{"id": "body", "type": "font", "path": "fonts/Inter-Regular.ttf"}
+```
+
+```json
+{"id": "title", "type": "text", "font": "body", "text": "Hello Chroma",
+ "font_size": 40, "position": [32, 72], "color": [1, 1, 1, 1],
+ "start_frame": 0, "end_frame": 60}
 ```
 
 The layered example exercises frame ranges and alpha compositing. Its red overlay is inactive at frame 0, active over the blue background at frame 30, and inactive again at frame 50:

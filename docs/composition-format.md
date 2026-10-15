@@ -105,9 +105,32 @@ Shape layers use canvas-space `[x, y, width, height]` bounds. Supported shape na
 }
 ```
 
+Text layers reference a `font` asset. `position` is the canvas-space text baseline, `font_size` is measured in pixels, and HarfBuzz determines glyph order and placement before FreeType rasterization:
+
+```json
+{
+  "assets": [
+    {"id": "body", "type": "font", "path": "fonts/Inter-Regular.ttf"}
+  ],
+  "layers": [
+    {
+      "id": "title",
+      "type": "text",
+      "font": "body",
+      "text": "Hello Chroma",
+      "font_size": 40,
+      "position": [32, 72],
+      "color": [1, 1, 1, 1],
+      "start_frame": 0,
+      "end_frame": 60
+    }
+  ]
+}
+```
+
 ## Basic effects and blending
 
-Solid, image, shape, and video layers may declare an ordered `effects` array and an optional `blend_mode`:
+Solid, image, shape, text, and video layers may declare an ordered `effects` array and an optional `blend_mode`:
 
 ```json
 {

@@ -9,6 +9,7 @@ project(
 
 option(CHROMA_BUILD_TESTS "Build Chroma tests" ON)
 option(CHROMA_ENABLE_FFMPEG "Enable FFmpeg media support when development libraries are available" ON)
+option(CHROMA_ENABLE_TEXT "Enable HarfBuzz/FreeType text support when available" ON)
 
 include(FetchContent)
 find_package(nlohmann_json 3.11.3 QUIET)
@@ -22,9 +23,10 @@ if(NOT nlohmann_json_FOUND)
   FetchContent_MakeAvailable(nlohmann_json)
 endif()
 
+find_package(PkgConfig QUIET)
+
 set(CHROMA_HAS_FFMPEG 0)
 if(CHROMA_ENABLE_FFMPEG)
-  find_package(PkgConfig QUIET)
   if(PkgConfig_FOUND)
     pkg_check_modules(CHROMA_FFMPEG QUIET IMPORTED_TARGET
       libavformat
@@ -43,6 +45,19 @@ else()
   message(STATUS "Chroma FFmpeg media support: disabled by configuration")
 endif()
 
+set(CHROMA_HAS_TEXT 0)
+if(CHROMA_ENABLE_TEXT AND PkgConfig_FOUND)
+  pkg_check_modules(CHROMA_TEXT QUIET IMPORTED_TARGET harfbuzz freetype2)
+  if(TARGET PkgConfig::CHROMA_TEXT)
+    set(CHROMA_HAS_TEXT 1)
+    message(STATUS "Chroma HarfBuzz/FreeType text support: enabled")
+  else()
+    message(WARNING "HarfBuzz/FreeType development libraries were not found; text support is disabled")
+  endif()
+else()
+  message(STATUS "Chroma HarfBuzz/FreeType text support: disabled")
+endif()
+
 if(CHROMA_HAS_FFMPEG)
   find_program(CHROMA_FFMPEG_EXECUTABLE ffmpeg)
 endif()
@@ -57,6 +72,7 @@ add_library(chroma_core
   src/media/decode.cpp
   src/media/encode.cpp
   src/media/media.cpp
+  src/text/text.cpp
 )
 add_library(chroma::core ALIAS chroma_core)
 
@@ -67,9 +83,15 @@ target_include_directories(chroma_core
     $<INSTALL_INTERFACE:include>
 )
 target_link_libraries(chroma_core PRIVATE nlohmann_json::nlohmann_json)
-target_compile_definitions(chroma_core PRIVATE CHROMA_HAS_FFMPEG=${CHROMA_HAS_FFMPEG})
+target_compile_definitions(chroma_core PRIVATE
+  CHROMA_HAS_FFMPEG=${CHROMA_HAS_FFMPEG}
+  CHROMA_HAS_TEXT=${CHROMA_HAS_TEXT}
+)
 if(CHROMA_HAS_FFMPEG)
   target_link_libraries(chroma_core PRIVATE PkgConfig::CHROMA_FFMPEG)
+endif()
+if(CHROMA_HAS_TEXT)
+  target_link_libraries(chroma_core PRIVATE PkgConfig::CHROMA_TEXT)
 endif()
 
 if(MSVC)
@@ -125,6 +147,26 @@ if(CHROMA_BUILD_TESTS)
 
   add_executable(chroma_media_tests tests/media_tests.cpp)
   target_link_libraries(chroma_media_tests PRIVATE chroma::core)
+
+  add_executable(chroma_text_tests tests/text_tests.cpp)
+  target_link_libraries(chroma_text_tests PRIVATE chroma::core)
+  if(CHROMA_HAS_TEXT)
+    find_file(CHROMA_TEST_FONT
+      NAMES DejaVuSans.ttf Arial.ttf
+      PATHS
+        /usr/share/fonts/truetype/dejavu
+        /usr/share/fonts/dejavu
+        /System/Library/Fonts/Supplemental
+        /Library/Fonts
+    )
+  else()
+    unset(CHROMA_TEST_FONT CACHE)
+  endif()
+  if(CHROMA_TEST_FONT)
+    add_test(NAME chroma_text_tests COMMAND chroma_text_tests ${CHROMA_TEST_FONT})
+  else()
+    add_test(NAME chroma_text_tests COMMAND chroma_text_tests)
+  endif()
   if(CHROMA_HAS_FFMPEG AND CHROMA_FFMPEG_EXECUTABLE)
     set(CHROMA_MEDIA_FIXTURE ${CMAKE_CURRENT_BINARY_DIR}/fixtures/color-segments.mkv)
     set(CHROMA_IMAGE_FIXTURE ${CMAKE_CURRENT_BINARY_DIR}/fixtures/red.png)
@@ -220,6 +262,11 @@ if(CHROMA_BUILD_TESTS)
   add_test(
     NAME chroma_cli_validates_shapes_example
     COMMAND chroma_cli validate ${CMAKE_CURRENT_SOURCE_DIR}/examples/shapes.json
+  )
+
+  add_test(
+    NAME chroma_cli_validates_text_example
+    COMMAND chroma_cli validate ${CMAKE_CURRENT_SOURCE_DIR}/examples/text.json
   )
 
   add_test(

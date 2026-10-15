@@ -65,9 +65,24 @@ struct CompositeShapeOperation {
   friend bool operator==(const CompositeShapeOperation&, const CompositeShapeOperation&) = default;
 };
 
+struct CompositeTextOperation {
+  std::string source_id;
+  std::filesystem::path font_path;
+  std::string text;
+  double font_size;
+  double x;
+  double y;
+  Color color;
+  EffectProgram effects;
+  std::size_t effect_rewrite_count{0};
+  BlendMode blend_mode{BlendMode::source_over};
+
+  friend bool operator==(const CompositeTextOperation&, const CompositeTextOperation&) = default;
+};
+
 using RenderOperation = std::variant<ClearOperation, CompositeSolidOperation,
                                      CompositeVideoFrameOperation, CompositeImageOperation,
-                                     CompositeShapeOperation>;
+                                     CompositeShapeOperation, CompositeTextOperation>;
 
 class ExecutionPlan {
  public:

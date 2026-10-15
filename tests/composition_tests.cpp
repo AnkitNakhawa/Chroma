@@ -235,6 +235,57 @@ void shape_layers_are_normalized_and_validated() {
   CHECK(has_code(invalid_result, "layer.invalid_stroke"));
 }
 
+void text_layers_are_normalized_and_validated() {
+  constexpr std::string_view source = R"json(
+  {
+    "schema_version": 1,
+    "canvas": {"width": 320, "height": 180,
+      "frame_rate": {"numerator": 30, "denominator": 1}, "duration_frames": 60},
+    "assets": [{"id": "body", "type": "font", "path": "fonts/body.ttf"}],
+    "layers": [
+      {"id": "title", "type": "text", "font": "body", "text": "Hello",
+       "font_size": 36, "position": [24, 72], "color": [1, 0.5, 0.2, 1],
+       "start_frame": 0, "end_frame": 60,
+       "effects": [{"type": "opacity", "value": 0.8}]}
+    ]
+  }
+  )json";
+  const auto result = chroma::parse_composition(source, "/project");
+  CHECK(result.valid());
+  if (!result.composition) {
+    return;
+  }
+  CHECK(result.composition->font_assets().size() == 1);
+  CHECK(result.composition->font_assets().front().path == "/project/fonts/body.ttf");
+  const auto* text = std::get_if<chroma::TextLayer>(&result.composition->layers().front());
+  CHECK(text != nullptr);
+  if (text != nullptr) {
+    CHECK(text->font_asset_id == "body");
+    CHECK(text->text == "Hello");
+    CHECK(text->font_size == 36.0);
+    CHECK(text->x == 24.0);
+    CHECK(text->y == 72.0);
+  }
+
+  constexpr std::string_view invalid = R"json(
+  {
+    "schema_version": 1,
+    "canvas": {"width": 16, "height": 16,
+      "frame_rate": {"numerator": 30, "denominator": 1}, "duration_frames": 1},
+    "layers": [
+      {"id": "bad", "type": "text", "font": "missing", "text": "",
+       "font_size": 0, "position": [0, 0], "color": [1, 1, 1, 1],
+       "start_frame": 0, "end_frame": 1}
+    ]
+  }
+  )json";
+  const auto invalid_result = chroma::parse_composition(invalid);
+  CHECK(!invalid_result.valid());
+  CHECK(has_code(invalid_result, "layer.unknown_asset"));
+  CHECK(has_code(invalid_result, "layer.invalid_text"));
+  CHECK(has_code(invalid_result, "layer.invalid_font_size"));
+}
+
 void effects_and_blend_modes_are_normalized() {
   constexpr std::string_view source = R"json(
   {
@@ -406,6 +457,7 @@ int main() {
   image_assets_and_layers_are_normalized();
   image_layers_reject_video_assets();
   shape_layers_are_normalized_and_validated();
+  text_layers_are_normalized_and_validated();
   effects_and_blend_modes_are_normalized();
   invalid_effects_and_blends_are_reported();
 

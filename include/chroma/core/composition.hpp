@@ -76,6 +76,11 @@ struct ImageAsset {
   std::filesystem::path path;
 };
 
+struct FontAsset {
+  std::string id;
+  std::filesystem::path path;
+};
+
 struct VideoLayer {
   std::string id;
   FrameRange range;
@@ -132,7 +137,21 @@ struct ShapeLayer {
   BlendMode blend_mode{BlendMode::source_over};
 };
 
-using CompositionLayer = std::variant<SolidLayer, VideoLayer, ImageLayer, ShapeLayer>;
+struct TextLayer {
+  std::string id;
+  FrameRange range;
+  std::string font_asset_id;
+  std::string text;
+  double font_size;
+  double x;
+  double y;
+  Color color;
+  EffectProgram effects;
+  BlendMode blend_mode{BlendMode::source_over};
+};
+
+using CompositionLayer =
+    std::variant<SolidLayer, VideoLayer, ImageLayer, ShapeLayer, TextLayer>;
 
 class Composition {
  public:
@@ -144,6 +163,10 @@ class Composition {
   Composition(std::int32_t schema_version, std::int32_t width, std::int32_t height,
               FrameRate frame_rate, FrameRange range, std::vector<VideoAsset> video_assets,
               std::vector<ImageAsset> image_assets, std::vector<CompositionLayer> layers);
+  Composition(std::int32_t schema_version, std::int32_t width, std::int32_t height,
+              FrameRate frame_rate, FrameRange range, std::vector<VideoAsset> video_assets,
+              std::vector<ImageAsset> image_assets, std::vector<FontAsset> font_assets,
+              std::vector<CompositionLayer> layers);
 
   [[nodiscard]] std::int32_t schema_version() const noexcept { return schema_version_; }
   [[nodiscard]] std::int32_t width() const noexcept { return width_; }
@@ -154,9 +177,13 @@ class Composition {
   [[nodiscard]] const std::vector<ImageAsset>& image_assets() const noexcept {
     return image_assets_;
   }
+  [[nodiscard]] const std::vector<FontAsset>& font_assets() const noexcept {
+    return font_assets_;
+  }
   [[nodiscard]] const std::vector<CompositionLayer>& layers() const noexcept { return layers_; }
   [[nodiscard]] const VideoAsset* find_video_asset(std::string_view id) const noexcept;
   [[nodiscard]] const ImageAsset* find_image_asset(std::string_view id) const noexcept;
+  [[nodiscard]] const FontAsset* find_font_asset(std::string_view id) const noexcept;
 
  private:
   std::int32_t schema_version_;
@@ -166,6 +193,7 @@ class Composition {
   FrameRange range_;
   std::vector<VideoAsset> assets_;
   std::vector<ImageAsset> image_assets_;
+  std::vector<FontAsset> font_assets_;
   std::vector<CompositionLayer> layers_;
 };
 

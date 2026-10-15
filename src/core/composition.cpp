@@ -453,6 +453,15 @@ Composition::Composition(std::int32_t schema_version, std::int32_t width, std::i
                          std::vector<VideoAsset> video_assets,
                          std::vector<ImageAsset> image_assets,
                          std::vector<CompositionLayer> layers)
+    : Composition(schema_version, width, height, std::move(frame_rate), range,
+                  std::move(video_assets), std::move(image_assets), {}, std::move(layers)) {}
+
+Composition::Composition(std::int32_t schema_version, std::int32_t width, std::int32_t height,
+                         FrameRate frame_rate, FrameRange range,
+                         std::vector<VideoAsset> video_assets,
+                         std::vector<ImageAsset> image_assets,
+                         std::vector<FontAsset> font_assets,
+                         std::vector<CompositionLayer> layers)
     : schema_version_(schema_version),
       width_(width),
       height_(height),
@@ -460,6 +469,7 @@ Composition::Composition(std::int32_t schema_version, std::int32_t width, std::i
       range_(range),
       assets_(std::move(video_assets)),
       image_assets_(std::move(image_assets)),
+      font_assets_(std::move(font_assets)),
       layers_(std::move(layers)) {
   if (schema_version_ != 1) {
     throw std::invalid_argument("unsupported composition schema version");
@@ -481,6 +491,12 @@ Composition::Composition(std::int32_t schema_version, std::int32_t width, std::i
     }
   }
   for (const auto& asset : image_assets_) {
+    if (asset.id.empty() || asset.id.size() > 128 || !asset_ids.insert(asset.id).second ||
+        asset.path.empty()) {
+      throw std::invalid_argument("composition assets must have unique ids and paths");
+    }
+  }
+  for (const auto& asset : font_assets_) {
     if (asset.id.empty() || asset.id.size() > 128 || !asset_ids.insert(asset.id).second ||
         asset.path.empty()) {
       throw std::invalid_argument("composition assets must have unique ids and paths");
@@ -552,27 +568,38 @@ Composition::Composition(std::int32_t schema_version, std::int32_t width, std::i
       continue;
     }
 
-    const auto& shape = std::get<ShapeLayer>(layer_variant);
-    const auto& geometry = shape.geometry;
-    if (!valid_shape_kind(geometry.kind) || !std::isfinite(geometry.x) ||
-        !std::isfinite(geometry.y) || !std::isfinite(geometry.width) ||
-        !std::isfinite(geometry.height) || geometry.width <= 0.0 || geometry.height <= 0.0 ||
-        !std::isfinite(geometry.corner_radius) || geometry.corner_radius < 0.0) {
-      throw std::invalid_argument("composition shape geometry is invalid");
-    }
     const auto valid_color = [](const Color& color) {
       const double components[] = {color.red, color.green, color.blue, color.alpha};
       return std::all_of(std::begin(components), std::end(components), [](double component) {
         return std::isfinite(component) && component >= 0.0 && component <= 1.0;
       });
     };
-    if (!valid_color(shape.fill) ||
-        (shape.stroke && (!valid_color(shape.stroke->color) ||
-                          !std::isfinite(shape.stroke->width) || shape.stroke->width <= 0.0))) {
-      throw std::invalid_argument("composition shape paint is invalid");
+    if (const auto* shape = std::get_if<ShapeLayer>(&layer_variant)) {
+      const auto& geometry = shape->geometry;
+      if (!valid_shape_kind(geometry.kind) || !std::isfinite(geometry.x) ||
+          !std::isfinite(geometry.y) || !std::isfinite(geometry.width) ||
+          !std::isfinite(geometry.height) || geometry.width <= 0.0 || geometry.height <= 0.0 ||
+          !std::isfinite(geometry.corner_radius) || geometry.corner_radius < 0.0) {
+        throw std::invalid_argument("composition shape geometry is invalid");
+      }
+      if (!valid_color(shape->fill) ||
+          (shape->stroke && (!valid_color(shape->stroke->color) ||
+                             !std::isfinite(shape->stroke->width) ||
+                             shape->stroke->width <= 0.0))) {
+        throw std::invalid_argument("composition shape paint is invalid");
+      }
+      if (!valid_blend_mode(shape->blend_mode)) {
+        throw std::invalid_argument("composition shape layer blend mode is invalid");
+      }
+      continue;
     }
-    if (!valid_blend_mode(shape.blend_mode)) {
-      throw std::invalid_argument("composition shape layer blend mode is invalid");
+
+    const auto& text = std::get<TextLayer>(layer_variant);
+    if (find_font_asset(text.font_asset_id) == nullptr || text.text.empty() ||
+        text.text.size() > 16'384 || !std::isfinite(text.font_size) || text.font_size <= 0.0 ||
+        text.font_size > 4096.0 || !std::isfinite(text.x) || !std::isfinite(text.y) ||
+        !valid_color(text.color) || !valid_blend_mode(text.blend_mode)) {
+      throw std::invalid_argument("composition text layer is invalid");
     }
   }
 }
@@ -588,6 +615,15 @@ const VideoAsset* Composition::find_video_asset(std::string_view id) const noexc
 
 const ImageAsset* Composition::find_image_asset(std::string_view id) const noexcept {
   for (const auto& asset : image_assets_) {
+    if (asset.id == id) {
+      return &asset;
+    }
+  }
+  return nullptr;
+}
+
+const FontAsset* Composition::find_font_asset(std::string_view id) const noexcept {
+  for (const auto& asset : font_assets_) {
     if (asset.id == id) {
       return &asset;
     }
@@ -681,9 +717,11 @@ CompositionParseResult parse_composition(std::string_view source,
 
   std::vector<VideoAsset> assets;
   std::vector<ImageAsset> image_assets;
+  std::vector<FontAsset> font_assets;
   std::unordered_set<std::string> asset_ids;
   std::unordered_set<std::string> video_asset_ids;
   std::unordered_set<std::string> image_asset_ids;
+  std::unordered_set<std::string> font_asset_ids;
   const Json* asset_array = optional_member(document, "assets");
   if (asset_array != nullptr && !asset_array->is_array()) {
     add_diagnostic(result.diagnostics, "schema.type", "/assets", "expected an array");
@@ -708,16 +746,16 @@ CompositionParseResult parse_composition(std::string_view source,
         add_diagnostic(result.diagnostics, "asset.duplicate_id", base + "/id",
                        "asset id must be unique");
       }
-      if (type && *type != "video" && *type != "image") {
+      if (type && *type != "video" && *type != "image" && *type != "font") {
         add_diagnostic(result.diagnostics, "asset.unsupported_type", base + "/type",
-                       "supported asset types are video and image");
+                       "supported asset types are video, image, and font");
       }
       if (path && path->empty()) {
         add_diagnostic(result.diagnostics, "asset.invalid_path", base + "/path",
                        "asset path must not be empty");
       }
       if (id && type && path && !id->empty() && id->size() <= 128 &&
-          (*type == "video" || *type == "image") && !path->empty()) {
+          (*type == "video" || *type == "image" || *type == "font") && !path->empty()) {
         auto resolved_path = std::filesystem::path(*path);
         if (resolved_path.is_relative() && !base_directory.empty()) {
           resolved_path = base_directory / resolved_path;
@@ -726,10 +764,14 @@ CompositionParseResult parse_composition(std::string_view source,
           video_asset_ids.insert(*id);
           assets.push_back(
               VideoAsset{.id = std::move(*id), .path = resolved_path.lexically_normal()});
-        } else {
+        } else if (*type == "image") {
           image_asset_ids.insert(*id);
           image_assets.push_back(
               ImageAsset{.id = std::move(*id), .path = resolved_path.lexically_normal()});
+        } else {
+          font_asset_ids.insert(*id);
+          font_assets.push_back(
+              FontAsset{.id = std::move(*id), .path = resolved_path.lexically_normal()});
         }
       }
     }
@@ -770,9 +812,9 @@ CompositionParseResult parse_composition(std::string_view source,
                        "layer id must be unique");
       }
       if (type && *type != "solid" && *type != "video" && *type != "image" &&
-          *type != "shape") {
+          *type != "shape" && *type != "text") {
         add_diagnostic(result.diagnostics, "layer.unsupported_type", base + "/type",
-                       "supported layer types are solid, video, image, and shape");
+                       "supported layer types are solid, video, image, shape, and text");
       }
       if (start && end && (*start < 0 || *end <= *start)) {
         add_diagnostic(result.diagnostics, "layer.invalid_range", base,
@@ -888,6 +930,46 @@ CompositionParseResult parse_composition(std::string_view source,
                          .effects = std::move(*effects),
                          .blend_mode = *blend_mode});
         }
+      } else if (type && *type == "text") {
+        auto font = string_value(required_member(layer, "font", base, result.diagnostics),
+                                 base + "/font", result.diagnostics);
+        auto text = string_value(required_member(layer, "text", base, result.diagnostics),
+                                 base + "/text", result.diagnostics);
+        const auto font_size = number_value(
+            required_member(layer, "font_size", base, result.diagnostics),
+            base + "/font_size", result.diagnostics);
+        const auto position = parse_number_array<2>(
+            required_member(layer, "position", base, result.diagnostics), base + "/position",
+            result.diagnostics);
+        const auto color = parse_color(required_member(layer, "color", base, result.diagnostics),
+                                       base + "/color", result.diagnostics);
+        if (font && !font_asset_ids.contains(*font)) {
+          add_diagnostic(result.diagnostics, "layer.unknown_asset", base + "/font",
+                         "text layer references an unknown font asset");
+        }
+        if (text && (text->empty() || text->size() > 16'384)) {
+          add_diagnostic(result.diagnostics, "layer.invalid_text", base + "/text",
+                         "text must contain between 1 and 16384 UTF-8 bytes");
+        }
+        if (font_size && (*font_size <= 0.0 || *font_size > 4096.0)) {
+          add_diagnostic(result.diagnostics, "layer.invalid_font_size", base + "/font_size",
+                         "font size must be greater than 0 and at most 4096 pixels");
+        }
+        if (common_valid && font && font_asset_ids.contains(*font) && text && !text->empty() &&
+            text->size() <= 16'384 && font_size && *font_size > 0.0 && *font_size <= 4096.0 &&
+            position && color && effects && blend_mode) {
+          layers.emplace_back(
+              TextLayer{.id = std::move(*id),
+                        .range = FrameRange(FrameIndex(*start), FrameIndex(*end)),
+                        .font_asset_id = std::move(*font),
+                        .text = std::move(*text),
+                        .font_size = *font_size,
+                        .x = (*position)[0],
+                        .y = (*position)[1],
+                        .color = *color,
+                        .effects = std::move(*effects),
+                        .blend_mode = *blend_mode});
+        }
       }
     }
   }
@@ -901,7 +983,7 @@ CompositionParseResult parse_composition(std::string_view source,
       static_cast<std::int32_t>(*schema_version), static_cast<std::int32_t>(*width),
       static_cast<std::int32_t>(*height), FrameRate(Rational(*rate_numerator, *rate_denominator)),
       FrameRange(FrameIndex(0), FrameIndex(*duration)), std::move(assets),
-      std::move(image_assets), std::move(layers));
+      std::move(image_assets), std::move(font_assets), std::move(layers));
   return result;
 }
 

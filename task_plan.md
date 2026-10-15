@@ -118,8 +118,8 @@ Each item is an independent test-and-commit gate; work proceeds strictly in orde
 
 1. [complete] Add FFmpeg-backed static image assets/layers, typed plans, CPU execution, placement/effects/blending, planner diagnostics, fixtures, and documentation.
 2. [complete] Add native rectangle, rounded-rectangle, and ellipse layers with fill/stroke semantics, CPU reference rendering, optimizer integration, tests, and documentation.
-3. [in_progress] Add optional HarfBuzz/FreeType shaped text, Chroma-owned glyph layout/raster resources, CPU reference rendering, graceful dependency-disabled behavior, tests, and documentation.
-4. [pending] Consolidate static prepared-resource identities and cache planning across images and text, add the representative basic-graphics demo/bench fixture, test, review, and document the boundary.
+3. [complete] Add optional HarfBuzz/FreeType shaped text, Chroma-owned glyph layout/raster resources, CPU reference rendering, graceful dependency-disabled behavior, tests, and documentation.
+4. [in_progress] Consolidate static prepared-resource identities and cache planning across images and text, add the representative basic-graphics demo/bench fixture, test, review, and document the boundary.
 
 ### Dependency policy for these slices
 
@@ -157,3 +157,4 @@ Each item is an independent test-and-commit gate; work proceeds strictly in orde
 | Combined image documentation patch assumed a stale composition-format heading | 1 | No files changed; inspected the current document and split the patch against exact headings. |
 | Initial shape execution-plan patch assumed helper ordering that differed from the file | 1 | No files changed; inspected exact helper and variant branches, then split the patch into smaller updates. |
 | Image viewer could not open the generated PPM shape frame | 1 | Kept PPM as the renderer output, converted the verification copy to PNG with FFmpeg for visual inspection. |
+| Text cache test tried to place its temporary font beside a read-only system font | 1 | Moved the disposable font copy into the writable system temporary directory. |

@@ -25,7 +25,11 @@ jobs:
 
       - name: Install FFmpeg development libraries
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y libavformat-dev libavcodec-dev libavutil-dev libswscale-dev
+        run: sudo apt-get update && sudo apt-get install -y libavformat-dev libavcodec-dev libavutil-dev libswscale-dev libharfbuzz-dev libfreetype6-dev fonts-dejavu-core
+
+      - name: Install text development libraries
+        if: runner.os == 'macOS'
+        run: brew install harfbuzz freetype
 
       - name: Configure
         run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -DCHROMA_ENABLE_FFMPEG=${{ matrix.ffmpeg }}
