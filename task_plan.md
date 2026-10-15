@@ -121,6 +121,13 @@ Each item is an independent test-and-commit gate; work proceeds strictly in orde
 3. [complete] Add optional HarfBuzz/FreeType shaped text, Chroma-owned glyph layout/raster resources, CPU reference rendering, graceful dependency-disabled behavior, tests, and documentation.
 4. [complete] Consolidate static prepared-resource identities and cache planning across images and text, add the representative basic-graphics demo/bench fixture, test, review, and document the boundary.
 
+### Active render-speed measurement checkpoint
+
+1. [complete] Establish a clean Release build and rerun the existing 640×360 video corpus to detect performance regressions or gains against the recorded ~261 fps baseline.
+2. [complete] Measure the representative video/image/shape/text workload with enough iterations to separate cold-start noise from steady-state throughput.
+3. [complete] Isolate prepared image/text reuse with a controlled cache-disabled comparison so any claimed speedup is attributable rather than inferred.
+4. [complete] Record the methodology, raw reports, result, and limitations; do not describe planner-only fusion diagnostics as runtime acceleration.
+
 ### Dependency policy for these slices
 
 - Keep FFmpeg as the media decode, encode, mux, and initial audio boundary.
@@ -158,3 +165,5 @@ Each item is an independent test-and-commit gate; work proceeds strictly in orde
 | Initial shape execution-plan patch assumed helper ordering that differed from the file | 1 | No files changed; inspected exact helper and variant branches, then split the patch into smaller updates. |
 | Image viewer could not open the generated PPM shape frame | 1 | Kept PPM as the renderer output, converted the verification copy to PNG with FFmpeg for visual inspection. |
 | Text cache test tried to place its temporary font beside a read-only system font | 1 | Moved the disposable font copy into the writable system temporary directory. |
+| The first approximate FFmpeg timing loop used `rm -f` for temporary outputs and was rejected by the command safety layer | 1 | Reused one explicit `/tmp` output path without deleting it during the timing loop. |
+| The four-batch video A/B command exceeded the tool's 30-second output window while its final batch continued | 1 | Confirmed the exact remaining process and waited for that already-running batch to finish before aggregating results. |
