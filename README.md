@@ -45,6 +45,8 @@ FFmpeg media support is enabled automatically when its development libraries are
 cmake -S . -B build -DCHROMA_ENABLE_FFMPEG=OFF
 ```
 
+Chroma's internal resident-frame contract describes host or accelerator memory, pixel format, color semantics, plane addresses/strides, and a shared lifetime token without exposing FFmpeg or CUDA types. The contract is currently infrastructure for the upcoming zero-copy path; the CPU renderer still materializes its linear-float `Surface`.
+
 HarfBuzz/FreeType text support is also discovered through `pkg-config` and can be disabled independently with `-DCHROMA_ENABLE_TEXT=OFF`. Composition parsing and plan inspection remain available, while CPU execution of a text operation fails explicitly in that configuration.
 
 Inspect a media file without exposing FFmpeg types through Chroma's public API:

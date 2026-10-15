@@ -140,8 +140,8 @@ Each item is an independent test-and-commit gate; work proceeds strictly in orde
 Each item is a separate test-and-commit gate.
 
 1. [complete] Instrument decoded/converted/encoded frame counts, estimated transfer bytes, and conversion time separately from decode, composition, and codec time; expose stable benchmark JSON and regression tests.
-2. [in_progress] Introduce a dependency-neutral resident-frame descriptor and ownership contract without leaking FFmpeg or CUDA types across Chroma's core/public boundary.
-3. [pending] Implement and benchmark the first safe CPU conversion reduction, retaining the current path as a correctness oracle and avoiding premature color-management claims.
+2. [complete] Introduce a dependency-neutral resident-frame descriptor and ownership contract without leaking FFmpeg or CUDA types across Chroma's core/public boundary.
+3. [in_progress] Implement and benchmark the first safe CPU conversion reduction, retaining the current path as a correctness oracle and avoiding premature color-management claims.
 4. [pending] Specify and scaffold the Linux/NVIDIA hardware-frame path, then implement it only in an environment with CUDA/NVDEC/NVENC capability and CPU-reference comparison.
 5. [pending] Resume the user-visible MVP sequence: keyframes/easing, masks/blur/transitions, audio, bounded caches, stable C API, packaging, and published comparison corpus.
 

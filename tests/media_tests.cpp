@@ -1,13 +1,16 @@
 #include <cstdlib>
 #include <filesystem>
 #include <iostream>
+#include <memory>
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include "chroma/media/media.hpp"
 #include "chroma/media/decode.hpp"
 #include "chroma/media/encode.hpp"
+#include "chroma/media/frame.hpp"
 
 namespace {
 
@@ -54,6 +57,55 @@ void metadata_json_is_machine_readable() {
 
 void missing_media_is_rejected() {
   CHECK_THROWS_AS(chroma::probe_media("this-file-does-not-exist.mp4"), std::runtime_error);
+}
+
+void resident_frame_contract_validates_layout_and_lifetime() {
+  auto storage = std::make_shared<std::vector<std::uint8_t>>(64U);
+  std::weak_ptr<std::vector<std::uint8_t>> weak_storage = storage;
+  {
+    const chroma::ResidentFrame frame(
+        {.width = 2,
+         .height = 2,
+         .memory_domain = chroma::FrameMemoryDomain::host,
+         .pixel_format = chroma::FramePixelFormat::linear_rgba_f32,
+         .color = {.range = chroma::FrameColorRange::full,
+                   .transfer = chroma::FrameColorTransfer::linear,
+                   .matrix = chroma::FrameColorMatrix::identity}},
+        {{.address = reinterpret_cast<std::uintptr_t>(storage->data()),
+          .byte_size = storage->size(),
+          .row_stride_bytes = 32,
+          .row_count = 2}},
+        storage);
+    storage.reset();
+    CHECK(!weak_storage.expired());
+    CHECK(frame.total_bytes() == 64);
+    CHECK(frame.planes().size() == 1);
+    CHECK(chroma::frame_memory_domain_name(frame.descriptor().memory_domain) == "host");
+    CHECK(chroma::frame_pixel_format_name(frame.descriptor().pixel_format) ==
+          "linear_rgba_f32");
+  }
+  CHECK(weak_storage.expired());
+
+  const auto owner = std::make_shared<int>(1);
+  CHECK_THROWS_AS(
+      chroma::ResidentFrame(
+          {.width = 2,
+           .height = 2,
+           .memory_domain = chroma::FrameMemoryDomain::host,
+           .pixel_format = chroma::FramePixelFormat::yuv420p8,
+           .color = {}},
+          {{.address = 1, .byte_size = 4, .row_stride_bytes = 2, .row_count = 2}}, owner),
+      std::invalid_argument);
+  CHECK_THROWS_AS(
+      chroma::ResidentFrame(
+          {.width = 2,
+           .height = 2,
+           .memory_domain = chroma::FrameMemoryDomain::host,
+           .pixel_format = chroma::FramePixelFormat::rgba8_srgb,
+           .color = {}},
+          {{.address = 1, .byte_size = 16, .row_stride_bytes = 8, .row_count = 2}},
+          std::shared_ptr<const void>{}),
+      std::invalid_argument);
 }
 
 void fixture_can_be_probed_and_decoded(const char* path) {
@@ -193,6 +245,7 @@ void failed_renders_remove_partial_outputs(const char* fixture_path) {
 int main(int argc, char** argv) {
   metadata_json_is_machine_readable();
   missing_media_is_rejected();
+  resident_frame_contract_validates_layout_and_lifetime();
   render_profiles_are_machine_readable();
   if (chroma::media_available() && argc == 2) {
     fixture_can_be_probed_and_decoded(argv[1]);

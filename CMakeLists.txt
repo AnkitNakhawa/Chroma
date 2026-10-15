@@ -72,6 +72,7 @@ add_library(chroma_core
   src/core/timeline.cpp
   src/media/decode.cpp
   src/media/encode.cpp
+  src/media/frame.cpp
   src/media/media.cpp
   src/text/text.cpp
 )
