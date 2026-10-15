@@ -149,6 +149,10 @@ The first accelerated backend targets 64-bit Linux and NVIDIA GPUs. Only selecte
 - Blur
 - Layer compositing
 
+The implemented `chroma hardware` probe uses FFmpeg's runtime APIs rather than CUDA headers to report five separate gates: FFmpeg availability, CUDA device-type discovery, successful device creation, H.264 decoder hardware-frame support, and `h264_nvenc` availability. It also reports `pipeline_implemented` independently, preventing a machine with partial codec support from being presented as accelerated.
+
+The first real L4 path must retain an FFmpeg hardware frame behind a `ResidentFrame` lifetime token, map its accelerator planes into one Chroma sampling/effect/composite kernel, and pass the resulting hardware frame to NVENC without host readback. Acceptance requires a supported Linux/NVIDIA host, zero CPU-plane transfers in telemetry for the accelerated segment, exact frame/timestamp counts, documented pixel tolerance against the CPU reference, failure-path cleanup, and a measured end-to-end win. This repository does not compile an untested `.cu` path on non-CUDA hosts.
+
 Text shaping and glyph rasterization may initially run on the CPU, with glyph atlases uploaded for GPU composition.
 
 Backend selection is capability-based. Unsupported operations may create a transfer boundary and fall back to the CPU, but the planner must expose those boundaries in profiling output.

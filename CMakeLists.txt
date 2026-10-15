@@ -73,6 +73,7 @@ add_library(chroma_core
   src/media/decode.cpp
   src/media/encode.cpp
   src/media/frame.cpp
+  src/media/hardware.cpp
   src/media/media.cpp
   src/text/text.cpp
 )
@@ -166,6 +167,10 @@ if(CHROMA_BUILD_TESTS)
   else()
     unset(CHROMA_TEST_FONT CACHE)
   endif()
+
+  add_test(NAME chroma_cli_reports_hardware_capabilities COMMAND chroma_cli hardware)
+  set_tests_properties(chroma_cli_reports_hardware_capabilities PROPERTIES
+    PASS_REGULAR_EXPRESSION "\"pipeline_implemented\": false")
   if(CHROMA_TEST_FONT)
     add_test(NAME chroma_text_tests COMMAND chroma_text_tests ${CHROMA_TEST_FONT})
   else()

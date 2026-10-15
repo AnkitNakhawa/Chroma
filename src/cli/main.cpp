@@ -15,6 +15,7 @@
 #include "chroma/core/render.hpp"
 #include "chroma/media/decode.hpp"
 #include "chroma/media/encode.hpp"
+#include "chroma/media/hardware.hpp"
 #include "chroma/media/media.hpp"
 
 namespace {
@@ -39,6 +40,7 @@ std::optional<std::string> read_file(const char* path) {
 void print_usage(std::ostream& output) {
   output << "Usage:\n"
          << "  chroma --version\n"
+         << "  chroma hardware\n"
          << "  chroma validate <composition.json> [--json]\n"
          << "  chroma inspect <composition.json>\n"
          << "  chroma probe <media-file>\n"
@@ -91,6 +93,13 @@ int main(int argc, char** argv) {
 
   if (argc == 2 && std::string_view(argv[1]) == "--version") {
     std::cout << "chroma 0.1.0\n";
+    return 0;
+  }
+
+  if (argc == 2 && std::string_view(argv[1]) == "hardware") {
+    std::cout << chroma::hardware_pipeline_capabilities_json(
+                     chroma::query_hardware_pipeline_capabilities())
+              << '\n';
     return 0;
   }
 

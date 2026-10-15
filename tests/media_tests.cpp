@@ -11,6 +11,7 @@
 #include "chroma/media/decode.hpp"
 #include "chroma/media/encode.hpp"
 #include "chroma/media/frame.hpp"
+#include "chroma/media/hardware.hpp"
 
 namespace {
 
@@ -106,6 +107,21 @@ void resident_frame_contract_validates_layout_and_lifetime() {
           {{.address = 1, .byte_size = 16, .row_stride_bytes = 8, .row_count = 2}},
           std::shared_ptr<const void>{}),
       std::invalid_argument);
+}
+
+void hardware_capabilities_are_machine_readable() {
+  const chroma::HardwarePipelineCapabilities capabilities{
+      .ffmpeg_available = true,
+      .cuda_device_type_available = true,
+      .cuda_device_creatable = true,
+      .h264_hardware_decode_available = true,
+      .h264_nvenc_available = true,
+      .pipeline_implemented = false,
+      .detail = "test"};
+  const auto json = chroma::hardware_pipeline_capabilities_json(capabilities);
+  CHECK(json.find("\"cuda_device_creatable\": true") != std::string::npos);
+  CHECK(json.find("\"pipeline_implemented\": false") != std::string::npos);
+  CHECK(json.find("\"detail\": \"test\"") != std::string::npos);
 }
 
 void fixture_can_be_probed_and_decoded(const char* path) {
@@ -249,6 +265,7 @@ int main(int argc, char** argv) {
   metadata_json_is_machine_readable();
   missing_media_is_rejected();
   resident_frame_contract_validates_layout_and_lifetime();
+  hardware_capabilities_are_machine_readable();
   render_profiles_are_machine_readable();
   if (chroma::media_available() && argc == 2) {
     fixture_can_be_probed_and_decoded(argv[1]);

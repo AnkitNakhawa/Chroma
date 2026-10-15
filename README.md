@@ -55,6 +55,14 @@ Inspect a media file without exposing FFmpeg types through Chroma's public API:
 ./build/chroma probe input.mp4
 ```
 
+Inspect local CUDA/NVDEC/NVENC readiness without assuming that an FFmpeg build implies usable hardware:
+
+```sh
+./build/chroma hardware
+```
+
+The command separately reports CUDA device-type discovery, device creation, H.264 hardware-frame decode support, NVENC availability, and whether Chroma's accelerated pipeline is implemented. The last field remains false until an end-to-end GPU-resident path is validated on supported Linux/NVIDIA hardware.
+
 Decode a source frame using the media stream's nominal frame rate:
 
 ```sh
