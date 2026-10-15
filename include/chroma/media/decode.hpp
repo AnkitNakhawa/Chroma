@@ -32,5 +32,6 @@ class VideoDecoder {
 
 [[nodiscard]] DecodedVideoFrame decode_video_frame(const std::filesystem::path& path,
                                                     Rational time);
+[[nodiscard]] Surface decode_image(const std::filesystem::path& path);
 
 }  // namespace chroma

@@ -42,8 +42,19 @@ struct CompositeVideoFrameOperation {
                          const CompositeVideoFrameOperation&) = default;
 };
 
-using RenderOperation =
-    std::variant<ClearOperation, CompositeSolidOperation, CompositeVideoFrameOperation>;
+struct CompositeImageOperation {
+  std::string source_id;
+  std::filesystem::path asset_path;
+  SourcePlacement placement;
+  EffectProgram effects;
+  std::size_t effect_rewrite_count{0};
+  BlendMode blend_mode{BlendMode::source_over};
+
+  friend bool operator==(const CompositeImageOperation&, const CompositeImageOperation&) = default;
+};
+
+using RenderOperation = std::variant<ClearOperation, CompositeSolidOperation,
+                                     CompositeVideoFrameOperation, CompositeImageOperation>;
 
 class ExecutionPlan {
  public:
@@ -92,6 +103,7 @@ enum class CacheReason {
   nondeterministic_effect,
   cheap_static_subgraph,
   expensive_static_subgraph,
+  static_resource,
 };
 
 [[nodiscard]] std::string_view render_pass_kind_name(RenderPassKind kind) noexcept;

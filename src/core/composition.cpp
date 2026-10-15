@@ -389,12 +389,21 @@ Composition::Composition(std::int32_t schema_version, std::int32_t width, std::i
 Composition::Composition(std::int32_t schema_version, std::int32_t width, std::int32_t height,
                          FrameRate frame_rate, FrameRange range,
                          std::vector<VideoAsset> assets, std::vector<CompositionLayer> layers)
+    : Composition(schema_version, width, height, std::move(frame_rate), range,
+                  std::move(assets), {}, std::move(layers)) {}
+
+Composition::Composition(std::int32_t schema_version, std::int32_t width, std::int32_t height,
+                         FrameRate frame_rate, FrameRange range,
+                         std::vector<VideoAsset> video_assets,
+                         std::vector<ImageAsset> image_assets,
+                         std::vector<CompositionLayer> layers)
     : schema_version_(schema_version),
       width_(width),
       height_(height),
       frame_rate_(std::move(frame_rate)),
       range_(range),
-      assets_(std::move(assets)),
+      assets_(std::move(video_assets)),
+      image_assets_(std::move(image_assets)),
       layers_(std::move(layers)) {
   if (schema_version_ != 1) {
     throw std::invalid_argument("unsupported composition schema version");
@@ -413,6 +422,12 @@ Composition::Composition(std::int32_t schema_version, std::int32_t width, std::i
     if (asset.id.empty() || asset.id.size() > 128 || !asset_ids.insert(asset.id).second ||
         asset.path.empty()) {
       throw std::invalid_argument("composition video assets must have unique ids and paths");
+    }
+  }
+  for (const auto& asset : image_assets_) {
+    if (asset.id.empty() || asset.id.size() > 128 || !asset_ids.insert(asset.id).second ||
+        asset.path.empty()) {
+      throw std::invalid_argument("composition assets must have unique ids and paths");
     }
   }
 
@@ -446,28 +461,52 @@ Composition::Composition(std::int32_t schema_version, std::int32_t width, std::i
       continue;
     }
 
-    const auto& video = std::get<VideoLayer>(layer_variant);
-    if (!asset_ids.contains(video.asset_id)) {
-      throw std::invalid_argument("composition video layer references an unknown asset");
+    const auto validate_placement = [](const SourcePlacement& placement) {
+      return valid_fit_mode(placement.fit) && std::isfinite(placement.position_x) &&
+             std::isfinite(placement.position_y) && placement.position_x >= 0.0 &&
+             placement.position_x <= 1.0 && placement.position_y >= 0.0 &&
+             placement.position_y <= 1.0;
+    };
+    if (const auto* video = std::get_if<VideoLayer>(&layer_variant)) {
+      if (find_video_asset(video->asset_id) == nullptr) {
+        throw std::invalid_argument("composition video layer references an unknown asset");
+      }
+      if (!std::isfinite(video->opacity) || video->opacity < 0.0 || video->opacity > 1.0) {
+        throw std::invalid_argument("composition video opacity must be between 0 and 1");
+      }
+      if (!validate_placement(video->placement)) {
+        throw std::invalid_argument("composition video placement is invalid");
+      }
+      if (!valid_blend_mode(video->blend_mode)) {
+        throw std::invalid_argument("composition video layer blend mode is invalid");
+      }
+      continue;
     }
-    if (!std::isfinite(video.opacity) || video.opacity < 0.0 || video.opacity > 1.0) {
-      throw std::invalid_argument("composition video opacity must be between 0 and 1");
+
+    const auto& image = std::get<ImageLayer>(layer_variant);
+    if (find_image_asset(image.asset_id) == nullptr) {
+      throw std::invalid_argument("composition image layer references an unknown asset");
     }
-    if (!valid_fit_mode(video.placement.fit) ||
-        !std::isfinite(video.placement.position_x) ||
-        !std::isfinite(video.placement.position_y) || video.placement.position_x < 0.0 ||
-        video.placement.position_x > 1.0 || video.placement.position_y < 0.0 ||
-        video.placement.position_y > 1.0) {
-      throw std::invalid_argument("composition video placement is invalid");
+    if (!validate_placement(image.placement)) {
+      throw std::invalid_argument("composition image placement is invalid");
     }
-    if (!valid_blend_mode(video.blend_mode)) {
-      throw std::invalid_argument("composition video layer blend mode is invalid");
+    if (!valid_blend_mode(image.blend_mode)) {
+      throw std::invalid_argument("composition image layer blend mode is invalid");
     }
   }
 }
 
 const VideoAsset* Composition::find_video_asset(std::string_view id) const noexcept {
   for (const auto& asset : assets_) {
+    if (asset.id == id) {
+      return &asset;
+    }
+  }
+  return nullptr;
+}
+
+const ImageAsset* Composition::find_image_asset(std::string_view id) const noexcept {
+  for (const auto& asset : image_assets_) {
     if (asset.id == id) {
       return &asset;
     }
@@ -560,7 +599,10 @@ CompositionParseResult parse_composition(std::string_view source,
   }
 
   std::vector<VideoAsset> assets;
+  std::vector<ImageAsset> image_assets;
   std::unordered_set<std::string> asset_ids;
+  std::unordered_set<std::string> video_asset_ids;
+  std::unordered_set<std::string> image_asset_ids;
   const Json* asset_array = optional_member(document, "assets");
   if (asset_array != nullptr && !asset_array->is_array()) {
     add_diagnostic(result.diagnostics, "schema.type", "/assets", "expected an array");
@@ -585,22 +627,29 @@ CompositionParseResult parse_composition(std::string_view source,
         add_diagnostic(result.diagnostics, "asset.duplicate_id", base + "/id",
                        "asset id must be unique");
       }
-      if (type && *type != "video") {
+      if (type && *type != "video" && *type != "image") {
         add_diagnostic(result.diagnostics, "asset.unsupported_type", base + "/type",
-                       "only video assets are currently supported");
+                       "supported asset types are video and image");
       }
       if (path && path->empty()) {
         add_diagnostic(result.diagnostics, "asset.invalid_path", base + "/path",
                        "asset path must not be empty");
       }
-      if (id && type && path && !id->empty() && id->size() <= 128 && *type == "video" &&
-          !path->empty()) {
+      if (id && type && path && !id->empty() && id->size() <= 128 &&
+          (*type == "video" || *type == "image") && !path->empty()) {
         auto resolved_path = std::filesystem::path(*path);
         if (resolved_path.is_relative() && !base_directory.empty()) {
           resolved_path = base_directory / resolved_path;
         }
-        assets.push_back(VideoAsset{.id = std::move(*id),
-                                    .path = resolved_path.lexically_normal()});
+        if (*type == "video") {
+          video_asset_ids.insert(*id);
+          assets.push_back(
+              VideoAsset{.id = std::move(*id), .path = resolved_path.lexically_normal()});
+        } else {
+          image_asset_ids.insert(*id);
+          image_assets.push_back(
+              ImageAsset{.id = std::move(*id), .path = resolved_path.lexically_normal()});
+        }
       }
     }
   }
@@ -639,9 +688,9 @@ CompositionParseResult parse_composition(std::string_view source,
         add_diagnostic(result.diagnostics, "layer.duplicate_id", base + "/id",
                        "layer id must be unique");
       }
-      if (type && *type != "solid" && *type != "video") {
+      if (type && *type != "solid" && *type != "video" && *type != "image") {
         add_diagnostic(result.diagnostics, "layer.unsupported_type", base + "/type",
-                       "supported layer types are solid and video");
+                       "supported layer types are solid, video, and image");
       }
       if (start && end && (*start < 0 || *end <= *start)) {
         add_diagnostic(result.diagnostics, "layer.invalid_range", base,
@@ -675,7 +724,7 @@ CompositionParseResult parse_composition(std::string_view source,
                                     result.diagnostics)
                            .value_or(1.0);
         auto placement = parse_placement(layer, base, result.diagnostics);
-        if (asset && !asset_ids.contains(*asset)) {
+        if (asset && !video_asset_ids.contains(*asset)) {
           add_diagnostic(result.diagnostics, "layer.unknown_asset", base + "/asset",
                          "video layer references an unknown asset");
         }
@@ -688,7 +737,7 @@ CompositionParseResult parse_composition(std::string_view source,
           add_diagnostic(result.diagnostics, "layer.invalid_opacity", base + "/opacity",
                          "opacity must be between 0 and 1");
         }
-        if (common_valid && asset && asset_ids.contains(*asset) && source_start >= 0 &&
+        if (common_valid && asset && video_asset_ids.contains(*asset) && source_start >= 0 &&
             opacity >= 0.0 && opacity <= 1.0 && placement && effects && blend_mode) {
           layers.emplace_back(
               VideoLayer{.id = std::move(*id),
@@ -696,6 +745,24 @@ CompositionParseResult parse_composition(std::string_view source,
                          .asset_id = std::move(*asset),
                          .source_start = FrameIndex(source_start),
                          .opacity = opacity,
+                         .placement = *placement,
+                         .effects = std::move(*effects),
+                         .blend_mode = *blend_mode});
+        }
+      } else if (type && *type == "image") {
+        auto asset = string_value(required_member(layer, "asset", base, result.diagnostics),
+                                  base + "/asset", result.diagnostics);
+        auto placement = parse_placement(layer, base, result.diagnostics);
+        if (asset && !image_asset_ids.contains(*asset)) {
+          add_diagnostic(result.diagnostics, "layer.unknown_asset", base + "/asset",
+                         "image layer references an unknown asset");
+        }
+        if (common_valid && asset && image_asset_ids.contains(*asset) && placement && effects &&
+            blend_mode) {
+          layers.emplace_back(
+              ImageLayer{.id = std::move(*id),
+                         .range = FrameRange(FrameIndex(*start), FrameIndex(*end)),
+                         .asset_id = std::move(*asset),
                          .placement = *placement,
                          .effects = std::move(*effects),
                          .blend_mode = *blend_mode});
@@ -712,7 +779,8 @@ CompositionParseResult parse_composition(std::string_view source,
   result.composition.emplace(
       static_cast<std::int32_t>(*schema_version), static_cast<std::int32_t>(*width),
       static_cast<std::int32_t>(*height), FrameRate(Rational(*rate_numerator, *rate_denominator)),
-      FrameRange(FrameIndex(0), FrameIndex(*duration)), std::move(assets), std::move(layers));
+      FrameRange(FrameIndex(0), FrameIndex(*duration)), std::move(assets),
+      std::move(image_assets), std::move(layers));
   return result;
 }
 

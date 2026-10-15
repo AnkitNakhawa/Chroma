@@ -112,6 +112,15 @@ The first useful product target is template-style programmatic video: a backgrou
 3. [complete] Classify deterministic static solid subgraphs as cache candidates, cheap constants as recompute, and frame-varying or temporal work as non-cacheable.
 4. [complete] Add allocator overlap, ping-pong reuse, cache-safety, deterministic-output, and documentation coverage.
 
+### Active basic-graphics checkpoint
+
+Each item is an independent test-and-commit gate; work proceeds strictly in order.
+
+1. [complete] Add FFmpeg-backed static image assets/layers, typed plans, CPU execution, placement/effects/blending, planner diagnostics, fixtures, and documentation.
+2. [in_progress] Add native rectangle, rounded-rectangle, and ellipse layers with fill/stroke semantics, CPU reference rendering, optimizer integration, tests, and documentation.
+3. [pending] Add optional HarfBuzz/FreeType shaped text, Chroma-owned glyph layout/raster resources, CPU reference rendering, graceful dependency-disabled behavior, tests, and documentation.
+4. [pending] Consolidate static prepared-resource identities and cache planning across images and text, add the representative basic-graphics demo/bench fixture, test, review, and document the boundary.
+
 ### Dependency policy for these slices
 
 - Keep FFmpeg as the media decode, encode, mux, and initial audio boundary.
@@ -144,3 +153,5 @@ The first useful product target is template-style programmatic video: a backgrou
 | `clang-format` was unavailable on the development host | 1 | Kept the existing project style manually and verified whitespace with `git diff --check` plus compiler warnings. |
 | Invalid fit prevented an independent invalid-position diagnostic | 1 | Parsed fit and position independently, then returned placement only when both were valid. |
 | Legacy optimizer test expected one `multi_pass_required` marker | 1 | Replaced it with typed assertions over the new concrete fusion and barrier passes, resource edges, and cost totals. |
+| Source inventory included a nonexistent `cmake/` directory | 1 | `rg` reported the missing optional path; continued with the actual repository directories and root `CMakeLists.txt`. |
+| Combined image documentation patch assumed a stale composition-format heading | 1 | No files changed; inspected the current document and split the patch against exact headings. |

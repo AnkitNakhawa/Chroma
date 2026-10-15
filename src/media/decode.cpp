@@ -346,4 +346,8 @@ DecodedVideoFrame decode_video_frame(const std::filesystem::path& path, Rational
   return decoder.frame_at(time);
 }
 
+Surface decode_image(const std::filesystem::path& path) {
+  return decode_video_frame(path, Rational(0)).surface;
+}
+
 }  // namespace chroma

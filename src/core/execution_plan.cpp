@@ -114,7 +114,8 @@ bool is_temporary_resource(std::string_view resource) noexcept {
   return resource.starts_with("temporary:");
 }
 
-CacheOpportunity classify_cache_opportunity(std::string source_id, bool frame_variant,
+CacheOpportunity classify_cache_opportunity(std::string source_id, std::string source_node,
+                                            bool frame_variant, bool static_resource,
                                             const EffectProgram& program,
                                             std::uint64_t surface_bytes) {
   CacheOpportunity opportunity{.source_id = std::move(source_id),
@@ -122,7 +123,7 @@ CacheOpportunity classify_cache_opportunity(std::string source_id, bool frame_va
                                .reason = CacheReason::cheap_static_subgraph,
                                .nodes = {},
                                .estimated_storage_bytes = 0};
-  opportunity.nodes.push_back(frame_variant ? "video_sample" : "solid_source");
+  opportunity.nodes.push_back(std::move(source_node));
   bool temporal = false;
   bool nondeterministic = false;
   bool expensive = false;
@@ -144,6 +145,10 @@ CacheOpportunity classify_cache_opportunity(std::string source_id, bool frame_va
   } else if (nondeterministic) {
     opportunity.decision = CacheDecision::not_cacheable;
     opportunity.reason = CacheReason::nondeterministic_effect;
+  } else if (static_resource) {
+    opportunity.decision = CacheDecision::cache_candidate;
+    opportunity.reason = CacheReason::static_resource;
+    opportunity.estimated_storage_bytes = surface_bytes;
   } else if (expensive) {
     opportunity.decision = CacheDecision::cache_candidate;
     opportunity.reason = CacheReason::expensive_static_subgraph;
@@ -231,6 +236,7 @@ std::string_view cache_reason_name(CacheReason reason) noexcept {
     case CacheReason::nondeterministic_effect: return "nondeterministic_effect";
     case CacheReason::cheap_static_subgraph: return "cheap_static_subgraph";
     case CacheReason::expensive_static_subgraph: return "expensive_static_subgraph";
+    case CacheReason::static_resource: return "static_resource";
   }
   return "unknown";
 }
@@ -276,11 +282,17 @@ ExecutionPlan::ExecutionPlan(std::int32_t width, std::int32_t height, FrameIndex
       }
       continue;
     }
-    const auto& video = std::get<CompositeVideoFrameOperation>(operation);
-    if (video.asset_path.empty() || video.source_time < Rational(0) ||
-        !valid_placement(video.placement) ||
-        !valid_blend_mode(video.blend_mode)) {
-      throw std::invalid_argument("execution plan video operation is invalid");
+    if (const auto* video = std::get_if<CompositeVideoFrameOperation>(&operation)) {
+      if (video->asset_path.empty() || video->source_time < Rational(0) ||
+          !valid_placement(video->placement) || !valid_blend_mode(video->blend_mode)) {
+        throw std::invalid_argument("execution plan video operation is invalid");
+      }
+      continue;
+    }
+    const auto& image = std::get<CompositeImageOperation>(operation);
+    if (image.asset_path.empty() || !valid_placement(image.placement) ||
+        !valid_blend_mode(image.blend_mode)) {
+      throw std::invalid_argument("execution plan image operation is invalid");
     }
   }
 }
@@ -314,25 +326,47 @@ ExecutionPlan compile_frame(const Composition& composition, FrameIndex frame) {
       continue;
     }
 
-    const auto& video = std::get<VideoLayer>(layer_variant);
-    if (video.range.contains(frame)) {
-      const auto* asset = composition.find_video_asset(video.asset_id);
+    if (const auto* video = std::get_if<VideoLayer>(&layer_variant)) {
+      if (!video->range.contains(frame)) {
+        continue;
+      }
+      const auto* asset = composition.find_video_asset(video->asset_id);
       if (asset == nullptr) {
         throw std::logic_error("validated video layer references a missing asset");
       }
-      const auto source_frame = checked_source_frame(video, frame);
-      const auto optimized = compile_effects(video.effects, video.opacity);
+      const auto source_frame = checked_source_frame(*video, frame);
+      const auto optimized = compile_effects(video->effects, video->opacity);
       if (definitely_transparent(optimized.program(), false)) {
         continue;
       }
       operations.emplace_back(CompositeVideoFrameOperation{
-          .source_id = video.id,
+          .source_id = video->id,
           .asset_path = asset->path,
           .source_time = composition.frame_rate().time_at(FrameIndex(source_frame)),
-          .placement = video.placement,
+          .placement = video->placement,
           .effects = optimized.program(),
           .effect_rewrite_count = optimized.rewrite_count(),
-          .blend_mode = video.blend_mode});
+          .blend_mode = video->blend_mode});
+      continue;
+    }
+
+    const auto& image = std::get<ImageLayer>(layer_variant);
+    if (image.range.contains(frame)) {
+      const auto* asset = composition.find_image_asset(image.asset_id);
+      if (asset == nullptr) {
+        throw std::logic_error("validated image layer references a missing asset");
+      }
+      const auto optimized = compile_effects(image.effects);
+      if (definitely_transparent(optimized.program(), false)) {
+        continue;
+      }
+      operations.emplace_back(CompositeImageOperation{
+          .source_id = image.id,
+          .asset_path = asset->path,
+          .placement = image.placement,
+          .effects = optimized.program(),
+          .effect_rewrite_count = optimized.rewrite_count(),
+          .blend_mode = image.blend_mode});
     }
   }
 
@@ -389,27 +423,43 @@ ExecutionPlanAnalysis analyze_execution_plan(const ExecutionPlan& plan) {
     std::vector<Effect> effects;
     std::size_t pending_rewrites = 0;
     BlendMode blend_mode = BlendMode::source_over;
+    std::string source_node;
+    bool frame_variant = false;
+    bool static_resource = false;
     if (const auto* solid = std::get_if<CompositeSolidOperation>(&operation)) {
       source_id = solid->source_id;
-      current_nodes.push_back("solid_source");
+      source_node = "solid_source";
+      current_nodes.push_back(source_node);
       effects = solid->effects.effects();
       pending_rewrites = solid->effect_rewrite_count;
       blend_mode = solid->blend_mode;
-    } else {
-      const auto& video = std::get<CompositeVideoFrameOperation>(operation);
-      source_id = video.source_id;
-      current_nodes.push_back("video_sample");
-      current_nodes.push_back("place_" + std::string(fit_mode_name(video.placement.fit)));
+    } else if (const auto* video = std::get_if<CompositeVideoFrameOperation>(&operation)) {
+      source_id = video->source_id;
+      source_node = "video_sample";
+      frame_variant = true;
+      current_nodes.push_back(source_node);
+      current_nodes.push_back("place_" + std::string(fit_mode_name(video->placement.fit)));
       current_reads.push_back("source:" + source_id);
-      effects = video.effects.effects();
-      pending_rewrites = video.effect_rewrite_count;
-      blend_mode = video.blend_mode;
+      effects = video->effects.effects();
+      pending_rewrites = video->effect_rewrite_count;
+      blend_mode = video->blend_mode;
+    } else {
+      const auto& image = std::get<CompositeImageOperation>(operation);
+      source_id = image.source_id;
+      source_node = "image_sample";
+      static_resource = true;
+      current_nodes.push_back(source_node);
+      current_nodes.push_back("place_" + std::string(fit_mode_name(image.placement.fit)));
+      current_reads.push_back("source:" + source_id);
+      effects = image.effects.effects();
+      pending_rewrites = image.effect_rewrite_count;
+      blend_mode = image.blend_mode;
     }
 
     const auto optimized = optimize_effect_program(EffectProgram(std::move(effects)));
     analysis.cache_opportunities.push_back(classify_cache_opportunity(
-        source_id, std::holds_alternative<CompositeVideoFrameOperation>(operation),
-        optimized.program(), analysis.surface_bytes));
+        source_id, source_node, frame_variant, static_resource, optimized.program(),
+        analysis.surface_bytes));
     pending_rewrites += optimized.rewrite_count();
     analysis.total_rewrite_count += pending_rewrites;
     for (const auto& group : optimized.fusion_groups()) {
@@ -479,17 +529,27 @@ std::string execution_plan_json(const ExecutionPlan& plan) {
                             {"blend_mode", blend_mode_name(solid->blend_mode)}});
       continue;
     }
-    const auto& video = std::get<CompositeVideoFrameOperation>(operation);
-    operations.push_back(
-        {{"op", "composite_video_frame"},
-         {"source_id", video.source_id},
-         {"asset_path", video.asset_path.string()},
-         {"source_time", {{"numerator", video.source_time.numerator()},
-                          {"denominator", video.source_time.denominator()}}},
-         {"placement", placement_json(video.placement)},
-         {"effects", effects_json(video.effects)},
-         {"effect_rewrite_count", video.effect_rewrite_count},
-         {"blend_mode", blend_mode_name(video.blend_mode)}});
+    if (const auto* video = std::get_if<CompositeVideoFrameOperation>(&operation)) {
+      operations.push_back(
+          {{"op", "composite_video_frame"},
+           {"source_id", video->source_id},
+           {"asset_path", video->asset_path.string()},
+           {"source_time", {{"numerator", video->source_time.numerator()},
+                            {"denominator", video->source_time.denominator()}}},
+           {"placement", placement_json(video->placement)},
+           {"effects", effects_json(video->effects)},
+           {"effect_rewrite_count", video->effect_rewrite_count},
+           {"blend_mode", blend_mode_name(video->blend_mode)}});
+      continue;
+    }
+    const auto& image = std::get<CompositeImageOperation>(operation);
+    operations.push_back({{"op", "composite_image"},
+                          {"source_id", image.source_id},
+                          {"asset_path", image.asset_path.string()},
+                          {"placement", placement_json(image.placement)},
+                          {"effects", effects_json(image.effects)},
+                          {"effect_rewrite_count", image.effect_rewrite_count},
+                          {"blend_mode", blend_mode_name(image.blend_mode)}});
   }
 
   return nlohmann::json{{"frame", plan.frame().value()},

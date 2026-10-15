@@ -127,14 +127,18 @@ if(CHROMA_BUILD_TESTS)
   target_link_libraries(chroma_media_tests PRIVATE chroma::core)
   if(CHROMA_HAS_FFMPEG AND CHROMA_FFMPEG_EXECUTABLE)
     set(CHROMA_MEDIA_FIXTURE ${CMAKE_CURRENT_BINARY_DIR}/fixtures/color-segments.mkv)
+    set(CHROMA_IMAGE_FIXTURE ${CMAKE_CURRENT_BINARY_DIR}/fixtures/red.png)
     add_custom_command(
-      OUTPUT ${CHROMA_MEDIA_FIXTURE}
+      OUTPUT ${CHROMA_MEDIA_FIXTURE} ${CHROMA_IMAGE_FIXTURE}
       COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/fixtures
       COMMAND ${CHROMA_FFMPEG_EXECUTABLE} -y -hide_banner -loglevel error
               -f lavfi -i color=c=blue:size=64x36:rate=30:duration=1
               -f lavfi -i color=c=red:size=64x36:rate=30:duration=1
               -filter_complex [0:v][1:v]concat=n=2:v=1:a=0
               -c:v ffv1 ${CHROMA_MEDIA_FIXTURE}
+      COMMAND ${CHROMA_FFMPEG_EXECUTABLE} -y -hide_banner -loglevel error
+              -f lavfi -i color=c=red:size=2x2:duration=1
+              -frames:v 1 -threads 1 ${CHROMA_IMAGE_FIXTURE}
       VERBATIM
     )
     add_custom_target(chroma_media_fixture DEPENDS ${CHROMA_MEDIA_FIXTURE})
@@ -142,7 +146,8 @@ if(CHROMA_BUILD_TESTS)
     configure_file(tests/fixtures/video-composition.json.in ${CHROMA_VIDEO_COMPOSITION} @ONLY)
     add_dependencies(chroma_media_tests chroma_media_fixture)
     add_dependencies(chroma_render_tests chroma_media_fixture)
-    add_test(NAME chroma_render_tests COMMAND chroma_render_tests ${CHROMA_MEDIA_FIXTURE})
+    add_test(NAME chroma_render_tests
+             COMMAND chroma_render_tests ${CHROMA_MEDIA_FIXTURE} ${CHROMA_IMAGE_FIXTURE})
     add_test(NAME chroma_media_tests COMMAND chroma_media_tests ${CHROMA_MEDIA_FIXTURE})
     add_test(NAME chroma_cli_probes_media_fixture
              COMMAND chroma_cli probe ${CHROMA_MEDIA_FIXTURE})
@@ -205,6 +210,11 @@ if(CHROMA_BUILD_TESTS)
   add_test(
     NAME chroma_cli_validates_effects_example
     COMMAND chroma_cli validate ${CMAKE_CURRENT_SOURCE_DIR}/examples/effects.json
+  )
+
+  add_test(
+    NAME chroma_cli_validates_image_example
+    COMMAND chroma_cli validate ${CMAKE_CURRENT_SOURCE_DIR}/examples/image.json
   )
 
   add_test(

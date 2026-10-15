@@ -126,6 +126,63 @@ void invalid_video_references_are_reported() {
   CHECK(has_code(result, "layer.invalid_position"));
 }
 
+void image_assets_and_layers_are_normalized() {
+  constexpr std::string_view source = R"json(
+  {
+    "schema_version": 1,
+    "canvas": {
+      "width": 64,
+      "height": 36,
+      "frame_rate": {"numerator": 30, "denominator": 1},
+      "duration_frames": 60
+    },
+    "assets": [
+      {"id": "logo", "type": "image", "path": "media/logo.png"}
+    ],
+    "layers": [
+      {"id": "logo-layer", "type": "image", "asset": "logo", "start_frame": 0,
+       "end_frame": 60, "fit": "contain", "position": [0.25, 0.75],
+       "effects": [{"type": "opacity", "value": 0.5}], "blend_mode": "screen"}
+    ]
+  }
+  )json";
+  const auto result = chroma::parse_composition(source, "/project");
+  CHECK(result.valid());
+  if (!result.composition) {
+    return;
+  }
+  CHECK(result.composition->image_assets().size() == 1);
+  CHECK(result.composition->image_assets().front().path == "/project/media/logo.png");
+  const auto* image = std::get_if<chroma::ImageLayer>(&result.composition->layers().front());
+  CHECK(image != nullptr);
+  if (image != nullptr) {
+    CHECK(image->asset_id == "logo");
+    CHECK(image->placement.fit == chroma::FitMode::contain);
+    CHECK(image->placement.position_x == 0.25);
+    CHECK(image->placement.position_y == 0.75);
+    CHECK(image->effects.effects().size() == 1);
+    CHECK(image->blend_mode == chroma::BlendMode::screen);
+  }
+}
+
+void image_layers_reject_video_assets() {
+  constexpr std::string_view source = R"json(
+  {
+    "schema_version": 1,
+    "canvas": {"width": 1, "height": 1,
+      "frame_rate": {"numerator": 30, "denominator": 1}, "duration_frames": 1},
+    "assets": [{"id": "clip", "type": "video", "path": "clip.mkv"}],
+    "layers": [
+      {"id": "wrong-kind", "type": "image", "asset": "clip",
+       "start_frame": 0, "end_frame": 1}
+    ]
+  }
+  )json";
+  const auto result = chroma::parse_composition(source);
+  CHECK(!result.valid());
+  CHECK(has_code(result, "layer.unknown_asset"));
+}
+
 void effects_and_blend_modes_are_normalized() {
   constexpr std::string_view source = R"json(
   {
@@ -294,6 +351,8 @@ int main() {
   oversized_canvases_are_rejected_before_rendering();
   video_assets_and_layers_are_normalized();
   invalid_video_references_are_reported();
+  image_assets_and_layers_are_normalized();
+  image_layers_reject_video_assets();
   effects_and_blend_modes_are_normalized();
   invalid_effects_and_blends_are_reported();
 

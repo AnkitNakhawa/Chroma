@@ -1,5 +1,6 @@
 #include <cmath>
 #include <cstdlib>
+#include <filesystem>
 #include <iostream>
 #include <sstream>
 #include <stdexcept>
@@ -341,6 +342,33 @@ void video_layers_decode_into_the_cpu_plan(const char* path) {
   CHECK(contained.pixel(16, 16).blue > 0.8F);
 }
 
+void image_layers_decode_once_and_execute_effects(const char* path) {
+  auto cached_path = std::filesystem::path(path);
+  cached_path += ".cache-test.png";
+  std::filesystem::copy_file(path, cached_path,
+                             std::filesystem::copy_options::overwrite_existing);
+  const chroma::Composition composition(
+      1, 4, 4, chroma::FrameRate(chroma::Rational(30)),
+      chroma::FrameRange(chroma::FrameIndex(0), chroma::FrameIndex(2)),
+      std::vector<chroma::VideoAsset>{},
+      {chroma::ImageAsset{.id = "red", .path = cached_path}},
+      {chroma::ImageLayer{
+          .id = "image",
+          .range = chroma::FrameRange(chroma::FrameIndex(0), chroma::FrameIndex(2)),
+          .asset_id = "red",
+          .placement = {.fit = chroma::FitMode::contain},
+          .effects = chroma::EffectProgram({chroma::OpacityEffect{.opacity = 0.5}})}});
+  chroma::CpuRenderContext context;
+  const auto first = context.execute(chroma::compile_frame(composition, chroma::FrameIndex(0)));
+  std::filesystem::remove(cached_path);
+  const auto second = context.execute(chroma::compile_frame(composition, chroma::FrameIndex(1)));
+  CHECK(first.pixels() == second.pixels());
+  CHECK(first.pixel(0, 0).alpha == 0.5F);
+  CHECK(first.pixel(0, 0).red > 0.45F);
+  CHECK(first.pixel(0, 0).green < 0.05F);
+  CHECK(first.pixel(0, 0).blue < 0.05F);
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -359,8 +387,11 @@ int main(int argc, char** argv) {
   blend_modes_follow_premultiplied_source_over_semantics();
   composition_effects_execute_through_the_frame_plan();
   parsed_effects_execute_end_to_end();
-  if (argc == 2) {
+  if (argc >= 2) {
     video_layers_decode_into_the_cpu_plan(argv[1]);
+  }
+  if (argc >= 3) {
+    image_layers_decode_once_and_execute_effects(argv[2]);
   }
 
   if (failures != 0) {

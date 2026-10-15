@@ -334,6 +334,7 @@ Surface apply_effect_program_cpu(Surface source, const EffectProgram& program) {
 
 struct CpuRenderContext::Impl {
   std::unordered_map<std::string, std::unique_ptr<VideoDecoder>> decoders;
+  std::unordered_map<std::string, Surface> images;
 };
 
 CpuRenderContext::CpuRenderContext() : impl_(std::make_unique<Impl>()) {}
@@ -365,19 +366,36 @@ Surface CpuRenderContext::execute(const ExecutionPlan& plan) {
       continue;
     }
 
-    const auto& video = std::get<CompositeVideoFrameOperation>(operation);
-    const auto key = video.source_id + '\n' + video.asset_path.generic_string();
-    auto& decoder = impl_->decoders[key];
-    if (!decoder) {
-      decoder = std::make_unique<VideoDecoder>(video.asset_path);
+    Surface source_surface(1, 1);
+    const EffectProgram* effects = nullptr;
+    BlendMode blend_mode = BlendMode::source_over;
+    if (const auto* video = std::get_if<CompositeVideoFrameOperation>(&operation)) {
+      const auto key = video->source_id + '\n' + video->asset_path.generic_string();
+      auto& decoder = impl_->decoders[key];
+      if (!decoder) {
+        decoder = std::make_unique<VideoDecoder>(video->asset_path);
+      }
+      auto decoded = decoder->frame_at(video->source_time);
+      source_surface = place_surface_cpu(std::move(decoded.surface), result.width(),
+                                         result.height(), video->placement);
+      effects = &video->effects;
+      blend_mode = video->blend_mode;
+    } else {
+      const auto& image = std::get<CompositeImageOperation>(operation);
+      const auto key = image.asset_path.generic_string();
+      auto found = impl_->images.find(key);
+      if (found == impl_->images.end()) {
+        found = impl_->images.emplace(key, decode_image(image.asset_path)).first;
+      }
+      source_surface = place_surface_cpu(found->second, result.width(), result.height(),
+                                         image.placement);
+      effects = &image.effects;
+      blend_mode = image.blend_mode;
     }
-    auto decoded = decoder->frame_at(video.source_time);
-    auto source_surface = place_surface_cpu(std::move(decoded.surface), result.width(),
-                                            result.height(), video.placement);
-    source_surface = apply_effect_program_cpu(std::move(source_surface), video.effects);
+    source_surface = apply_effect_program_cpu(std::move(source_surface), *effects);
     for (std::size_t index = 0; index < result.size(); ++index) {
       result.pixels()[index] =
-          composite(source_surface.pixels()[index], result.pixels()[index], video.blend_mode);
+          composite(source_surface.pixels()[index], result.pixels()[index], blend_mode);
     }
   }
   return result;

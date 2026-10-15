@@ -23,7 +23,7 @@ The current schema exists to exercise Chroma's validation and rendering boundari
 }
 ```
 
-Video files are declared separately from their uses so future plans can share probes, decoders, and cache identities:
+Video and image files are declared separately from their uses so plans can share decoders, prepared surfaces, and cache identities:
 
 ```json
 {
@@ -53,6 +53,27 @@ Video files are declared separately from their uses so future plans can share pr
 }
 ```
 
+Static images use `"type": "image"` and may use any still-image format supported by the configured FFmpeg build:
+
+```json
+{
+  "assets": [
+    {"id": "logo", "type": "image", "path": "media/logo.png"}
+  ],
+  "layers": [
+    {
+      "id": "logo-layer",
+      "type": "image",
+      "asset": "logo",
+      "start_frame": 0,
+      "end_frame": 60,
+      "fit": "contain",
+      "position": [0.5, 0.5]
+    }
+  ]
+}
+```
+
 ## Current semantics
 
 - Frame ranges are half-open: `start_frame` is included and `end_frame` is excluded.
@@ -64,13 +85,13 @@ Video files are declared separately from their uses so future plans can share pr
 - PPM output has no alpha channel; premultiplied RGB is therefore effectively displayed over black.
 - Asset paths are resolved relative to the composition file by the CLI. Parsing from memory accepts an explicit base directory.
 - Video layers sample source time using the composition's exact rational frame rate. `source_start_frame` defaults to 0 and `opacity` defaults to 1.
-- Video `fit` supports `none` (default), `contain`, `cover`, and `fill`. `position` is a normalized `[x, y]` alignment from `[0, 0]` (top-left) through `[1, 1]` (bottom-right) and defaults to `[0.5, 0.5]`.
+- Video and image `fit` support `none` (default), `contain`, `cover`, and `fill`. `position` is a normalized `[x, y]` alignment from `[0, 0]` (top-left) through `[1, 1]` (bottom-right) and defaults to `[0.5, 0.5]`.
 - `contain` preserves the complete source and may leave transparent bars; `cover` preserves aspect ratio while cropping overflow; `fill` stretches to the canvas; `none` keeps native pixel size. Placement occurs before the ordered effect program.
 - Asset existence and decodability are checked when media is probed or rendered, not during syntax-only composition validation.
 
 ## Basic effects and blending
 
-Solid and video layers may declare an ordered `effects` array and an optional `blend_mode`:
+Solid, image, and video layers may declare an ordered `effects` array and an optional `blend_mode`:
 
 ```json
 {

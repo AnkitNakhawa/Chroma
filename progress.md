@@ -62,3 +62,5 @@
 - Added lifetime-based physical temporary reuse with strict read/write non-aliasing, plus physical buffer counts, byte estimates, and allocation intervals.
 - Added conservative cache opportunity diagnostics for frame-varying, temporal, nondeterministic, cheap static, and expensive deterministic subgraphs; cache execution and persistence remain unimplemented.
 - Verified the reuse/cache checkpoint with 21/21 FFmpeg tests, 13/13 core-only tests, and 13/13 sanitizer tests; a focused review found no blocking correctness issues.
+- Started the sequential basic-graphics track with four separate test-and-commit gates: images, native shapes, shaped text, and static prepared-resource planning/demo coverage.
+- Completed static image assets/layers with typed parsing and plans, FFmpeg still-image decode, render-context surface reuse, placement/effects/blending, static-resource cache diagnostics, a real PNG fixture, and updated examples/docs. Verified 22/22 FFmpeg, 14/14 core-only, and 14/14 sanitizer tests.

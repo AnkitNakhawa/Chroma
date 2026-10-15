@@ -29,7 +29,7 @@ Chroma is not intended to be a visual editor, preview platform, hosted rendering
 
 ## Status
 
-Post-baseline compiler spike. Chroma can parse and validate solid/video compositions, resolve assets, probe and decode media at exact rational times, compile typed per-frame plans, render through a persistent CPU execution context, write PPM frames, encode H.264/MP4 directly, and emit per-stage benchmark JSON. Video sources support `none`, `contain`, `cover`, and `fill` placement with normalized alignment. Composition layers can request transform, crop, opacity, and color-matrix effects plus source-over, multiply, screen, and plus blending. The compiler makes conservative algebraic rewrites authoritative for execution, removes provably dead work, and produces a typed physical-pass analysis with fusion candidates, explicit barriers, logical intermediate resources, reusable physical-buffer assignments, full-frame byte-traffic estimates, peak-live memory, and cache opportunities. CUDA execution, audio, text, image assets, production color management, cache persistence, parallel scheduling, and language bindings are not implemented yet.
+Post-baseline compiler spike. Chroma can parse and validate solid, static-image, and video compositions; resolve assets; probe and decode media at exact rational times; compile typed per-frame plans; render through a persistent CPU execution context; write PPM frames; encode H.264/MP4 directly; and emit per-stage benchmark JSON. Image and video sources support `none`, `contain`, `cover`, and `fill` placement with normalized alignment. Composition layers can request transform, crop, opacity, and color-matrix effects plus source-over, multiply, screen, and plus blending. Static images decode once per render context while Chroma retains ownership of sampling, effects, and compositing. The compiler makes conservative algebraic rewrites authoritative for execution, removes provably dead work, and produces a typed physical-pass analysis with fusion candidates, explicit barriers, logical intermediate resources, reusable physical-buffer assignments, full-frame byte-traffic estimates, peak-live memory, and cache opportunities. CUDA execution, audio, text, shapes, production color management, persistent cross-job caching, parallel scheduling, and language bindings are not implemented yet.
 
 ## Build and test
 
@@ -100,6 +100,17 @@ Render the basic effects example:
 ./build/chroma frame examples/effects.json --frame 0 --output effects.ppm
 ./build/chroma render examples/effects.json --output effects.mp4
 ./build/chroma inspect-optimized-plan examples/effects.json --frame 0
+```
+
+Static image assets use the same placement, effect, and blend pipeline as video, but decode once per CPU render context:
+
+```json
+{"id": "logo", "type": "image", "path": "logo.png"}
+```
+
+```json
+{"id": "logo-layer", "type": "image", "asset": "logo", "start_frame": 0,
+ "end_frame": 60, "fit": "contain", "position": [0.5, 0.5]}
 ```
 
 The layered example exercises frame ranges and alpha compositing. Its red overlay is inactive at frame 0, active over the blue background at frame 30, and inactive again at frame 50:
