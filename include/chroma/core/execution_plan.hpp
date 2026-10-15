@@ -10,6 +10,7 @@
 
 #include "chroma/core/composition.hpp"
 #include "chroma/core/effect.hpp"
+#include "chroma/core/prepared_resource.hpp"
 
 namespace chroma {
 
@@ -168,14 +169,26 @@ struct CacheOpportunity {
   CacheReason reason;
   std::vector<std::string> nodes;
   std::uint64_t estimated_storage_bytes;
+  bool storage_size_known{true};
 
   friend bool operator==(const CacheOpportunity&, const CacheOpportunity&) = default;
+};
+
+struct PreparedResourcePlan {
+  PreparedResourceKind kind;
+  std::string identity;
+  std::vector<std::string> source_ids;
+  std::uint64_t estimated_storage_bytes{0};
+  bool storage_size_known{false};
+
+  friend bool operator==(const PreparedResourcePlan&, const PreparedResourcePlan&) = default;
 };
 
 struct ExecutionPlanAnalysis {
   std::vector<PlannedRenderPass> passes;
   std::vector<TemporaryAllocation> temporary_allocations;
   std::vector<CacheOpportunity> cache_opportunities;
+  std::vector<PreparedResourcePlan> prepared_resources;
   std::size_t logical_temporary_surfaces{0};
   std::size_t physical_temporary_buffers{0};
   std::uint64_t surface_bytes{0};

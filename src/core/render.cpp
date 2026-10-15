@@ -11,6 +11,7 @@
 #include <unordered_map>
 #include <variant>
 
+#include "chroma/core/prepared_resource.hpp"
 #include "chroma/media/decode.hpp"
 #include "chroma/text/text.hpp"
 
@@ -484,8 +485,8 @@ Surface CpuRenderContext::execute(const ExecutionPlan& plan) {
       continue;
     }
     if (const auto* text = std::get_if<CompositeTextOperation>(&operation)) {
-      const auto key = text->font_path.generic_string() + '\n' +
-                       std::to_string(text->font_size) + '\n' + text->text;
+      const auto key =
+          prepared_text_request_key(text->font_path, text->text, text->font_size);
       auto found = impl_->text.find(key);
       if (found == impl_->text.end()) {
         found = impl_->text
@@ -518,7 +519,7 @@ Surface CpuRenderContext::execute(const ExecutionPlan& plan) {
       blend_mode = video->blend_mode;
     } else {
       const auto& image = std::get<CompositeImageOperation>(operation);
-      const auto key = image.asset_path.generic_string();
+      const auto key = prepared_image_request_key(image.asset_path);
       auto found = impl_->images.find(key);
       if (found == impl_->images.end()) {
         found = impl_->images.emplace(key, decode_image(image.asset_path)).first;

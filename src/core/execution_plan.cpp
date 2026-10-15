@@ -135,7 +135,8 @@ CacheOpportunity classify_cache_opportunity(std::string source_id, std::string s
                                .decision = CacheDecision::recompute,
                                .reason = CacheReason::cheap_static_subgraph,
                                .nodes = {},
-                               .estimated_storage_bytes = 0};
+                               .estimated_storage_bytes = 0,
+                               .storage_size_known = true};
   opportunity.nodes.push_back(std::move(source_node));
   bool temporal = false;
   bool nondeterministic = false;
@@ -161,7 +162,8 @@ CacheOpportunity classify_cache_opportunity(std::string source_id, std::string s
   } else if (static_resource) {
     opportunity.decision = CacheDecision::cache_candidate;
     opportunity.reason = CacheReason::static_resource;
-    opportunity.estimated_storage_bytes = surface_bytes;
+    opportunity.estimated_storage_bytes = 0;
+    opportunity.storage_size_known = false;
   } else if (expensive) {
     opportunity.decision = CacheDecision::cache_candidate;
     opportunity.reason = CacheReason::expensive_static_subgraph;
@@ -457,6 +459,24 @@ ExecutionPlanAnalysis analyze_execution_plan(const ExecutionPlan& plan) {
   analysis.surface_bytes = static_cast<std::uint64_t>(plan.width()) *
                            static_cast<std::uint64_t>(plan.height()) * 4U * sizeof(float);
   std::size_t temporary_index = 0;
+  std::unordered_map<std::string, std::size_t> prepared_resource_by_key;
+
+  const auto record_prepared_resource = [&](PreparedResourceKind kind,
+                                            const std::string& source_id,
+                                            std::string request_key) {
+    const auto found = prepared_resource_by_key.find(request_key);
+    if (found != prepared_resource_by_key.end()) {
+      analysis.prepared_resources[found->second].source_ids.push_back(source_id);
+      return;
+    }
+    prepared_resource_by_key.emplace(request_key, analysis.prepared_resources.size());
+    analysis.prepared_resources.push_back(
+        PreparedResourcePlan{.kind = kind,
+                             .identity = prepared_resource_identity(request_key),
+                             .source_ids = {source_id},
+                             .estimated_storage_bytes = 0,
+                             .storage_size_known = false});
+  };
 
   const auto next_temporary = [&]() {
     ++analysis.logical_temporary_surfaces;
@@ -532,6 +552,8 @@ ExecutionPlanAnalysis analyze_execution_plan(const ExecutionPlan& plan) {
       effects = image->effects.effects();
       pending_rewrites = image->effect_rewrite_count;
       blend_mode = image->blend_mode;
+      record_prepared_resource(PreparedResourceKind::image, source_id,
+                               prepared_image_request_key(image->asset_path));
     } else if (const auto* shape = std::get_if<CompositeShapeOperation>(&operation)) {
       source_id = shape->source_id;
       source_node = "shape_" + std::string(shape_kind_name(shape->geometry.kind));
@@ -549,6 +571,9 @@ ExecutionPlanAnalysis analyze_execution_plan(const ExecutionPlan& plan) {
       effects = text.effects.effects();
       pending_rewrites = text.effect_rewrite_count;
       blend_mode = text.blend_mode;
+      record_prepared_resource(
+          PreparedResourceKind::text, source_id,
+          prepared_text_request_key(text.font_path, text.text, text.font_size));
     }
 
     const auto optimized = optimize_effect_program(EffectProgram(std::move(effects)));
@@ -720,7 +745,21 @@ std::string optimized_execution_plan_json(const ExecutionPlan& plan) {
          {"decision", cache_decision_name(opportunity.decision)},
          {"reason", cache_reason_name(opportunity.reason)},
          {"nodes", opportunity.nodes},
-         {"estimated_storage_bytes", opportunity.estimated_storage_bytes}});
+         {"estimated_storage_bytes",
+          opportunity.storage_size_known
+              ? nlohmann::json(opportunity.estimated_storage_bytes)
+              : nlohmann::json(nullptr)}});
+  }
+
+  nlohmann::json prepared_resources = nlohmann::json::array();
+  for (const auto& resource : analysis.prepared_resources) {
+    prepared_resources.push_back(
+        {{"kind", prepared_resource_kind_name(resource.kind)},
+         {"identity", resource.identity},
+         {"source_ids", resource.source_ids},
+         {"estimated_storage_bytes",
+          resource.storage_size_known ? nlohmann::json(resource.estimated_storage_bytes)
+                                      : nlohmann::json(nullptr)}});
   }
 
   return nlohmann::json{{"frame", plan.frame().value()},
@@ -739,10 +778,12 @@ std::string optimized_execution_plan_json(const ExecutionPlan& plan) {
                           {"estimated_bytes_written", analysis.estimated_bytes_written},
                           {"peak_live_bytes", analysis.peak_live_bytes},
                           {"total_rewrite_count", analysis.total_rewrite_count},
-                          {"cache_candidate_count", cache_candidate_count}}},
+                          {"cache_candidate_count", cache_candidate_count},
+                          {"prepared_resource_count", analysis.prepared_resources.size()}}},
                         {"passes", std::move(passes)},
                         {"temporary_allocations", std::move(allocations)},
-                        {"cache_opportunities", std::move(cache_opportunities)}}
+                        {"cache_opportunities", std::move(cache_opportunities)},
+                        {"prepared_resources", std::move(prepared_resources)}}
       .dump(2);
 }
 

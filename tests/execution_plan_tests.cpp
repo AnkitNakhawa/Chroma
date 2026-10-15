@@ -222,6 +222,7 @@ void image_layers_compile_as_static_fusible_sources() {
     CHECK(analysis.cache_opportunities[0].decision ==
           chroma::CacheDecision::cache_candidate);
     CHECK(analysis.cache_opportunities[0].reason == chroma::CacheReason::static_resource);
+    CHECK(!analysis.cache_opportunities[0].storage_size_known);
   }
   const auto json = chroma::execution_plan_json(plan);
   CHECK(json.find("composite_image") != std::string::npos);
@@ -293,8 +294,52 @@ void text_layers_compile_as_prepared_fusible_sources() {
     CHECK(analysis.cache_opportunities[0].decision ==
           chroma::CacheDecision::cache_candidate);
     CHECK(analysis.cache_opportunities[0].reason == chroma::CacheReason::static_resource);
+    CHECK(!analysis.cache_opportunities[0].storage_size_known);
   }
   CHECK(chroma::execution_plan_json(plan).find("composite_text") != std::string::npos);
+}
+
+void prepared_resource_plans_are_stable_and_deduplicated() {
+  const chroma::ExecutionPlan plan(
+      16, 16, chroma::FrameIndex(0),
+      {chroma::ClearOperation{.color = {0.0, 0.0, 0.0, 0.0}},
+       chroma::CompositeImageOperation{.source_id = "image-a", .asset_path = "logo.png"},
+       chroma::CompositeImageOperation{.source_id = "image-b", .asset_path = "logo.png"},
+       chroma::CompositeTextOperation{.source_id = "text-a",
+                                      .font_path = "body.ttf",
+                                      .text = "Hello",
+                                      .font_size = 24.0,
+                                      .x = 0.0,
+                                      .y = 24.0,
+                                      .color = {1.0, 1.0, 1.0, 1.0}},
+       chroma::CompositeTextOperation{.source_id = "text-b",
+                                      .font_path = "body.ttf",
+                                      .text = "Hello",
+                                      .font_size = 24.0,
+                                      .x = 8.0,
+                                      .y = 32.0,
+                                      .color = {1.0, 0.0, 0.0, 1.0}}});
+  const auto first = chroma::analyze_execution_plan(plan);
+  const auto second = chroma::analyze_execution_plan(plan);
+  CHECK(first == second);
+  CHECK(first.prepared_resources.size() == 2);
+  if (first.prepared_resources.size() == 2) {
+    CHECK(first.prepared_resources[0].kind == chroma::PreparedResourceKind::image);
+    CHECK(first.prepared_resources[0].source_ids ==
+          (std::vector<std::string>{"image-a", "image-b"}));
+    CHECK(first.prepared_resources[1].kind == chroma::PreparedResourceKind::text);
+    CHECK(first.prepared_resources[1].source_ids ==
+          (std::vector<std::string>{"text-a", "text-b"}));
+    CHECK(first.prepared_resources[0].identity.starts_with("fnv1a64:"));
+    CHECK(!first.prepared_resources[0].storage_size_known);
+  }
+  const auto base_key = chroma::prepared_text_request_key("body.ttf", "Hello", 24.0);
+  CHECK(base_key == chroma::prepared_text_request_key("body.ttf", "Hello", 24.0));
+  CHECK(base_key != chroma::prepared_text_request_key("body.ttf", "Hello", 25.0));
+  CHECK(base_key != chroma::prepared_text_request_key("body.ttf", "Hello!", 24.0));
+  const auto json = chroma::optimized_execution_plan_json(plan);
+  CHECK(json.find("prepared_resource_count") != std::string::npos);
+  CHECK(json.find("fnv1a64:") != std::string::npos);
 }
 
 void layer_effects_and_blends_lower_into_the_plan() {
@@ -591,6 +636,7 @@ int main() {
   image_layers_compile_as_static_fusible_sources();
   shape_layers_compile_as_native_fusible_sources();
   text_layers_compile_as_prepared_fusible_sources();
+  prepared_resource_plans_are_stable_and_deduplicated();
   layer_effects_and_blends_lower_into_the_plan();
   compilation_optimizes_effects_and_records_rewrites();
   compilation_eliminates_definitely_transparent_layers();

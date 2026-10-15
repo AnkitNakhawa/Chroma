@@ -96,6 +96,8 @@ Inspect proposed rewrites and GPU fusion candidates separately:
 Optimized-plan output currently reports `"status": "planning_only"`; rendering still executes the typed plan shown by `inspect-plan`.
 Its cost summary assumes a linear-premultiplied RGBA working surface of four floats per pixel and full-canvas reads/writes. Logical temporaries use SSA-style names; non-overlapping lifetimes are mapped onto reusable physical buffer numbers. Cache diagnostics conservatively classify frame-varying, temporal, and nondeterministic work as non-cacheable, cheap static work as better to recompute, and expensive deterministic static work as a cache candidate. These are planning decisions only: the renderer does not yet allocate from this physical plan or persist cached surfaces.
 
+Image and shaped-text preparation share deterministic request-key construction. Runtime maps use the full length-prefixed key; optimized-plan diagnostics expose a compact `fnv1a64:` identifier and deduplicate identical preparation requests across layers. The compact identifier is diagnostic—not a collision-proof persistent cache key—and currently incorporates normalized paths rather than asset contents. Cross-job content hashing and eviction remain future work.
+
 Render the basic effects example:
 
 ```sh
@@ -142,6 +144,8 @@ The layered example exercises frame ranges and alpha compositing. Its red overla
 ./build/chroma inspect-plan examples/layered.json --frame 30
 ./build/chroma frame examples/layered.json --frame 30 --output frame-30.ppm
 ```
+
+When tests run with FFmpeg and text support, CMake generates `build/fixtures/basic-graphics.json`. It combines video, image, rounded-shape, and shaped-text layers and is exercised through optimized-plan inspection, frame rendering, and the benchmark command.
 
 ## License
 

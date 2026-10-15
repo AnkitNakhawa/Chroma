@@ -66,6 +66,7 @@ add_library(chroma_core
   src/core/composition.cpp
   src/core/effect.cpp
   src/core/execution_plan.cpp
+  src/core/prepared_resource.cpp
   src/core/rational.cpp
   src/core/render.cpp
   src/core/timeline.cpp
@@ -179,7 +180,7 @@ if(CHROMA_BUILD_TESTS)
               -filter_complex [0:v][1:v]concat=n=2:v=1:a=0
               -c:v ffv1 ${CHROMA_MEDIA_FIXTURE}
       COMMAND ${CHROMA_FFMPEG_EXECUTABLE} -y -hide_banner -loglevel error
-              -f lavfi -i color=c=red:size=2x2:duration=1
+              -f lavfi -i color=c=red:size=32x32:duration=1
               -frames:v 1 -threads 1 ${CHROMA_IMAGE_FIXTURE}
       VERBATIM
     )
@@ -229,6 +230,32 @@ if(CHROMA_BUILD_TESTS)
       DEPENDS chroma_cli_benchmarks_video
       PASS_REGULAR_EXPRESSION "frames_per_second"
     )
+    if(CHROMA_TEST_FONT)
+      set(CHROMA_BASIC_GRAPHICS_COMPOSITION
+          ${CMAKE_CURRENT_BINARY_DIR}/fixtures/basic-graphics.json)
+      configure_file(tests/fixtures/basic-graphics.json.in
+                     ${CHROMA_BASIC_GRAPHICS_COMPOSITION} @ONLY)
+      add_test(NAME chroma_cli_inspects_basic_graphics
+               COMMAND chroma_cli inspect-optimized-plan
+                       ${CHROMA_BASIC_GRAPHICS_COMPOSITION} --frame 0)
+      set_tests_properties(chroma_cli_inspects_basic_graphics PROPERTIES
+        PASS_REGULAR_EXPRESSION "prepared_resource_count[^0-9]*2"
+      )
+      add_test(NAME chroma_cli_renders_basic_graphics
+               COMMAND chroma_cli frame ${CHROMA_BASIC_GRAPHICS_COMPOSITION} --frame 0
+                       --output ${CMAKE_CURRENT_BINARY_DIR}/fixtures/basic-graphics.ppm)
+      set(CHROMA_BASIC_GRAPHICS_BENCHMARK
+          ${CMAKE_CURRENT_BINARY_DIR}/fixtures/basic-graphics-benchmark.json)
+      add_test(NAME chroma_cli_benchmarks_basic_graphics
+               COMMAND chroma_cli benchmark ${CHROMA_BASIC_GRAPHICS_COMPOSITION}
+                       --iterations 1 --output ${CHROMA_BASIC_GRAPHICS_BENCHMARK})
+      add_test(NAME chroma_cli_basic_graphics_benchmark_report
+               COMMAND ${CMAKE_COMMAND} -E cat ${CHROMA_BASIC_GRAPHICS_BENCHMARK})
+      set_tests_properties(chroma_cli_basic_graphics_benchmark_report PROPERTIES
+        DEPENDS chroma_cli_benchmarks_basic_graphics
+        PASS_REGULAR_EXPRESSION "frames_per_second"
+      )
+    endif()
   else()
     add_test(NAME chroma_render_tests COMMAND chroma_render_tests)
     add_test(NAME chroma_media_tests COMMAND chroma_media_tests)

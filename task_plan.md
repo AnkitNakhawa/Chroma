@@ -119,7 +119,7 @@ Each item is an independent test-and-commit gate; work proceeds strictly in orde
 1. [complete] Add FFmpeg-backed static image assets/layers, typed plans, CPU execution, placement/effects/blending, planner diagnostics, fixtures, and documentation.
 2. [complete] Add native rectangle, rounded-rectangle, and ellipse layers with fill/stroke semantics, CPU reference rendering, optimizer integration, tests, and documentation.
 3. [complete] Add optional HarfBuzz/FreeType shaped text, Chroma-owned glyph layout/raster resources, CPU reference rendering, graceful dependency-disabled behavior, tests, and documentation.
-4. [in_progress] Consolidate static prepared-resource identities and cache planning across images and text, add the representative basic-graphics demo/bench fixture, test, review, and document the boundary.
+4. [complete] Consolidate static prepared-resource identities and cache planning across images and text, add the representative basic-graphics demo/bench fixture, test, review, and document the boundary.
 
 ### Dependency policy for these slices
 

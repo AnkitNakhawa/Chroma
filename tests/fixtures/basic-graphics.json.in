@@ -1,0 +1,56 @@
+{
+  "schema_version": 1,
+  "canvas": {
+    "width": 160,
+    "height": 90,
+    "frame_rate": {"numerator": 30, "denominator": 1},
+    "duration_frames": 60
+  },
+  "assets": [
+    {"id": "clip", "type": "video", "path": "@CHROMA_MEDIA_FIXTURE@"},
+    {"id": "logo", "type": "image", "path": "@CHROMA_IMAGE_FIXTURE@"},
+    {"id": "body", "type": "font", "path": "@CHROMA_TEST_FONT@"}
+  ],
+  "layers": [
+    {
+      "id": "video-background",
+      "type": "video",
+      "asset": "clip",
+      "start_frame": 0,
+      "end_frame": 60,
+      "fit": "cover"
+    },
+    {
+      "id": "card",
+      "type": "shape",
+      "shape": "rounded_rectangle",
+      "start_frame": 0,
+      "end_frame": 60,
+      "bounds": [16, 17, 128, 56],
+      "corner_radius": 8,
+      "fill": [0.04, 0.06, 0.12, 0.82],
+      "stroke": {"color": [0.75, 0.85, 1.0, 1.0], "width": 2}
+    },
+    {
+      "id": "logo-layer",
+      "type": "image",
+      "asset": "logo",
+      "start_frame": 0,
+      "end_frame": 60,
+      "fit": "none",
+      "position": [0.18, 0.5],
+      "effects": [{"type": "opacity", "value": 0.9}]
+    },
+    {
+      "id": "title",
+      "type": "text",
+      "font": "body",
+      "text": "Chroma",
+      "font_size": 24,
+      "position": [58, 54],
+      "color": [0.95, 0.97, 1.0, 1.0],
+      "start_frame": 0,
+      "end_frame": 60
+    }
+  ]
+}
