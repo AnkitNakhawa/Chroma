@@ -369,6 +369,91 @@ void image_layers_decode_once_and_execute_effects(const char* path) {
   CHECK(first.pixel(0, 0).blue < 0.05F);
 }
 
+chroma::ColorMatrixEffect test_color_matrix() {
+  return chroma::ColorMatrixEffect{
+      .values = {0.8, 0.1, 0.0, 0.0, 0.02,
+                 0.0, 0.7, 0.2, 0.0, 0.01,
+                 0.1, 0.0, 0.6, 0.0, 0.03,
+                 0.0, 0.0, 0.0, 0.9, 0.05}};
+}
+
+chroma::Composition image_effect_composition(const char* path, std::int32_t width,
+                                             std::int32_t height,
+                                             chroma::SourcePlacement placement,
+                                             chroma::EffectProgram effects) {
+  return chroma::Composition(
+      1, width, height, chroma::FrameRate(chroma::Rational(30)),
+      chroma::FrameRange(chroma::FrameIndex(0), chroma::FrameIndex(1)),
+      std::vector<chroma::VideoAsset>{},
+      {chroma::ImageAsset{.id = "red", .path = path}},
+      {chroma::SolidLayer{
+           .id = "background",
+           .range = chroma::FrameRange(chroma::FrameIndex(0), chroma::FrameIndex(1)),
+           .color = {.red = 0.0, .green = 0.0, .blue = 0.5, .alpha = 1.0}},
+       chroma::ImageLayer{
+           .id = "image",
+           .range = chroma::FrameRange(chroma::FrameIndex(0), chroma::FrameIndex(1)),
+           .asset_id = "red",
+           .placement = placement,
+           .effects = std::move(effects),
+           .blend_mode = chroma::BlendMode::screen}});
+}
+
+void fused_image_sampling_and_effects_match_the_reference_path(const char* path) {
+  const auto composition = image_effect_composition(
+      path, 23, 19,
+      {.fit = chroma::FitMode::contain, .position_x = 0.2, .position_y = 0.8},
+      chroma::EffectProgram({
+          chroma::CropEffect{.x = 2, .y = 3, .width = 17, .height = 11},
+          chroma::OpacityEffect{.opacity = 0.63}, test_color_matrix()}));
+  const auto plan = chroma::compile_frame(composition, chroma::FrameIndex(0));
+  chroma::CpuRenderContext fused_context;
+  chroma::CpuRenderContext reference_context;
+  const auto fused = fused_context.execute(plan);
+  const auto reference =
+      reference_context.execute(plan, chroma::CpuExecutionMode::reference);
+  CHECK(fused.pixels() == reference.pixels());
+  CHECK(fused_context.last_execution_stats().fused_operations == 1);
+  CHECK(fused_context.last_execution_stats().reference_operations == 0);
+  CHECK(reference_context.last_execution_stats().fused_operations == 0);
+  CHECK(reference_context.last_execution_stats().reference_operations == 1);
+}
+
+void fused_transform_matches_reference_and_unsafe_order_falls_back(const char* path) {
+  const auto fused_composition = image_effect_composition(
+      path, 32, 32, {.fit = chroma::FitMode::fill},
+      chroma::EffectProgram({
+          chroma::Transform2DEffect{.m00 = 0.95, .m01 = 0.1, .m02 = 0.25,
+                                    .m10 = -0.05, .m11 = 0.9, .m12 = 1.5},
+          chroma::CropEffect{.x = 1, .y = 2, .width = 28, .height = 26},
+          test_color_matrix(), chroma::OpacityEffect{.opacity = 0.7}}));
+  const auto fused_plan = chroma::compile_frame(fused_composition, chroma::FrameIndex(0));
+  chroma::CpuRenderContext fused_context;
+  chroma::CpuRenderContext reference_context;
+  const auto fused = fused_context.execute(fused_plan);
+  const auto reference =
+      reference_context.execute(fused_plan, chroma::CpuExecutionMode::reference);
+  CHECK(fused.pixels() == reference.pixels());
+  CHECK(fused_context.last_execution_stats().fused_operations == 1);
+
+  const auto fallback_composition = image_effect_composition(
+      path, 32, 32, {.fit = chroma::FitMode::fill},
+      chroma::EffectProgram({
+          chroma::OpacityEffect{.opacity = 0.7},
+          chroma::Transform2DEffect{.m02 = 1.0},
+          chroma::CropEffect{.x = 2, .y = 2, .width = 28, .height = 28}}));
+  const auto fallback_plan =
+      chroma::compile_frame(fallback_composition, chroma::FrameIndex(0));
+  chroma::CpuRenderContext fallback_context;
+  chroma::CpuRenderContext fallback_reference_context;
+  const auto fallback = fallback_context.execute(fallback_plan);
+  const auto fallback_reference =
+      fallback_reference_context.execute(fallback_plan, chroma::CpuExecutionMode::reference);
+  CHECK(fallback.pixels() == fallback_reference.pixels());
+  CHECK(fallback_context.last_execution_stats().fused_operations == 0);
+  CHECK(fallback_context.last_execution_stats().reference_operations == 1);
+}
+
 chroma::Surface render_test_shape(chroma::ShapeGeometry geometry,
                                   std::optional<chroma::ShapeStroke> stroke = std::nullopt) {
   const chroma::Composition composition(
@@ -442,6 +527,8 @@ int main(int argc, char** argv) {
   }
   if (argc >= 3) {
     image_layers_decode_once_and_execute_effects(argv[2]);
+    fused_image_sampling_and_effects_match_the_reference_path(argv[2]);
+    fused_transform_matches_reference_and_unsafe_order_falls_back(argv[2]);
   }
 
   if (failures != 0) {

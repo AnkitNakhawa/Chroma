@@ -156,25 +156,37 @@ void apply_opacity(Surface& surface, const OpacityEffect& opacity) noexcept {
   }
 }
 
+void apply_opacity(Pixel& pixel, const OpacityEffect& opacity) noexcept {
+  const auto factor = static_cast<float>(opacity.opacity);
+  pixel.red *= factor;
+  pixel.green *= factor;
+  pixel.blue *= factor;
+  pixel.alpha *= factor;
+}
+
+void apply_color_matrix(Pixel& pixel, const ColorMatrixEffect& matrix) noexcept {
+  const auto alpha = static_cast<double>(pixel.alpha);
+  const auto reciprocal_alpha = alpha > 0.0 ? 1.0 / alpha : 0.0;
+  const double straight[] = {static_cast<double>(pixel.red) * reciprocal_alpha,
+                             static_cast<double>(pixel.green) * reciprocal_alpha,
+                             static_cast<double>(pixel.blue) * reciprocal_alpha, alpha};
+  double transformed[4]{};
+  for (std::size_t row = 0; row < 4; ++row) {
+    transformed[row] = matrix.values[row * 5 + 4];
+    for (std::size_t column = 0; column < 4; ++column) {
+      transformed[row] += matrix.values[row * 5 + column] * straight[column];
+    }
+  }
+  const auto transformed_alpha = clamp_unit(transformed[3]);
+  pixel = Pixel{.red = clamp_unit(transformed[0]) * transformed_alpha,
+                .green = clamp_unit(transformed[1]) * transformed_alpha,
+                .blue = clamp_unit(transformed[2]) * transformed_alpha,
+                .alpha = transformed_alpha};
+}
+
 void apply_color_matrix(Surface& surface, const ColorMatrixEffect& matrix) noexcept {
   for (auto& pixel : surface.pixels()) {
-    const auto alpha = static_cast<double>(pixel.alpha);
-    const auto reciprocal_alpha = alpha > 0.0 ? 1.0 / alpha : 0.0;
-    const double straight[] = {static_cast<double>(pixel.red) * reciprocal_alpha,
-                               static_cast<double>(pixel.green) * reciprocal_alpha,
-                               static_cast<double>(pixel.blue) * reciprocal_alpha, alpha};
-    double transformed[4]{};
-    for (std::size_t row = 0; row < 4; ++row) {
-      transformed[row] = matrix.values[row * 5 + 4];
-      for (std::size_t column = 0; column < 4; ++column) {
-        transformed[row] += matrix.values[row * 5 + column] * straight[column];
-      }
-    }
-    const auto transformed_alpha = clamp_unit(transformed[3]);
-    pixel = Pixel{.red = clamp_unit(transformed[0]) * transformed_alpha,
-                  .green = clamp_unit(transformed[1]) * transformed_alpha,
-                  .blue = clamp_unit(transformed[2]) * transformed_alpha,
-                  .alpha = transformed_alpha};
+    apply_color_matrix(pixel, matrix);
   }
 }
 
@@ -247,16 +259,25 @@ Pixel composite(Pixel source, Pixel destination, BlendMode mode) noexcept {
                .alpha = source_alpha + destination_alpha * (1.0F - source_alpha)};
 }
 
-Surface place_surface_cpu(Surface source, std::int32_t width, std::int32_t height,
-                          const SourcePlacement& placement) {
+struct SourcePlacementMapping {
+  double source_width;
+  double source_height;
+  double scale_x;
+  double scale_y;
+  double placed_width;
+  double placed_height;
+  double left;
+  double top;
+};
+
+SourcePlacementMapping source_placement_mapping(const Surface& source, std::int32_t width,
+                                                std::int32_t height,
+                                                const SourcePlacement& placement) {
   if (fit_mode_name(placement.fit) == "unknown" ||
       !std::isfinite(placement.position_x) || !std::isfinite(placement.position_y) ||
       placement.position_x < 0.0 || placement.position_x > 1.0 ||
       placement.position_y < 0.0 || placement.position_y > 1.0) {
     throw std::invalid_argument("source placement is invalid");
-  }
-  if (source.width() == width && source.height() == height) {
-    return source;
   }
 
   const auto source_width = static_cast<double>(source.width());
@@ -288,24 +309,43 @@ Surface place_surface_cpu(Surface source, std::int32_t width, std::int32_t heigh
 
   const auto placed_width = source_width * scale_x;
   const auto placed_height = source_height * scale_y;
-  const auto left = (target_width - placed_width) * placement.position_x;
-  const auto top = (target_height - placed_height) * placement.position_y;
+  return SourcePlacementMapping{
+      .source_width = source_width,
+      .source_height = source_height,
+      .scale_x = scale_x,
+      .scale_y = scale_y,
+      .placed_width = placed_width,
+      .placed_height = placed_height,
+      .left = (target_width - placed_width) * placement.position_x,
+      .top = (target_height - placed_height) * placement.position_y};
+}
+
+Pixel sample_placed_surface(const Surface& source, const SourcePlacementMapping& mapping,
+                            std::int32_t x, std::int32_t y) noexcept {
+  const auto target_x = static_cast<double>(x) + 0.5;
+  const auto target_y = static_cast<double>(y) + 0.5;
+  if (target_x < mapping.left || target_x >= mapping.left + mapping.placed_width ||
+      target_y < mapping.top || target_y >= mapping.top + mapping.placed_height) {
+    return {};
+  }
+  const auto source_x = std::clamp((target_x - mapping.left) / mapping.scale_x - 0.5, 0.0,
+                                   mapping.source_width - 1.0);
+  const auto source_y = std::clamp((target_y - mapping.top) / mapping.scale_y - 0.5, 0.0,
+                                   mapping.source_height - 1.0);
+  return sample_bilinear(source, source_x, source_y);
+}
+
+Surface place_surface_cpu(Surface source, std::int32_t width, std::int32_t height,
+                          const SourcePlacement& placement) {
+  const auto mapping = source_placement_mapping(source, width, height, placement);
+  if (source.width() == width && source.height() == height) {
+    return source;
+  }
+
   Surface output(width, height);
   for (std::int32_t y = 0; y < height; ++y) {
-    const auto target_y = static_cast<double>(y) + 0.5;
-    if (target_y < top || target_y >= top + placed_height) {
-      continue;
-    }
     for (std::int32_t x = 0; x < width; ++x) {
-      const auto target_x = static_cast<double>(x) + 0.5;
-      if (target_x < left || target_x >= left + placed_width) {
-        continue;
-      }
-      const auto source_x = std::clamp((target_x - left) / scale_x - 0.5, 0.0,
-                                       source_width - 1.0);
-      const auto source_y = std::clamp((target_y - top) / scale_y - 0.5, 0.0,
-                                       source_height - 1.0);
-      output.pixel(x, y) = sample_bilinear(source, source_x, source_y);
+      output.pixel(x, y) = sample_placed_surface(source, mapping, x, y);
     }
   }
   return output;
@@ -332,6 +372,100 @@ Surface apply_effect_program_cpu(Surface source, const EffectProgram& program) {
         effect);
   }
   return source;
+}
+
+bool fused_program_supported(const Surface& source, const Surface& destination,
+                             const EffectProgram& program) noexcept {
+  std::size_t transform_count = 0;
+  for (std::size_t index = 0; index < program.effects().size(); ++index) {
+    const auto& effect = program.effects()[index];
+    if (std::holds_alternative<Transform2DEffect>(effect)) {
+      ++transform_count;
+      if (index != 0 || transform_count != 1 || source.width() != destination.width() ||
+          source.height() != destination.height()) {
+        return false;
+      }
+      continue;
+    }
+    if (!std::holds_alternative<CropEffect>(effect) &&
+        !std::holds_alternative<OpacityEffect>(effect) &&
+        !std::holds_alternative<ColorMatrixEffect>(effect)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+bool composite_fused_source(const Surface& source, Surface& destination,
+                            const SourcePlacement& placement, const EffectProgram& program,
+                            BlendMode blend_mode) {
+  if (!fused_program_supported(source, destination, program)) {
+    return false;
+  }
+
+  const auto placement_mapping = source_placement_mapping(
+      source, destination.width(), destination.height(), placement);
+  const auto* transform = program.effects().empty()
+                              ? nullptr
+                              : std::get_if<Transform2DEffect>(&program.effects().front());
+  double inverse00 = 0.0;
+  double inverse01 = 0.0;
+  double inverse10 = 0.0;
+  double inverse11 = 0.0;
+  bool singular_transform = false;
+  if (transform != nullptr) {
+    const auto determinant = transform->m00 * transform->m11 - transform->m01 * transform->m10;
+    singular_transform = std::abs(determinant) <= 1e-12;
+    if (!singular_transform) {
+      inverse00 = transform->m11 / determinant;
+      inverse01 = -transform->m01 / determinant;
+      inverse10 = -transform->m10 / determinant;
+      inverse11 = transform->m00 / determinant;
+    }
+  }
+
+  const bool native_placement =
+      source.width() == destination.width() && source.height() == destination.height();
+  for (std::int32_t y = 0; y < destination.height(); ++y) {
+    for (std::int32_t x = 0; x < destination.width(); ++x) {
+      Pixel pixel{};
+      if (transform != nullptr && !singular_transform) {
+        const auto destination_x = static_cast<double>(x) + 0.5;
+        const auto destination_y = static_cast<double>(y) + 0.5;
+        const auto translated_x = destination_x - transform->m02;
+        const auto translated_y = destination_y - transform->m12;
+        const auto source_x = inverse00 * translated_x + inverse01 * translated_y - 0.5;
+        const auto source_y = inverse10 * translated_x + inverse11 * translated_y - 0.5;
+        pixel = sample_bilinear(source, source_x, source_y);
+      } else if (transform == nullptr) {
+        pixel = native_placement ? source.pixel(x, y)
+                                 : sample_placed_surface(source, placement_mapping, x, y);
+      }
+
+      const auto first_effect = transform != nullptr ? std::size_t{1} : std::size_t{0};
+      for (std::size_t index = first_effect; index < program.effects().size(); ++index) {
+        const auto& effect = program.effects()[index];
+        if (const auto* crop = std::get_if<CropEffect>(&effect)) {
+          const auto right = static_cast<std::int64_t>(crop->x) + crop->width;
+          const auto bottom = static_cast<std::int64_t>(crop->y) + crop->height;
+          if (static_cast<std::int64_t>(x) < crop->x ||
+              static_cast<std::int64_t>(x) >= right ||
+              static_cast<std::int64_t>(y) < crop->y ||
+              static_cast<std::int64_t>(y) >= bottom) {
+            pixel = {};
+          }
+        } else if (const auto* opacity = std::get_if<OpacityEffect>(&effect)) {
+          apply_opacity(pixel, *opacity);
+        } else if (const auto* matrix = std::get_if<ColorMatrixEffect>(&effect)) {
+          apply_color_matrix(pixel, *matrix);
+        }
+      }
+
+      auto& output = destination.pixel(x, y);
+      output = composite(pixel, output, blend_mode);
+    }
+  }
+  return true;
 }
 
 bool shape_contains(const ShapeGeometry& geometry, double sample_x, double sample_y,
@@ -451,7 +585,8 @@ CpuRenderContext::~CpuRenderContext() = default;
 CpuRenderContext::CpuRenderContext(CpuRenderContext&&) noexcept = default;
 CpuRenderContext& CpuRenderContext::operator=(CpuRenderContext&&) noexcept = default;
 
-Surface CpuRenderContext::execute(const ExecutionPlan& plan) {
+Surface CpuRenderContext::execute(const ExecutionPlan& plan, CpuExecutionMode mode) {
+  last_execution_stats_ = {};
   Surface result(plan.width(), plan.height());
   for (const auto& operation : plan.operations()) {
     if (const auto* clear = std::get_if<ClearOperation>(&operation)) {
@@ -504,6 +639,7 @@ Surface CpuRenderContext::execute(const ExecutionPlan& plan) {
     }
 
     Surface source_surface(1, 1);
+    SourcePlacement placement;
     const EffectProgram* effects = nullptr;
     BlendMode blend_mode = BlendMode::source_over;
     if (const auto* video = std::get_if<CompositeVideoFrameOperation>(&operation)) {
@@ -513,8 +649,8 @@ Surface CpuRenderContext::execute(const ExecutionPlan& plan) {
         decoder = std::make_unique<VideoDecoder>(video->asset_path);
       }
       auto decoded = decoder->frame_at(video->source_time);
-      source_surface = place_surface_cpu(std::move(decoded.surface), result.width(),
-                                         result.height(), video->placement);
+      source_surface = std::move(decoded.surface);
+      placement = video->placement;
       effects = &video->effects;
       blend_mode = video->blend_mode;
     } else {
@@ -524,11 +660,20 @@ Surface CpuRenderContext::execute(const ExecutionPlan& plan) {
       if (found == impl_->images.end()) {
         found = impl_->images.emplace(key, decode_image(image.asset_path)).first;
       }
-      source_surface = place_surface_cpu(found->second, result.width(), result.height(),
-                                         image.placement);
+      source_surface = found->second;
+      placement = image.placement;
       effects = &image.effects;
       blend_mode = image.blend_mode;
     }
+
+    if (mode == CpuExecutionMode::fused &&
+        composite_fused_source(source_surface, result, placement, *effects, blend_mode)) {
+      ++last_execution_stats_.fused_operations;
+      continue;
+    }
+    ++last_execution_stats_.reference_operations;
+    source_surface = place_surface_cpu(std::move(source_surface), result.width(),
+                                       result.height(), placement);
     source_surface = apply_effect_program_cpu(std::move(source_surface), *effects);
     for (std::size_t index = 0; index < result.size(); ++index) {
       result.pixels()[index] =

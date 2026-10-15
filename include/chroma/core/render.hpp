@@ -39,6 +39,18 @@ class Surface {
   std::vector<Pixel> pixels_;
 };
 
+enum class CpuExecutionMode {
+  fused,
+  reference,
+};
+
+struct CpuExecutionStats {
+  std::size_t fused_operations{0};
+  std::size_t reference_operations{0};
+
+  friend bool operator==(const CpuExecutionStats&, const CpuExecutionStats&) = default;
+};
+
 class CpuRenderContext {
  public:
   CpuRenderContext();
@@ -49,11 +61,16 @@ class CpuRenderContext {
   CpuRenderContext(const CpuRenderContext&) = delete;
   CpuRenderContext& operator=(const CpuRenderContext&) = delete;
 
-  [[nodiscard]] Surface execute(const ExecutionPlan& plan);
+  [[nodiscard]] Surface execute(const ExecutionPlan& plan,
+                                CpuExecutionMode mode = CpuExecutionMode::fused);
+  [[nodiscard]] const CpuExecutionStats& last_execution_stats() const noexcept {
+    return last_execution_stats_;
+  }
 
  private:
   struct Impl;
   std::unique_ptr<Impl> impl_;
+  CpuExecutionStats last_execution_stats_;
 };
 
 [[nodiscard]] Pixel composite_over(Pixel source, Pixel destination) noexcept;
