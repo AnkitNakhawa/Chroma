@@ -205,6 +205,46 @@ Pixel composite_over(Pixel source, Pixel destination) noexcept {
                .alpha = source.alpha + destination.alpha * inverse_source_alpha};
 }
 
+Pixel composite(Pixel source, Pixel destination, BlendMode mode) noexcept {
+  if (mode == BlendMode::source_over) {
+    return composite_over(source, destination);
+  }
+  if (mode == BlendMode::plus) {
+    return Pixel{.red = std::min(source.red + destination.red, 1.0F),
+                 .green = std::min(source.green + destination.green, 1.0F),
+                 .blue = std::min(source.blue + destination.blue, 1.0F),
+                 .alpha = std::min(source.alpha + destination.alpha, 1.0F)};
+  }
+
+  const auto source_alpha = std::clamp(source.alpha, 0.0F, 1.0F);
+  const auto destination_alpha = std::clamp(destination.alpha, 0.0F, 1.0F);
+  const auto source_straight = [source_alpha](float channel) noexcept {
+    return source_alpha > 0.0F ? channel / source_alpha : 0.0F;
+  };
+  const auto destination_straight = [destination_alpha](float channel) noexcept {
+    return destination_alpha > 0.0F ? channel / destination_alpha : 0.0F;
+  };
+  if (mode != BlendMode::multiply && mode != BlendMode::screen) {
+    return composite_over(source, destination);
+  }
+  const auto blend_channel = [mode, source_alpha, destination_alpha, &source_straight,
+                              &destination_straight](float source_channel,
+                                                    float destination_channel) noexcept {
+    const auto source_value = source_straight(source_channel);
+    const auto destination_value = destination_straight(destination_channel);
+    const auto blended = mode == BlendMode::multiply
+                             ? source_value * destination_value
+                             : source_value + destination_value - source_value * destination_value;
+    return source_channel * (1.0F - destination_alpha) +
+           destination_channel * (1.0F - source_alpha) +
+           source_alpha * destination_alpha * blended;
+  };
+  return Pixel{.red = blend_channel(source.red, destination.red),
+               .green = blend_channel(source.green, destination.green),
+               .blue = blend_channel(source.blue, destination.blue),
+               .alpha = source_alpha + destination_alpha * (1.0F - source_alpha)};
+}
+
 Surface apply_effect_program_cpu(Surface source, const EffectProgram& program) {
   for (const auto& effect : program.effects()) {
     std::visit(
@@ -246,8 +286,17 @@ Surface CpuRenderContext::execute(const ExecutionPlan& plan) {
     }
     if (const auto* solid = std::get_if<CompositeSolidOperation>(&operation)) {
       const auto source = premultiply(solid->color);
-      for (auto& destination : result.pixels()) {
-        destination = composite_over(source, destination);
+      if (solid->effects.effects().empty()) {
+        for (auto& destination : result.pixels()) {
+          destination = composite(source, destination, solid->blend_mode);
+        }
+      } else {
+        auto effected = apply_effect_program_cpu(
+            Surface(result.width(), result.height(), source), solid->effects);
+        for (std::size_t index = 0; index < result.size(); ++index) {
+          result.pixels()[index] =
+              composite(effected.pixels()[index], result.pixels()[index], solid->blend_mode);
+        }
       }
       continue;
     }
@@ -258,19 +307,16 @@ Surface CpuRenderContext::execute(const ExecutionPlan& plan) {
     if (!decoder) {
       decoder = std::make_unique<VideoDecoder>(video.asset_path);
     }
-    const auto decoded = decoder->frame_at(video.source_time);
+    auto decoded = decoder->frame_at(video.source_time);
     if (decoded.surface.width() != result.width() ||
         decoded.surface.height() != result.height()) {
       throw std::runtime_error("video layer dimensions must match the composition canvas");
     }
-    const auto opacity = static_cast<float>(video.opacity);
+    auto source_surface =
+        apply_effect_program_cpu(std::move(decoded.surface), video.effects);
     for (std::size_t index = 0; index < result.size(); ++index) {
-      auto source = decoded.surface.pixels()[index];
-      source.red *= opacity;
-      source.green *= opacity;
-      source.blue *= opacity;
-      source.alpha *= opacity;
-      result.pixels()[index] = composite_over(source, result.pixels()[index]);
+      result.pixels()[index] =
+          composite(source_surface.pixels()[index], result.pixels()[index], video.blend_mode);
     }
   }
   return result;

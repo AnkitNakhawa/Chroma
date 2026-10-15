@@ -64,4 +64,33 @@ Video files are declared separately from their uses so future plans can share pr
 - Video layers sample source time using the composition's exact rational frame rate. `source_start_frame` defaults to 0 and `opacity` defaults to 1.
 - The current CPU spike requires decoded video dimensions to exactly match the canvas. Scaling and placement transforms have not landed yet.
 - Asset existence and decodability are checked when media is probed or rendered, not during syntax-only composition validation.
-- The internal effect IR is intentionally not exposed in this experimental JSON schema yet. Composition-level effect fields will be added only as their CPU reference semantics become executable and tested.
+
+## Basic effects and blending
+
+Solid and video layers may declare an ordered `effects` array and an optional `blend_mode`:
+
+```json
+{
+  "id": "panel",
+  "type": "solid",
+  "start_frame": 0,
+  "end_frame": 60,
+  "color": [0.95, 0.28, 0.08, 1.0],
+  "blend_mode": "screen",
+  "effects": [
+    {"type": "transform_2d", "matrix": [1, 0, 12, 0, 1, 8]},
+    {"type": "crop", "x": 52, "y": 48, "width": 216, "height": 84},
+    {"type": "opacity", "value": 0.82}
+  ]
+}
+```
+
+- Effects execute in declaration order.
+- `transform_2d` uses the affine matrix `[m00, m01, m02, m10, m11, m12]`, maps source pixel centers into a same-sized destination, samples bilinearly, and treats pixels outside the source as transparent.
+- `crop` retains pixels inside the half-open integer rectangle `[x, x + width) × [y, y + height)` and makes the remainder transparent.
+- `opacity` accepts a value from 0 through 1 and scales premultiplied color and alpha.
+- `color_matrix` requires 20 finite row-major values defining a 4×5 matrix over straight linear RGBA. The result is clamped and premultiplied again.
+- Supported blend modes are `source_over` (default), `multiply`, `screen`, and `plus`.
+- At most 64 effects may be declared on a layer in the experimental schema.
+- Video layers retain the legacy top-level `opacity` field. When it differs from 1, it is applied after the ordered `effects` array.
+- Blur, temporal, external/plugin, animated, and fit/contain/cover effects are not accepted by the JSON schema yet.

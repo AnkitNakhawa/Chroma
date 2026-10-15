@@ -83,7 +83,7 @@ The first useful product target is template-style programmatic video: a backgrou
 ### Ordered implementation slices
 
 1. [complete] Define an immutable effect IR and effect-trait contract covering identity, pointwise, coordinate-transform, neighborhood, temporal, and external/barrier operations. Add stable optimized-plan inspection.
-2. [next] Implement transforms, crop/fit, opacity, color matrices, and blend modes in the CPU reference backend. Add algebraic simplification for identities, combined transforms, combined opacity/color operations, and dead nodes.
+2. [in_progress] Implement transforms, crop/fit, opacity, color matrices, and blend modes in the CPU reference backend. Transform, crop, opacity, color-matrix, and four blend modes now execute end to end; fit helpers and broader dead-node simplification remain.
 3. [pending] Partition the optimized graph into fusible groups and explicit barriers. Add pass-count, intermediate-surface, estimated-byte-traffic, and cache-decision diagnostics; prove the planner with tests before GPU code generation.
 4. [pending] Add image layers plus text and basic shapes. Prefer a narrow text shaping/raster dependency, cache static raster results, and avoid adopting a general compositor dependency at this stage.
 5. [pending] Build the first Linux/NVIDIA CUDA vertical slice: retain decoded surfaces on the GPU where supported and fuse sample/transform/color/opacity/composite for the benchmark-critical path. Compare output against the CPU reference backend.
@@ -119,3 +119,5 @@ The first useful product target is template-style programmatic video: a backgrou
 | First directly encoded 60-frame MP4 probed at about 1.966 seconds instead of 2 seconds | 1 | Set frame and stream durations explicitly; added a regression test proving 60 frames at 30 fps probe as exactly 2 seconds. |
 | FFmpeg-disabled build warned about an unused timing helper | 1 | Compiled the steady-clock helper only when the FFmpeg render path is enabled. |
 | End-of-media test did not throw for Matroska fixture | 1 | Matroska exposed duration only at container level; rescaled the container duration into the selected stream time base as a fallback. |
+| Adding effect programs as defaulted aggregate members failed to compile | 1 | Replaced the explicit constructor's default argument with a real default constructor while keeping vector conversion explicit. |
+| `clang-format` was unavailable on the development host | 1 | Kept the existing project style manually and verified whitespace with `git diff --check` plus compiler warnings. |

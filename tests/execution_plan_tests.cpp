@@ -127,6 +127,15 @@ void plans_reject_invalid_operations() {
            chroma::CompositeSolidOperation{
                .source_id = "bad-color", .color = chroma::Color{2.0, 0.0, 0.0, 1.0}}}),
       std::invalid_argument);
+  CHECK_THROWS_AS(
+      chroma::ExecutionPlan(
+          1, 1, chroma::FrameIndex(0),
+          {chroma::ClearOperation{.color = chroma::Color{0.0, 0.0, 0.0, 0.0}},
+           chroma::CompositeSolidOperation{
+               .source_id = "bad-blend",
+               .color = chroma::Color{1.0, 0.0, 0.0, 1.0},
+               .blend_mode = static_cast<chroma::BlendMode>(99)}}),
+      std::invalid_argument);
 }
 
 void video_layers_compile_to_exact_source_times() {
@@ -149,8 +158,35 @@ void video_layers_compile_to_exact_source_times() {
     CHECK(video->source_id == "video");
     CHECK(video->asset_path == "clip.mkv");
     CHECK(video->source_time == chroma::Rational(1, 5));
-    CHECK(video->opacity == 0.75);
+    CHECK(video->effects.effects().size() == 1);
+    const auto* opacity = std::get_if<chroma::OpacityEffect>(&video->effects.effects().front());
+    CHECK(opacity != nullptr);
+    if (opacity != nullptr) {
+      CHECK(opacity->opacity == 0.75);
+    }
   }
+}
+
+void layer_effects_and_blends_lower_into_the_plan() {
+  const chroma::Composition composition(
+      1, 4, 2, chroma::FrameRate(chroma::Rational(30)),
+      chroma::FrameRange(chroma::FrameIndex(0), chroma::FrameIndex(10)),
+      {chroma::SolidLayer{
+          .id = "effected",
+          .range = chroma::FrameRange(chroma::FrameIndex(0), chroma::FrameIndex(10)),
+          .color = chroma::Color{.red = 1.0, .green = 0.0, .blue = 0.0, .alpha = 1.0},
+          .effects = chroma::EffectProgram({chroma::OpacityEffect{.opacity = 0.5}}),
+          .blend_mode = chroma::BlendMode::screen}});
+  const auto plan = chroma::compile_frame(composition, chroma::FrameIndex(0));
+  const auto* solid = std::get_if<chroma::CompositeSolidOperation>(&plan.operations().back());
+  CHECK(solid != nullptr);
+  if (solid != nullptr) {
+    CHECK(solid->effects.effects().size() == 1);
+    CHECK(solid->blend_mode == chroma::BlendMode::screen);
+  }
+  const auto json = chroma::execution_plan_json(plan);
+  CHECK(json.find("\"opacity\"") != std::string::npos);
+  CHECK(json.find("\"screen\"") != std::string::npos);
 }
 
 void optimized_plan_exposes_rewrites_without_changing_execution() {
@@ -171,7 +207,22 @@ void optimized_plan_exposes_rewrites_without_changing_execution() {
   CHECK(json.find("video_sample") != std::string::npos);
   CHECK(json.find("opacity") == std::string::npos);
   CHECK(json.find("source_over") != std::string::npos);
-  CHECK(json.find("\"rewrite_count\": 1") != std::string::npos);
+  CHECK(json.find("\"rewrite_count\": 0") != std::string::npos);
+}
+
+void optimizer_inspection_marks_barrier_chains_as_multi_pass() {
+  const chroma::Composition composition(
+      1, 4, 2, chroma::FrameRate(chroma::Rational(30)),
+      chroma::FrameRange(chroma::FrameIndex(0), chroma::FrameIndex(10)),
+      {chroma::SolidLayer{
+          .id = "blurred",
+          .range = chroma::FrameRange(chroma::FrameIndex(0), chroma::FrameIndex(10)),
+          .color = chroma::Color{.red = 1.0, .green = 0.0, .blue = 0.0, .alpha = 1.0},
+          .effects = chroma::EffectProgram({chroma::GaussianBlurEffect{.radius = 2.0}})}});
+  const auto json = chroma::optimized_execution_plan_json(
+      chroma::compile_frame(composition, chroma::FrameIndex(0)));
+  CHECK(json.find("multi_pass_required") != std::string::npos);
+  CHECK(json.find("\"gpu_fusible\": false") != std::string::npos);
 }
 
 }  // namespace
@@ -185,7 +236,9 @@ int main() {
   plans_reject_unsafe_dimensions();
   plans_reject_invalid_operations();
   video_layers_compile_to_exact_source_times();
+  layer_effects_and_blends_lower_into_the_plan();
   optimized_plan_exposes_rewrites_without_changing_execution();
+  optimizer_inspection_marks_barrier_chains_as_multi_pass();
 
   if (failures != 0) {
     std::cerr << failures << " test assertion(s) failed\n";

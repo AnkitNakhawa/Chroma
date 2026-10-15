@@ -120,6 +120,89 @@ void invalid_video_references_are_reported() {
   CHECK(has_code(result, "layer.invalid_opacity"));
 }
 
+void effects_and_blend_modes_are_normalized() {
+  constexpr std::string_view source = R"json(
+  {
+    "schema_version": 1,
+    "canvas": {
+      "width": 8,
+      "height": 4,
+      "frame_rate": {"numerator": 30, "denominator": 1},
+      "duration_frames": 10
+    },
+    "layers": [
+      {
+        "id": "effected",
+        "type": "solid",
+        "start_frame": 0,
+        "end_frame": 10,
+        "color": [1, 0, 0, 1],
+        "blend_mode": "multiply",
+        "effects": [
+          {"type": "transform_2d", "matrix": [1, 0, 2, 0, 1, 1]},
+          {"type": "crop", "x": 2, "y": 1, "width": 4, "height": 2},
+          {"type": "opacity", "value": 0.5},
+          {"type": "color_matrix", "matrix": [
+            1, 0, 0, 0, 0,
+            0, 1, 0, 0, 0,
+            0, 0, 1, 0, 0,
+            0, 0, 0, 1, 0
+          ]}
+        ]
+      }
+    ]
+  }
+  )json";
+  const auto result = chroma::parse_composition(source);
+  CHECK(result.valid());
+  if (!result.composition) {
+    return;
+  }
+  const auto* layer = std::get_if<chroma::SolidLayer>(&result.composition->layers().front());
+  CHECK(layer != nullptr);
+  if (layer != nullptr) {
+    CHECK(layer->blend_mode == chroma::BlendMode::multiply);
+    CHECK(layer->effects.effects().size() == 4);
+    CHECK(std::holds_alternative<chroma::Transform2DEffect>(layer->effects.effects()[0]));
+    CHECK(std::holds_alternative<chroma::CropEffect>(layer->effects.effects()[1]));
+    CHECK(std::holds_alternative<chroma::OpacityEffect>(layer->effects.effects()[2]));
+    CHECK(std::holds_alternative<chroma::ColorMatrixEffect>(layer->effects.effects()[3]));
+  }
+}
+
+void invalid_effects_and_blends_are_reported() {
+  constexpr std::string_view source = R"json(
+  {
+    "schema_version": 1,
+    "canvas": {
+      "width": 8,
+      "height": 4,
+      "frame_rate": {"numerator": 30, "denominator": 1},
+      "duration_frames": 10
+    },
+    "layers": [
+      {
+        "id": "invalid",
+        "type": "solid",
+        "start_frame": 0,
+        "end_frame": 10,
+        "color": [1, 0, 0, 1],
+        "blend_mode": "difference",
+        "effects": [
+          {"type": "transform_2d", "matrix": [1, 0]},
+          {"type": "blur", "radius": 2}
+        ]
+      }
+    ]
+  }
+  )json";
+  const auto result = chroma::parse_composition(source);
+  CHECK(!result.valid());
+  CHECK(has_code(result, "layer.unsupported_blend_mode"));
+  CHECK(has_code(result, "effect.invalid_array"));
+  CHECK(has_code(result, "effect.unsupported_type"));
+}
+
 void invalid_json_is_reported() {
   const auto result = chroma::parse_composition("{");
   CHECK(!result.valid());
@@ -205,6 +288,8 @@ int main() {
   oversized_canvases_are_rejected_before_rendering();
   video_assets_and_layers_are_normalized();
   invalid_video_references_are_reported();
+  effects_and_blend_modes_are_normalized();
+  invalid_effects_and_blends_are_reported();
 
   if (failures != 0) {
     std::cerr << failures << " test assertion(s) failed\n";

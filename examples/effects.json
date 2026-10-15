@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "canvas": {
+    "width": 320,
+    "height": 180,
+    "frame_rate": {"numerator": 30, "denominator": 1},
+    "duration_frames": 60
+  },
+  "layers": [
+    {
+      "id": "background",
+      "type": "solid",
+      "start_frame": 0,
+      "end_frame": 60,
+      "color": [0.03, 0.06, 0.14, 1.0]
+    },
+    {
+      "id": "panel",
+      "type": "solid",
+      "start_frame": 0,
+      "end_frame": 60,
+      "color": [0.95, 0.28, 0.08, 1.0],
+      "blend_mode": "screen",
+      "effects": [
+        {"type": "transform_2d", "matrix": [1, 0, 12, 0, 1, 8]},
+        {"type": "crop", "x": 52, "y": 48, "width": 216, "height": 84},
+        {"type": "opacity", "value": 0.82},
+        {"type": "opacity", "value": 0.9}
+      ]
+    }
+  ]
+}

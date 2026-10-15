@@ -43,3 +43,10 @@
 - Added conservative identity removal, adjacent transform/opacity/color-matrix composition, fusion-barrier partitioning, stable effect JSON, and `inspect-optimized-plan`. The command is explicitly planning-only; the existing typed plan remains authoritative for execution.
 - Added focused effect and plan tests. Both FFmpeg-enabled and core-only builds remain green after the compiler slice.
 - Added CPU reference execution for transform, crop, opacity, and color-matrix effect programs, including transparent-edge bilinear sampling, singular-transform behavior, straight-alpha color math, and explicit failures for unsupported effect classes.
+
+## 2026-10-15
+- Exposed transform, crop, opacity, and color-matrix programs through the experimental composition JSON and typed execution plan.
+- Added source-over, multiply, screen, and plus blending with premultiplied-alpha CPU semantics.
+- Normalized legacy video opacity into the same effect chain while removing identity opacity before execution.
+- Added parser/compiler/renderer seam tests, invalid-input diagnostics, fusion-barrier inspection coverage, and a reproducible effects composition.
+- Rendered and visually inspected a 320×180 effects frame, then encoded and probed a 60-frame, 30 fps, exactly two-second H.264 demo.

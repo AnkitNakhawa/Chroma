@@ -340,6 +340,14 @@ std::string optimized_effect_program_json(const OptimizedEffectProgram& program)
       .dump(2);
 }
 
+std::string effect_program_json(const EffectProgram& program) {
+  nlohmann::json effects = nlohmann::json::array();
+  for (const auto& effect : program.effects()) {
+    effects.push_back(effect_json(effect));
+  }
+  return effects.dump(2);
+}
+
 ColorMatrixEffect identity_color_matrix() noexcept {
   return ColorMatrixEffect{.values = {1.0, 0.0, 0.0, 0.0, 0.0,
                                       0.0, 1.0, 0.0, 0.0, 0.0,

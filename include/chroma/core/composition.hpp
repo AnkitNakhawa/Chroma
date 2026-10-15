@@ -8,6 +8,7 @@
 #include <vector>
 #include <variant>
 
+#include "chroma/core/effect.hpp"
 #include "chroma/core/timeline.hpp"
 
 namespace chroma {
@@ -31,10 +32,21 @@ struct Color {
   friend bool operator==(const Color&, const Color&) = default;
 };
 
+enum class BlendMode {
+  source_over,
+  multiply,
+  screen,
+  plus,
+};
+
+[[nodiscard]] std::string_view blend_mode_name(BlendMode mode) noexcept;
+
 struct SolidLayer {
   std::string id;
   FrameRange range;
   Color color;
+  EffectProgram effects;
+  BlendMode blend_mode{BlendMode::source_over};
 };
 
 struct VideoAsset {
@@ -48,6 +60,8 @@ struct VideoLayer {
   std::string asset_id;
   FrameIndex source_start;
   double opacity;
+  EffectProgram effects;
+  BlendMode blend_mode{BlendMode::source_over};
 };
 
 using CompositionLayer = std::variant<SolidLayer, VideoLayer>;

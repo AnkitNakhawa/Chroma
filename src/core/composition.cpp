@@ -1,5 +1,6 @@
 #include "chroma/core/composition.hpp"
 
+#include <array>
 #include <cmath>
 #include <limits>
 #include <optional>
@@ -127,7 +128,186 @@ std::optional<Color> parse_color(const Json* value, std::string_view path,
   return color;
 }
 
+bool valid_blend_mode(BlendMode mode) noexcept {
+  switch (mode) {
+    case BlendMode::source_over:
+    case BlendMode::multiply:
+    case BlendMode::screen:
+    case BlendMode::plus:
+      return true;
+  }
+  return false;
+}
+
+std::optional<BlendMode> parse_blend_mode(const Json* value, std::string_view path,
+                                          std::vector<Diagnostic>& diagnostics) {
+  if (value == nullptr) {
+    return BlendMode::source_over;
+  }
+  const auto name = string_value(value, path, diagnostics);
+  if (!name) {
+    return std::nullopt;
+  }
+  if (*name == "source_over") return BlendMode::source_over;
+  if (*name == "multiply") return BlendMode::multiply;
+  if (*name == "screen") return BlendMode::screen;
+  if (*name == "plus") return BlendMode::plus;
+  add_diagnostic(diagnostics, "layer.unsupported_blend_mode", std::string(path),
+                 "supported blend modes are source_over, multiply, screen, and plus");
+  return std::nullopt;
+}
+
+template <std::size_t Size>
+std::optional<std::array<double, Size>> parse_number_array(
+    const Json* value, std::string_view path, std::vector<Diagnostic>& diagnostics) {
+  if (value == nullptr) {
+    return std::nullopt;
+  }
+  if (!value->is_array() || value->size() != Size) {
+    add_diagnostic(diagnostics, "effect.invalid_array", std::string(path),
+                   "expected exactly " + std::to_string(Size) + " numeric values");
+    return std::nullopt;
+  }
+  std::array<double, Size> output{};
+  for (std::size_t index = 0; index < Size; ++index) {
+    const auto item_path = std::string(path) + "/" + std::to_string(index);
+    const auto number = number_value(&(*value)[index], item_path, diagnostics);
+    if (!number) {
+      return std::nullopt;
+    }
+    output[index] = *number;
+  }
+  return output;
+}
+
+std::optional<std::int32_t> effect_integer(const Json* value, std::string_view path,
+                                           std::vector<Diagnostic>& diagnostics) {
+  const auto integer = integer_value(value, path, diagnostics);
+  if (!integer) {
+    return std::nullopt;
+  }
+  if (*integer < std::numeric_limits<std::int32_t>::min() ||
+      *integer > std::numeric_limits<std::int32_t>::max()) {
+    add_diagnostic(diagnostics, "effect.integer_range", std::string(path),
+                   "effect integer is outside the supported 32-bit range");
+    return std::nullopt;
+  }
+  return static_cast<std::int32_t>(*integer);
+}
+
+std::optional<EffectProgram> parse_effects(const Json* value, std::string_view path,
+                                           std::vector<Diagnostic>& diagnostics) {
+  if (value == nullptr) {
+    return EffectProgram{};
+  }
+  if (!value->is_array()) {
+    add_diagnostic(diagnostics, "schema.type", std::string(path), "expected an array");
+    return std::nullopt;
+  }
+  if (value->size() > 64) {
+    add_diagnostic(diagnostics, "effect.too_many", std::string(path),
+                   "a layer may contain at most 64 effects");
+    return std::nullopt;
+  }
+
+  std::vector<Effect> effects;
+  effects.reserve(value->size());
+  bool valid = true;
+  for (std::size_t index = 0; index < value->size(); ++index) {
+    const auto& effect = (*value)[index];
+    const auto base = std::string(path) + "/" + std::to_string(index);
+    if (!effect.is_object()) {
+      add_diagnostic(diagnostics, "schema.type", base, "expected an object");
+      valid = false;
+      continue;
+    }
+    const auto type = string_value(required_member(effect, "type", base, diagnostics),
+                                   base + "/type", diagnostics);
+    if (!type) {
+      valid = false;
+      continue;
+    }
+    if (*type == "transform_2d") {
+      const auto matrix = parse_number_array<6>(
+          required_member(effect, "matrix", base, diagnostics), base + "/matrix", diagnostics);
+      if (matrix) {
+        effects.emplace_back(Transform2DEffect{.m00 = (*matrix)[0],
+                                               .m01 = (*matrix)[1],
+                                               .m02 = (*matrix)[2],
+                                               .m10 = (*matrix)[3],
+                                               .m11 = (*matrix)[4],
+                                               .m12 = (*matrix)[5]});
+      } else {
+        valid = false;
+      }
+      continue;
+    }
+    if (*type == "crop") {
+      const auto x = effect_integer(required_member(effect, "x", base, diagnostics),
+                                    base + "/x", diagnostics);
+      const auto y = effect_integer(required_member(effect, "y", base, diagnostics),
+                                    base + "/y", diagnostics);
+      const auto width = effect_integer(required_member(effect, "width", base, diagnostics),
+                                        base + "/width", diagnostics);
+      const auto height = effect_integer(required_member(effect, "height", base, diagnostics),
+                                         base + "/height", diagnostics);
+      if (x && y && width && height && *width > 0 && *height > 0) {
+        effects.emplace_back(CropEffect{.x = *x, .y = *y, .width = *width, .height = *height});
+      } else {
+        if (width && height && (*width <= 0 || *height <= 0)) {
+          add_diagnostic(diagnostics, "effect.invalid_crop", base,
+                         "crop width and height must be positive");
+        }
+        valid = false;
+      }
+      continue;
+    }
+    if (*type == "opacity") {
+      const auto opacity = number_value(required_member(effect, "value", base, diagnostics),
+                                        base + "/value", diagnostics);
+      if (opacity && *opacity >= 0.0 && *opacity <= 1.0) {
+        effects.emplace_back(OpacityEffect{.opacity = *opacity});
+      } else {
+        if (opacity) {
+          add_diagnostic(diagnostics, "effect.invalid_opacity", base + "/value",
+                         "opacity must be between 0 and 1");
+        }
+        valid = false;
+      }
+      continue;
+    }
+    if (*type == "color_matrix") {
+      const auto matrix = parse_number_array<20>(
+          required_member(effect, "matrix", base, diagnostics), base + "/matrix", diagnostics);
+      if (matrix) {
+        effects.emplace_back(ColorMatrixEffect{.values = *matrix});
+      } else {
+        valid = false;
+      }
+      continue;
+    }
+    add_diagnostic(diagnostics, "effect.unsupported_type", base + "/type",
+                   "supported effects are transform_2d, crop, opacity, and color_matrix");
+    valid = false;
+  }
+
+  if (!valid) {
+    return std::nullopt;
+  }
+  return EffectProgram(std::move(effects));
+}
+
 }  // namespace
+
+std::string_view blend_mode_name(BlendMode mode) noexcept {
+  switch (mode) {
+    case BlendMode::source_over: return "source_over";
+    case BlendMode::multiply: return "multiply";
+    case BlendMode::screen: return "screen";
+    case BlendMode::plus: return "plus";
+  }
+  return "unknown";
+}
 
 Composition::Composition(std::int32_t schema_version, std::int32_t width, std::int32_t height,
                          FrameRate frame_rate, FrameRange range,
@@ -189,6 +369,9 @@ Composition::Composition(std::int32_t schema_version, std::int32_t width, std::i
               "composition layer color components must be between 0 and 1");
         }
       }
+      if (!valid_blend_mode(solid->blend_mode)) {
+        throw std::invalid_argument("composition solid layer blend mode is invalid");
+      }
       continue;
     }
 
@@ -198,6 +381,9 @@ Composition::Composition(std::int32_t schema_version, std::int32_t width, std::i
     }
     if (!std::isfinite(video.opacity) || video.opacity < 0.0 || video.opacity > 1.0) {
       throw std::invalid_argument("composition video opacity must be between 0 and 1");
+    }
+    if (!valid_blend_mode(video.blend_mode)) {
+      throw std::invalid_argument("composition video layer blend mode is invalid");
     }
   }
 }
@@ -363,6 +549,10 @@ CompositionParseResult parse_composition(std::string_view source,
                                  base + "/start_frame", result.diagnostics);
       auto end = integer_value(required_member(layer, "end_frame", base, result.diagnostics),
                                base + "/end_frame", result.diagnostics);
+      auto effects = parse_effects(optional_member(layer, "effects"), base + "/effects",
+                                   result.diagnostics);
+      auto blend_mode = parse_blend_mode(optional_member(layer, "blend_mode"),
+                                         base + "/blend_mode", result.diagnostics);
 
       if (id && (id->empty() || id->size() > 128)) {
         add_diagnostic(result.diagnostics, "layer.invalid_id", base + "/id",
@@ -389,11 +579,13 @@ CompositionParseResult parse_composition(std::string_view source,
       if (type && *type == "solid") {
         auto color = parse_color(required_member(layer, "color", base, result.diagnostics),
                                  base + "/color", result.diagnostics);
-        if (common_valid && color) {
+        if (common_valid && color && effects && blend_mode) {
           layers.emplace_back(
               SolidLayer{.id = std::move(*id),
                          .range = FrameRange(FrameIndex(*start), FrameIndex(*end)),
-                         .color = *color});
+                         .color = *color,
+                         .effects = std::move(*effects),
+                         .blend_mode = *blend_mode});
         }
       } else if (type && *type == "video") {
         auto asset = string_value(required_member(layer, "asset", base, result.diagnostics),
@@ -418,13 +610,15 @@ CompositionParseResult parse_composition(std::string_view source,
                          "opacity must be between 0 and 1");
         }
         if (common_valid && asset && asset_ids.contains(*asset) && source_start >= 0 &&
-            opacity >= 0.0 && opacity <= 1.0) {
+            opacity >= 0.0 && opacity <= 1.0 && effects && blend_mode) {
           layers.emplace_back(
               VideoLayer{.id = std::move(*id),
                          .range = FrameRange(FrameIndex(*start), FrameIndex(*end)),
                          .asset_id = std::move(*asset),
                          .source_start = FrameIndex(source_start),
-                         .opacity = opacity});
+                         .opacity = opacity,
+                         .effects = std::move(*effects),
+                         .blend_mode = *blend_mode});
         }
       }
     }

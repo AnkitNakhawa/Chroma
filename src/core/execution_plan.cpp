@@ -35,6 +35,22 @@ bool valid_color(const Color& color) noexcept {
   return true;
 }
 
+bool valid_blend_mode(BlendMode mode) noexcept {
+  return blend_mode_name(mode) != "unknown";
+}
+
+EffectProgram video_effects(const VideoLayer& layer) {
+  auto effects = layer.effects.effects();
+  if (layer.opacity != 1.0) {
+    effects.emplace_back(OpacityEffect{.opacity = layer.opacity});
+  }
+  return EffectProgram(std::move(effects));
+}
+
+nlohmann::json effects_json(const EffectProgram& program) {
+  return nlohmann::json::parse(effect_program_json(program));
+}
+
 }  // namespace
 
 ExecutionPlan::ExecutionPlan(std::int32_t width, std::int32_t height, FrameIndex frame,
@@ -73,14 +89,14 @@ ExecutionPlan::ExecutionPlan(std::int32_t width, std::int32_t height, FrameIndex
       throw std::invalid_argument("execution plan source id is invalid");
     }
     if (const auto* solid = std::get_if<CompositeSolidOperation>(&operation)) {
-      if (!valid_color(solid->color)) {
-        throw std::invalid_argument("execution plan solid color is invalid");
+      if (!valid_color(solid->color) || !valid_blend_mode(solid->blend_mode)) {
+        throw std::invalid_argument("execution plan solid operation is invalid");
       }
       continue;
     }
     const auto& video = std::get<CompositeVideoFrameOperation>(operation);
     if (video.asset_path.empty() || video.source_time < Rational(0) ||
-        !std::isfinite(video.opacity) || video.opacity < 0.0 || video.opacity > 1.0) {
+        !valid_blend_mode(video.blend_mode)) {
       throw std::invalid_argument("execution plan video operation is invalid");
     }
   }
@@ -97,8 +113,10 @@ ExecutionPlan compile_frame(const Composition& composition, FrameIndex frame) {
   for (const auto& layer_variant : composition.layers()) {
     if (const auto* solid = std::get_if<SolidLayer>(&layer_variant)) {
       if (solid->range.contains(frame)) {
-        operations.emplace_back(
-            CompositeSolidOperation{.source_id = solid->id, .color = solid->color});
+        operations.emplace_back(CompositeSolidOperation{.source_id = solid->id,
+                                                        .color = solid->color,
+                                                        .effects = solid->effects,
+                                                        .blend_mode = solid->blend_mode});
       }
       continue;
     }
@@ -114,7 +132,8 @@ ExecutionPlan compile_frame(const Composition& composition, FrameIndex frame) {
           .source_id = video.id,
           .asset_path = asset->path,
           .source_time = composition.frame_rate().time_at(FrameIndex(source_frame)),
-          .opacity = video.opacity});
+          .effects = video_effects(video),
+          .blend_mode = video.blend_mode});
     }
   }
 
@@ -131,7 +150,9 @@ std::string execution_plan_json(const ExecutionPlan& plan) {
     if (const auto* solid = std::get_if<CompositeSolidOperation>(&operation)) {
       operations.push_back({{"op", "composite_solid"},
                             {"source_id", solid->source_id},
-                            {"color", color_json(solid->color)}});
+                            {"color", color_json(solid->color)},
+                            {"effects", effects_json(solid->effects)},
+                            {"blend_mode", blend_mode_name(solid->blend_mode)}});
       continue;
     }
     const auto& video = std::get<CompositeVideoFrameOperation>(operation);
@@ -141,7 +162,8 @@ std::string execution_plan_json(const ExecutionPlan& plan) {
          {"asset_path", video.asset_path.string()},
          {"source_time", {{"numerator", video.source_time.numerator()},
                           {"denominator", video.source_time.denominator()}}},
-         {"opacity", video.opacity}});
+         {"effects", effects_json(video.effects)},
+         {"blend_mode", blend_mode_name(video.blend_mode)}});
   }
 
   return nlohmann::json{{"frame", plan.frame().value()},
@@ -170,11 +192,12 @@ std::string optimized_execution_plan_json(const ExecutionPlan& plan) {
     if (const auto* solid = std::get_if<CompositeSolidOperation>(&operation)) {
       source_id = solid->source_id;
       source_node = "solid_source";
+      effects = solid->effects.effects();
     } else {
       const auto& video = std::get<CompositeVideoFrameOperation>(operation);
       source_id = video.source_id;
       source_node = "video_sample";
-      effects.emplace_back(OpacityEffect{.opacity = video.opacity});
+      effects = video.effects.effects();
     }
 
     const auto optimized = optimize_effect_program(EffectProgram(std::move(effects)));
@@ -182,21 +205,32 @@ std::string optimized_execution_plan_json(const ExecutionPlan& plan) {
     for (const auto& effect : optimized.program().effects()) {
       nodes.push_back(effect_name(effect));
     }
-    nodes.push_back("source_over");
+    const auto blend_mode = std::visit(
+        [](const auto& typed_operation) {
+          if constexpr (requires { typed_operation.blend_mode; }) {
+            return typed_operation.blend_mode;
+          }
+          return BlendMode::source_over;
+        },
+        operation);
+    nodes.push_back(blend_mode_name(blend_mode));
 
     nlohmann::json effect_groups = nlohmann::json::array();
+    bool entire_chain_fusible = true;
     for (const auto& group : optimized.fusion_groups()) {
+      entire_chain_fusible = entire_chain_fusible && group.gpu_fusible;
       effect_groups.push_back({{"begin", group.begin},
                                {"end", group.end},
                                {"gpu_fusible", group.gpu_fusible}});
     }
 
-    // Source sampling, simple effects, and source-over are one candidate pass until a
+    // Source sampling, simple effects, and blending are one candidate pass until a
     // non-fusible effect forces the future GPU compiler to split the chain.
     passes.push_back({{"pass", pass_index++},
-                      {"kind", "fusion_candidate"},
+                      {"kind", entire_chain_fusible ? "fusion_candidate"
+                                                     : "multi_pass_required"},
                       {"source_id", source_id},
-                      {"gpu_fusible", true},
+                      {"gpu_fusible", entire_chain_fusible},
                       {"rewrite_count", optimized.rewrite_count()},
                       {"nodes", std::move(nodes)},
                       {"effect_groups", std::move(effect_groups)}});

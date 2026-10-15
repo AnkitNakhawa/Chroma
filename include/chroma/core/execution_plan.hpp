@@ -20,6 +20,8 @@ struct ClearOperation {
 struct CompositeSolidOperation {
   std::string source_id;
   Color color;
+  EffectProgram effects;
+  BlendMode blend_mode{BlendMode::source_over};
 
   friend bool operator==(const CompositeSolidOperation&, const CompositeSolidOperation&) = default;
 };
@@ -28,7 +30,8 @@ struct CompositeVideoFrameOperation {
   std::string source_id;
   std::filesystem::path asset_path;
   Rational source_time;
-  double opacity;
+  EffectProgram effects;
+  BlendMode blend_mode{BlendMode::source_over};
 
   friend bool operator==(const CompositeVideoFrameOperation&,
                          const CompositeVideoFrameOperation&) = default;

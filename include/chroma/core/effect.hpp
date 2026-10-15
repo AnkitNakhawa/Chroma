@@ -86,7 +86,8 @@ using Effect = std::variant<Transform2DEffect, CropEffect, OpacityEffect, ColorM
 
 class EffectProgram {
  public:
-  explicit EffectProgram(std::vector<Effect> effects = {});
+  EffectProgram() = default;
+  explicit EffectProgram(std::vector<Effect> effects);
 
   [[nodiscard]] const std::vector<Effect>& effects() const noexcept { return effects_; }
 
@@ -127,6 +128,7 @@ class OptimizedEffectProgram {
 [[nodiscard]] std::string_view effect_name(const Effect& effect) noexcept;
 [[nodiscard]] std::string_view effect_domain_name(EffectDomain domain) noexcept;
 [[nodiscard]] OptimizedEffectProgram optimize_effect_program(const EffectProgram& program);
+[[nodiscard]] std::string effect_program_json(const EffectProgram& program);
 [[nodiscard]] std::string optimized_effect_program_json(const OptimizedEffectProgram& program);
 [[nodiscard]] ColorMatrixEffect identity_color_matrix() noexcept;
 

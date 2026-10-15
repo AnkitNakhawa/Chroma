@@ -178,6 +178,76 @@ void unavailable_cpu_effects_fail_explicitly() {
       std::runtime_error);
 }
 
+void blend_modes_follow_premultiplied_source_over_semantics() {
+  const auto red = chroma::Pixel{.red = 1.0F, .green = 0.0F, .blue = 0.0F, .alpha = 1.0F};
+  const auto blue = chroma::Pixel{.red = 0.0F, .green = 0.0F, .blue = 1.0F, .alpha = 1.0F};
+  const auto multiplied = chroma::composite(red, blue, chroma::BlendMode::multiply);
+  CHECK(multiplied == (chroma::Pixel{.red = 0.0F, .green = 0.0F,
+                                     .blue = 0.0F, .alpha = 1.0F}));
+  const auto screened = chroma::composite(red, blue, chroma::BlendMode::screen);
+  CHECK(screened == (chroma::Pixel{.red = 1.0F, .green = 0.0F,
+                                   .blue = 1.0F, .alpha = 1.0F}));
+  const auto added = chroma::composite(red, blue, chroma::BlendMode::plus);
+  CHECK(added == (chroma::Pixel{.red = 1.0F, .green = 0.0F,
+                                .blue = 1.0F, .alpha = 1.0F}));
+}
+
+void composition_effects_execute_through_the_frame_plan() {
+  const auto composition = composition_with(
+      {chroma::SolidLayer{
+           .id = "background",
+           .range = chroma::FrameRange(chroma::FrameIndex(0), chroma::FrameIndex(10)),
+           .color = chroma::Color{.red = 0.0, .green = 0.0, .blue = 1.0, .alpha = 1.0}},
+       chroma::SolidLayer{
+           .id = "effected",
+           .range = chroma::FrameRange(chroma::FrameIndex(0), chroma::FrameIndex(10)),
+           .color = chroma::Color{.red = 1.0, .green = 0.0, .blue = 0.0, .alpha = 1.0},
+           .effects = chroma::EffectProgram(
+               {chroma::CropEffect{.x = 1, .y = 0, .width = 1, .height = 1},
+                chroma::OpacityEffect{.opacity = 0.5}})}});
+  const auto surface = chroma::render_frame_cpu(composition, chroma::FrameIndex(0));
+  CHECK(surface.pixel(0, 0) ==
+        (chroma::Pixel{.red = 0.0F, .green = 0.0F, .blue = 1.0F, .alpha = 1.0F}));
+  CHECK(near(surface.pixel(1, 0).red, 0.5F));
+  CHECK(near(surface.pixel(1, 0).green, 0.0F));
+  CHECK(near(surface.pixel(1, 0).blue, 0.5F));
+  CHECK(near(surface.pixel(1, 0).alpha, 1.0F));
+}
+
+void parsed_effects_execute_end_to_end() {
+  constexpr std::string_view source = R"json(
+  {
+    "schema_version": 1,
+    "canvas": {
+      "width": 2,
+      "height": 1,
+      "frame_rate": {"numerator": 30, "denominator": 1},
+      "duration_frames": 1
+    },
+    "layers": [
+      {"id": "background", "type": "solid", "start_frame": 0, "end_frame": 1,
+       "color": [0, 0, 1, 1]},
+      {"id": "foreground", "type": "solid", "start_frame": 0, "end_frame": 1,
+       "color": [1, 0, 0, 1],
+       "effects": [
+         {"type": "crop", "x": 1, "y": 0, "width": 1, "height": 1},
+         {"type": "opacity", "value": 0.5}
+       ]}
+    ]
+  }
+  )json";
+  const auto parsed = chroma::parse_composition(source);
+  CHECK(parsed.valid());
+  if (!parsed.composition) {
+    return;
+  }
+  const auto surface = chroma::render_frame_cpu(*parsed.composition, chroma::FrameIndex(0));
+  CHECK(surface.pixel(0, 0) ==
+        (chroma::Pixel{.red = 0.0F, .green = 0.0F, .blue = 1.0F, .alpha = 1.0F}));
+  CHECK(near(surface.pixel(1, 0).red, 0.5F));
+  CHECK(near(surface.pixel(1, 0).blue, 0.5F));
+}
+
 void video_layers_decode_into_the_cpu_plan(const char* path) {
   const chroma::Composition composition(
       1, 64, 36, chroma::FrameRate(chroma::Rational(30)),
@@ -211,6 +281,9 @@ int main(int argc, char** argv) {
   color_matrix_operates_on_straight_linear_rgba();
   singular_transforms_produce_transparency();
   unavailable_cpu_effects_fail_explicitly();
+  blend_modes_follow_premultiplied_source_over_semantics();
+  composition_effects_execute_through_the_frame_plan();
+  parsed_effects_execute_end_to_end();
   if (argc == 2) {
     video_layers_decode_into_the_cpu_plan(argv[1]);
   }

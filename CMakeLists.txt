@@ -203,6 +203,11 @@ if(CHROMA_BUILD_TESTS)
   )
 
   add_test(
+    NAME chroma_cli_validates_effects_example
+    COMMAND chroma_cli validate ${CMAKE_CURRENT_SOURCE_DIR}/examples/effects.json
+  )
+
+  add_test(
     NAME chroma_cli_inspects_example_plan
     COMMAND chroma_cli inspect-plan ${CMAKE_CURRENT_SOURCE_DIR}/examples/solid.json --frame 0
   )
@@ -216,5 +221,13 @@ if(CHROMA_BUILD_TESTS)
   )
   set_tests_properties(chroma_cli_inspects_optimized_plan PROPERTIES
     PASS_REGULAR_EXPRESSION "fusion_candidate"
+  )
+
+  add_test(
+    NAME chroma_cli_inspects_effect_rewrite
+    COMMAND chroma_cli inspect-optimized-plan ${CMAKE_CURRENT_SOURCE_DIR}/examples/effects.json --frame 0
+  )
+  set_tests_properties(chroma_cli_inspects_effect_rewrite PROPERTIES
+    PASS_REGULAR_EXPRESSION "rewrite_count[^0-9]*1"
   )
 endif()

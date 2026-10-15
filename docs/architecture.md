@@ -118,7 +118,9 @@ Parallelism is constrained by dependencies and memory budgets rather than an unb
 
 The CPU backend defines the reference behavior for every supported v1 node. It is used for correctness tests, ordinary CI, development without an NVIDIA GPU, and fallback.
 
-The first effect executor applies an immutable effect program sequentially to a fixed-size linear-premultiplied surface. Transform matrices map source pixel centers into the same-sized destination and use transparent-edge bilinear sampling; singular transforms produce a transparent result. Crop removes pixels outside its integer rectangle. Opacity scales all premultiplied channels. Color matrices operate on straight linear RGBA, clamp the result, and premultiply it again. Blur, temporal sampling, and external effects fail explicitly until their CPU semantics are implemented.
+The first effect executor applies an immutable effect program sequentially to a fixed-size linear-premultiplied surface. Transform matrices map source pixel centers into the same-sized destination and use transparent-edge bilinear sampling; singular transforms produce a transparent result. Crop removes pixels outside its integer rectangle. Opacity scales all premultiplied channels. Color matrices operate on straight linear RGBA, clamp the result, and premultiply it again. Source-over, multiply, screen, and plus blend modes use premultiplied-alpha compositing. Blur, temporal sampling, and external effects fail explicitly until their CPU semantics are implemented.
+
+Layer effects now cross the full composition boundary: the JSON parser validates them, the immutable composition retains them, frame compilation emits them, `inspect-plan` displays their exact executable parameters, and the CPU renderer executes them in declaration order. The legacy video-layer `opacity` field is normalized as the final opacity node when it differs from one. The current CPU executor deliberately materializes same-sized intermediate surfaces to define reference semantics; eliminating those intermediates belongs to optimized CPU/GPU backends rather than this oracle.
 
 #### CUDA backend
 

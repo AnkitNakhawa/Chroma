@@ -29,7 +29,7 @@ Chroma is not intended to be a visual editor, preview platform, hosted rendering
 
 ## Status
 
-Post-baseline compiler spike. Chroma can parse and validate solid/video compositions, resolve assets, probe and decode media at exact rational times, compile typed per-frame plans, render through a persistent CPU execution context, write PPM frames, encode H.264/MP4 directly, and emit per-stage benchmark JSON. The core now includes an immutable effect program, explicit effect traits, conservative algebraic rewrites, fusion-group planning, and CPU reference primitives for transform, crop, opacity, and color-matrix effects. Optimized groups remain inspection-only, and composition JSON cannot request these new effects until the next schema/execution-plan slice. Audio, text, production color management, caching, parallel scheduling, language bindings, and CUDA execution are not implemented yet.
+Post-baseline compiler spike. Chroma can parse and validate solid/video compositions, resolve assets, probe and decode media at exact rational times, compile typed per-frame plans, render through a persistent CPU execution context, write PPM frames, encode H.264/MP4 directly, and emit per-stage benchmark JSON. Composition layers can now request transform, crop, opacity, and color-matrix effects plus source-over, multiply, screen, and plus blending. The compiler preserves executable effect programs and separately reports conservative algebraic rewrites and fusion groups. CUDA execution, audio, text, image assets, fit/placement helpers, production color management, caching, parallel scheduling, and language bindings are not implemented yet.
 
 ## Build and test
 
@@ -92,6 +92,14 @@ Inspect proposed rewrites and GPU fusion candidates separately:
 ```
 
 Optimized-plan output currently reports `"status": "planning_only"`; rendering still executes the typed plan shown by `inspect-plan`.
+
+Render the basic effects example:
+
+```sh
+./build/chroma frame examples/effects.json --frame 0 --output effects.ppm
+./build/chroma render examples/effects.json --output effects.mp4
+./build/chroma inspect-optimized-plan examples/effects.json --frame 0
+```
 
 The layered example exercises frame ranges and alpha compositing. Its red overlay is inactive at frame 0, active over the blue background at frame 30, and inactive again at frame 50:
 
