@@ -191,3 +191,18 @@ including for audio embedded in video files. The track's range determines the tr
 length. Gain is a finite linear multiplier from 0 through 16 (default 1); 0 mutes.
 Audio asset IDs share the existing asset namespace; track IDs are unique within
 `audio_tracks`. Missing tracks preserve video-only output.
+
+The sequential CPU mixer resamples inputs through libswresample to 48 kHz stereo
+float PCM. Each frame boundary maps independently to the nearest sample (ties up),
+so fractional frame rates do not accumulate drift. Source time zero is the first
+decoded sample, independent of the container's timestamp origin. Discontinuous
+source timestamps and midstream format changes fail explicitly. Trimming decodes
+from the beginning to preserve decoder priming and resampler state; deep trims
+therefore have a startup cost. Input audio is not taken automatically from video
+layers: declare the file again as an audio asset when its sound is wanted.
+
+Samples outside active tracks are silence. Tracks sum in declaration order using
+double precision; the final mix saturates to [-1, 1], without automatic gain
+normalization. A trim extending beyond decoded source samples is an error,
+including muted tracks. Decode and mix storage is block-based rather than sized
+to the entire composition; each overlapping track owns its own decoder.

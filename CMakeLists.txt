@@ -33,6 +33,7 @@ if(CHROMA_ENABLE_FFMPEG)
       libavcodec
       libavutil
       libswscale
+      libswresample
     )
   endif()
   if(TARGET PkgConfig::CHROMA_FFMPEG)
@@ -70,6 +71,7 @@ add_library(chroma_core
   src/core/rational.cpp
   src/core/render.cpp
   src/core/timeline.cpp
+  src/media/audio.cpp
   src/media/decode.cpp
   src/media/encode.cpp
   src/media/frame.cpp
@@ -130,6 +132,10 @@ endif()
 if(CHROMA_BUILD_TESTS)
   include(CTest)
   enable_testing()
+
+  add_executable(chroma_audio_tests tests/audio_tests.cpp)
+  target_link_libraries(chroma_audio_tests PRIVATE chroma::core)
+  add_test(NAME chroma_audio_tests COMMAND chroma_audio_tests)
 
   add_executable(chroma_timeline_tests tests/timeline_tests.cpp)
   target_link_libraries(chroma_timeline_tests PRIVATE chroma::core)
