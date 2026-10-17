@@ -82,3 +82,7 @@
 - Added layer-relative integer keyframes and deterministic cubic easing for animated opacity. Per-frame compilation lowers animation to static opacity before existing identity/combination rewrites and fusion planning; parser, validation, interpolation, and lowering tests cover the boundary.
 - Implemented deterministic separable Gaussian blur over linear premultiplied surfaces, exposed it through composition JSON, and added pixel plus CLI-plan coverage showing the neighborhood barrier preserves fusible regions on both sides.
 - Added native analytic rectangle and ellipse masks with optional inversion and deterministic antialiased CPU coverage. Added a source-over crossfade example that keeps the outgoing layer opaque and lowers the incoming keyframed opacity through the ordinary optimizer rather than introducing a special transition executor.
+
+## 2026-10-17 — Audio implementation
+- Added typed audio assets and independent audio tracks with frame-based placement/trim, linear gain, structured parser diagnostics, and direct C++ validation. Existing constructors and video-only documents remain compatible.
+- Checkpoint 1 verification: Debug FFmpeg+text build and all 38 CTest tests pass, including new schema/default/path/reference/range/gain/duplicate-track coverage. Local toolchain uses workspace-local dependencies and the installed macOS 15.4 SDK because the default SDK fails its linker probe.

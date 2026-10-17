@@ -172,3 +172,22 @@ For example, this fades in during the first 12 frames of a layer:
 ```
 
 Simple transitions are compositions of existing primitives rather than a separate execution type. For a source-over crossfade between opaque layers, keep the outgoing layer opaque underneath and animate the incoming layer's opacity from 0 to 1; this preserves full output alpha while interpolating the colors. See `examples/crossfade.json`.
+
+## Audio tracks
+
+Audio is independent of visual layer order. Declare `{"id":"music","type":"audio",
+"path":"music.wav"}` in `assets`, then add an optional top-level array:
+
+```json
+"audio_tracks": [
+  {"id":"bed","asset":"music","start_frame":0,"end_frame":120,
+   "source_start_frame":30,"gain":0.5}
+]
+```
+
+Track ranges are half-open and must be inside the composition. Source trimming starts
+at `source_start_frame` (default 0), measured at the **composition** frame rate,
+including for audio embedded in video files. The track's range determines the trim
+length. Gain is a finite linear multiplier from 0 through 16 (default 1); 0 mutes.
+Audio asset IDs share the existing asset namespace; track IDs are unique within
+`audio_tracks`. Missing tracks preserve video-only output.

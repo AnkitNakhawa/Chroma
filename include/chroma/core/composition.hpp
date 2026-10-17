@@ -71,6 +71,19 @@ struct VideoAsset {
   std::filesystem::path path;
 };
 
+struct AudioAsset {
+  std::string id;
+  std::filesystem::path path;
+};
+
+struct AudioTrack {
+  std::string id;
+  FrameRange range;
+  std::string asset_id;
+  FrameIndex source_start{0};
+  double gain{1.0};
+};
+
 struct ImageAsset {
   std::string id;
   std::filesystem::path path;
@@ -166,7 +179,9 @@ class Composition {
   Composition(std::int32_t schema_version, std::int32_t width, std::int32_t height,
               FrameRate frame_rate, FrameRange range, std::vector<VideoAsset> video_assets,
               std::vector<ImageAsset> image_assets, std::vector<FontAsset> font_assets,
-              std::vector<CompositionLayer> layers);
+              std::vector<CompositionLayer> layers,
+              std::vector<AudioAsset> audio_assets = {},
+              std::vector<AudioTrack> audio_tracks = {});
 
   [[nodiscard]] std::int32_t schema_version() const noexcept { return schema_version_; }
   [[nodiscard]] std::int32_t width() const noexcept { return width_; }
@@ -181,6 +196,9 @@ class Composition {
     return font_assets_;
   }
   [[nodiscard]] const std::vector<CompositionLayer>& layers() const noexcept { return layers_; }
+  [[nodiscard]] const std::vector<AudioAsset>& audio_assets() const noexcept { return audio_assets_; }
+  [[nodiscard]] const std::vector<AudioTrack>& audio_tracks() const noexcept { return audio_tracks_; }
+  [[nodiscard]] const AudioAsset* find_audio_asset(std::string_view id) const noexcept;
   [[nodiscard]] const VideoAsset* find_video_asset(std::string_view id) const noexcept;
   [[nodiscard]] const ImageAsset* find_image_asset(std::string_view id) const noexcept;
   [[nodiscard]] const FontAsset* find_font_asset(std::string_view id) const noexcept;
@@ -195,6 +213,8 @@ class Composition {
   std::vector<ImageAsset> image_assets_;
   std::vector<FontAsset> font_assets_;
   std::vector<CompositionLayer> layers_;
+  std::vector<AudioAsset> audio_assets_;
+  std::vector<AudioTrack> audio_tracks_;
 };
 
 struct CompositionParseResult {

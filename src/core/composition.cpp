@@ -605,7 +605,9 @@ Composition::Composition(std::int32_t schema_version, std::int32_t width, std::i
                          std::vector<VideoAsset> video_assets,
                          std::vector<ImageAsset> image_assets,
                          std::vector<FontAsset> font_assets,
-                         std::vector<CompositionLayer> layers)
+                         std::vector<CompositionLayer> layers,
+                         std::vector<AudioAsset> audio_assets,
+                         std::vector<AudioTrack> audio_tracks)
     : schema_version_(schema_version),
       width_(width),
       height_(height),
@@ -614,7 +616,9 @@ Composition::Composition(std::int32_t schema_version, std::int32_t width, std::i
       assets_(std::move(video_assets)),
       image_assets_(std::move(image_assets)),
       font_assets_(std::move(font_assets)),
-      layers_(std::move(layers)) {
+      layers_(std::move(layers)),
+      audio_assets_(std::move(audio_assets)),
+      audio_tracks_(std::move(audio_tracks)) {
   if (schema_version_ != 1) {
     throw std::invalid_argument("unsupported composition schema version");
   }
@@ -644,6 +648,23 @@ Composition::Composition(std::int32_t schema_version, std::int32_t width, std::i
     if (asset.id.empty() || asset.id.size() > 128 || !asset_ids.insert(asset.id).second ||
         asset.path.empty()) {
       throw std::invalid_argument("composition assets must have unique ids and paths");
+    }
+  }
+
+  for (const auto& asset : audio_assets_) {
+    if (asset.id.empty() || asset.id.size() > 128 || !asset_ids.insert(asset.id).second ||
+        asset.path.empty()) {
+      throw std::invalid_argument("composition assets must have unique ids and paths");
+    }
+  }
+  std::unordered_set<std::string> track_ids;
+  for (const auto& track : audio_tracks_) {
+    if (track.id.empty() || track.id.size() > 128 || !track_ids.insert(track.id).second ||
+        track.range.empty() || track.range.start() < range_.start() ||
+        track.range.end() > range_.end() || track.source_start.value() < 0 ||
+        !std::isfinite(track.gain) || track.gain < 0.0 || track.gain > 16.0 ||
+        find_audio_asset(track.asset_id) == nullptr) {
+      throw std::invalid_argument("invalid audio track id, range, asset, source start, or gain");
     }
   }
 
@@ -746,6 +767,13 @@ Composition::Composition(std::int32_t schema_version, std::int32_t width, std::i
       throw std::invalid_argument("composition text layer is invalid");
     }
   }
+}
+
+const AudioAsset* Composition::find_audio_asset(std::string_view id) const noexcept {
+  for (const auto& asset : audio_assets_) {
+    if (asset.id == id) return &asset;
+  }
+  return nullptr;
 }
 
 const VideoAsset* Composition::find_video_asset(std::string_view id) const noexcept {
@@ -862,6 +890,8 @@ CompositionParseResult parse_composition(std::string_view source,
   std::vector<VideoAsset> assets;
   std::vector<ImageAsset> image_assets;
   std::vector<FontAsset> font_assets;
+  std::vector<AudioAsset> audio_assets;
+  std::unordered_set<std::string> audio_asset_ids;
   std::unordered_set<std::string> asset_ids;
   std::unordered_set<std::string> video_asset_ids;
   std::unordered_set<std::string> image_asset_ids;
@@ -890,16 +920,16 @@ CompositionParseResult parse_composition(std::string_view source,
         add_diagnostic(result.diagnostics, "asset.duplicate_id", base + "/id",
                        "asset id must be unique");
       }
-      if (type && *type != "video" && *type != "image" && *type != "font") {
+      if (type && *type != "video" && *type != "image" && *type != "font" && *type != "audio") {
         add_diagnostic(result.diagnostics, "asset.unsupported_type", base + "/type",
-                       "supported asset types are video, image, and font");
+                       "supported asset types are video, image, font, and audio");
       }
       if (path && path->empty()) {
         add_diagnostic(result.diagnostics, "asset.invalid_path", base + "/path",
                        "asset path must not be empty");
       }
       if (id && type && path && !id->empty() && id->size() <= 128 &&
-          (*type == "video" || *type == "image" || *type == "font") && !path->empty()) {
+          (*type == "video" || *type == "image" || *type == "font" || *type == "audio") && !path->empty()) {
         auto resolved_path = std::filesystem::path(*path);
         if (resolved_path.is_relative() && !base_directory.empty()) {
           resolved_path = base_directory / resolved_path;
@@ -912,6 +942,9 @@ CompositionParseResult parse_composition(std::string_view source,
           image_asset_ids.insert(*id);
           image_assets.push_back(
               ImageAsset{.id = std::move(*id), .path = resolved_path.lexically_normal()});
+        } else if (*type == "audio") {
+          audio_asset_ids.insert(*id);
+          audio_assets.push_back(AudioAsset{.id = *id, .path = resolved_path.lexically_normal()});
         } else {
           font_asset_ids.insert(*id);
           font_assets.push_back(
@@ -1118,6 +1151,43 @@ CompositionParseResult parse_composition(std::string_view source,
     }
   }
 
+  std::vector<AudioTrack> audio_tracks;
+  std::unordered_set<std::string> track_ids;
+  const auto* tracks = optional_member(document, "audio_tracks");
+  if (tracks != nullptr && !tracks->is_array()) {
+    add_diagnostic(result.diagnostics, "schema.type", "/audio_tracks", "expected an array");
+  } else if (tracks != nullptr) {
+    for (std::size_t index = 0; index < tracks->size(); ++index) {
+      const auto& track = (*tracks)[index];
+      const auto base = "/audio_tracks/" + std::to_string(index);
+      if (!track.is_object()) {
+        add_diagnostic(result.diagnostics, "schema.type", base, "expected an object");
+        continue;
+      }
+      auto id = string_value(required_member(track, "id", base, result.diagnostics), base + "/id", result.diagnostics);
+      auto asset = string_value(required_member(track, "asset", base, result.diagnostics), base + "/asset", result.diagnostics);
+      auto start = integer_value(required_member(track, "start_frame", base, result.diagnostics), base + "/start_frame", result.diagnostics);
+      auto end = integer_value(required_member(track, "end_frame", base, result.diagnostics), base + "/end_frame", result.diagnostics);
+      auto source = integer_value(optional_member(track, "source_start_frame"), base + "/source_start_frame", result.diagnostics).value_or(0);
+      auto gain = number_value(optional_member(track, "gain"), base + "/gain", result.diagnostics).value_or(1.0);
+      if (id && (id->empty() || id->size() > 128 || !track_ids.insert(*id).second))
+        add_diagnostic(result.diagnostics, "audio.invalid_id", base + "/id", "track ids must be nonempty and unique, at most 128 characters");
+      if (asset && !audio_asset_ids.contains(*asset))
+        add_diagnostic(result.diagnostics, "audio.unknown_asset", base + "/asset", "expected an audio asset");
+      if (start && end && (*start < 0 || *end <= *start || (duration && *end > *duration)))
+        add_diagnostic(result.diagnostics, "audio.invalid_range", base, "track must be nonempty and inside the composition");
+      if (source < 0)
+        add_diagnostic(result.diagnostics, "audio.invalid_source_start", base + "/source_start_frame", "source start must be nonnegative");
+      if (gain < 0.0 || gain > 16.0)
+        add_diagnostic(result.diagnostics, "audio.invalid_gain", base + "/gain", "gain must be between 0 and 16");
+      if (id && asset && start && end && *start >= 0 && *end > *start &&
+          (!duration || *end <= *duration) && source >= 0 && gain >= 0.0 && gain <= 16.0 && audio_asset_ids.contains(*asset)) {
+        audio_tracks.push_back(AudioTrack{.id = *id, .range = FrameRange(FrameIndex(*start), FrameIndex(*end)),
+                                         .asset_id = *asset, .source_start = FrameIndex(source), .gain = gain});
+      }
+    }
+  }
+
   if (!result.diagnostics.empty() || !schema_version || !width || !height || !duration ||
       !rate_numerator || !rate_denominator) {
     return result;
@@ -1127,7 +1197,8 @@ CompositionParseResult parse_composition(std::string_view source,
       static_cast<std::int32_t>(*schema_version), static_cast<std::int32_t>(*width),
       static_cast<std::int32_t>(*height), FrameRate(Rational(*rate_numerator, *rate_denominator)),
       FrameRange(FrameIndex(0), FrameIndex(*duration)), std::move(assets),
-      std::move(image_assets), std::move(font_assets), std::move(layers));
+      std::move(image_assets), std::move(font_assets), std::move(layers),
+      std::move(audio_assets), std::move(audio_tracks));
   return result;
 }
 
