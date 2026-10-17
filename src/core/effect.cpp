@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <numbers>
 #include <stdexcept>
 #include <type_traits>
 #include <utility>
@@ -76,6 +77,46 @@ ColorMatrixEffect compose(const ColorMatrixEffect& first,
   return result;
 }
 
+template <typename Keyframe>
+void validate_transform_keyframes(const std::vector<Keyframe>& keyframes) {
+  if (keyframes.empty() || keyframes.size() > 1024)
+    throw std::invalid_argument("transform animation must contain 1 to 1024 keyframes");
+  std::int64_t previous = -1;
+  for (const auto& keyframe : keyframes) {
+    if (keyframe.frame < 0 || keyframe.frame <= previous ||
+        easing_curve_name(keyframe.easing) == "unknown")
+      throw std::invalid_argument("invalid transform keyframe order or easing");
+    if constexpr (std::is_same_v<Keyframe, ScalarKeyframe>) {
+      if (!std::isfinite(keyframe.value))
+        throw std::invalid_argument("rotation keyframe value must be finite");
+    } else {
+      if (!std::isfinite(keyframe.value[0]) || !std::isfinite(keyframe.value[1]))
+        throw std::invalid_argument("transform keyframe values must be finite");
+    }
+    previous = keyframe.frame;
+  }
+}
+
+template <typename Keyframe>
+auto evaluate_transform_keyframes(const std::vector<Keyframe>& keyframes, std::int64_t frame) {
+  if (keyframes.empty()) throw std::invalid_argument("transform animation has no keyframes");
+  if (frame <= keyframes.front().frame) return keyframes.front().value;
+  if (frame >= keyframes.back().frame) return keyframes.back().value;
+  const auto next = std::upper_bound(keyframes.begin(), keyframes.end(), frame,
+      [](std::int64_t value, const Keyframe& keyframe) { return value < keyframe.frame; });
+  const auto& right = *next;
+  const auto& left = *(next - 1);
+  const auto progress = static_cast<double>(frame - left.frame) /
+                        static_cast<double>(right.frame - left.frame);
+  const auto eased = evaluate_easing(left.easing, progress);
+  if constexpr (std::is_same_v<Keyframe, ScalarKeyframe>) {
+    return std::lerp(left.value, right.value, eased);
+  } else {
+    return std::array<double, 2>{std::lerp(left.value[0], right.value[0], eased),
+                                 std::lerp(left.value[1], right.value[1], eased)};
+  }
+}
+
 void validate_effect(const Effect& effect) {
   std::visit(
       [](const auto& typed) {
@@ -107,6 +148,14 @@ void validate_effect(const Effect& effect) {
               throw std::invalid_argument("animated opacity keyframe is invalid");
             }
             previous_frame = keyframe.frame;
+          }
+        } else if constexpr (std::is_same_v<Type, AnimatedTranslationEffect> ||
+                             std::is_same_v<Type, AnimatedScaleEffect> ||
+                             std::is_same_v<Type, AnimatedRotationEffect>) {
+          validate_transform_keyframes(typed.keyframes);
+          if constexpr (!std::is_same_v<Type, AnimatedTranslationEffect>) {
+            if (!std::isfinite(typed.origin[0]) || !std::isfinite(typed.origin[1]))
+              throw std::invalid_argument("transform origin must be finite");
           }
         } else if constexpr (std::is_same_v<Type, MaskEffect>) {
           if (mask_shape_name(typed.shape) == "unknown" || !std::isfinite(typed.x) ||
@@ -151,7 +200,12 @@ nlohmann::json effect_json(const Effect& effect) {
                             {"width", typed.width}, {"height", typed.height}};
         } else if constexpr (std::is_same_v<Type, OpacityEffect>) {
           output["opacity"] = typed.opacity;
-        } else if constexpr (std::is_same_v<Type, AnimatedOpacityEffect>) {
+        } else if constexpr (std::is_same_v<Type, AnimatedOpacityEffect> ||
+                             std::is_same_v<Type, AnimatedTranslationEffect> ||
+                             std::is_same_v<Type, AnimatedScaleEffect> ||
+                             std::is_same_v<Type, AnimatedRotationEffect>) {
+          if constexpr (std::is_same_v<Type, AnimatedScaleEffect> ||
+                        std::is_same_v<Type, AnimatedRotationEffect>) output["origin"] = typed.origin;
           output["keyframes"] = nlohmann::json::array();
           for (const auto& keyframe : typed.keyframes) {
             output["keyframes"].push_back({{"frame", keyframe.frame},
@@ -230,6 +284,11 @@ EffectTraits effect_traits(const Effect& effect) {
                   .temporal_radius = 0,
                   .gpu_fusible = true,
                   .deterministic = true};
+        } else if constexpr (std::is_same_v<Type, AnimatedTranslationEffect> ||
+                             std::is_same_v<Type, AnimatedScaleEffect> ||
+                             std::is_same_v<Type, AnimatedRotationEffect>) {
+          return {.domain = EffectDomain::coordinate, .spatial_radius = 0,
+                  .temporal_radius = 0, .gpu_fusible = false, .deterministic = true};
         } else if constexpr (std::is_same_v<Type, AnimatedOpacityEffect>) {
           // A local frame is required before a backend can execute this node.
           // Per-frame compilation lowers it to a normal fusible opacity effect.
@@ -269,6 +328,9 @@ std::string_view effect_name(const Effect& effect) noexcept {
         if constexpr (std::is_same_v<Type, CropEffect>) return "crop";
         if constexpr (std::is_same_v<Type, OpacityEffect>) return "opacity";
         if constexpr (std::is_same_v<Type, AnimatedOpacityEffect>) return "animated_opacity";
+        if constexpr (std::is_same_v<Type, AnimatedTranslationEffect>) return "animated_translation";
+        if constexpr (std::is_same_v<Type, AnimatedScaleEffect>) return "animated_scale";
+        if constexpr (std::is_same_v<Type, AnimatedRotationEffect>) return "animated_rotation";
         if constexpr (std::is_same_v<Type, MaskEffect>) return "mask";
         if constexpr (std::is_same_v<Type, ColorMatrixEffect>) return "color_matrix";
         if constexpr (std::is_same_v<Type, GaussianBlurEffect>) return "gaussian_blur";
@@ -334,6 +396,34 @@ double evaluate_animated_opacity(const AnimatedOpacityEffect& effect,
                         static_cast<double>(right.frame - left.frame);
   const auto eased = evaluate_easing(left.easing, progress);
   return left.value + (right.value - left.value) * eased;
+}
+
+Transform2DEffect evaluate_animated_transform(const AnimatedTranslationEffect& effect,
+                                               std::int64_t local_frame) {
+  const auto value = evaluate_transform_keyframes(effect.keyframes, local_frame);
+  return {.m02 = value[0], .m12 = value[1]};
+}
+
+Transform2DEffect evaluate_animated_transform(const AnimatedScaleEffect& effect,
+                                               std::int64_t local_frame) {
+  const auto value = evaluate_transform_keyframes(effect.keyframes, local_frame);
+  return {.m00 = value[0], .m02 = effect.origin[0] * (1.0 - value[0]),
+          .m11 = value[1], .m12 = effect.origin[1] * (1.0 - value[1])};
+}
+
+Transform2DEffect evaluate_animated_transform(const AnimatedRotationEffect& effect,
+                                               std::int64_t local_frame) {
+  const auto degrees = std::remainder(evaluate_transform_keyframes(effect.keyframes, local_frame), 360.0);
+  const auto radians = degrees * (std::numbers::pi / 180.0);
+  // Cardinal rotations stay exact, including full-turn identity elimination.
+  const auto cosine = degrees == 0.0 ? 1.0 : std::abs(degrees) == 90.0 ? 0.0 :
+                      std::abs(degrees) == 180.0 ? -1.0 : std::cos(radians);
+  const auto sine = degrees == 0.0 || std::abs(degrees) == 180.0 ? 0.0 :
+                    degrees == 90.0 ? 1.0 : degrees == -90.0 ? -1.0 : std::sin(radians);
+  return {.m00 = cosine, .m01 = -sine,
+          .m02 = effect.origin[0] * (1.0 - cosine) + sine * effect.origin[1],
+          .m10 = sine, .m11 = cosine,
+          .m12 = effect.origin[1] * (1.0 - cosine) - sine * effect.origin[0]};
 }
 
 std::string_view effect_domain_name(EffectDomain domain) noexcept {

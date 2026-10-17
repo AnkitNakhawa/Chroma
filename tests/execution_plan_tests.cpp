@@ -660,6 +660,29 @@ void animated_opacity_resolves_in_layer_time_before_optimization() {
   CHECK(json.find("animated_opacity") == std::string::npos);
 }
 
+void animated_transforms_lower_in_layer_time_and_compose() {
+  const chroma::Composition composition(1, 8, 8, chroma::FrameRate(chroma::Rational(30000, 1001)),
+      chroma::FrameRange(chroma::FrameIndex(0), chroma::FrameIndex(30)),
+      {chroma::SolidLayer{.id = "motion",
+          .range = chroma::FrameRange(chroma::FrameIndex(10), chroma::FrameIndex(20)),
+          .color = {1, 0, 0, 1}, .effects = chroma::EffectProgram({
+            chroma::AnimatedTranslationEffect{.keyframes = {{0, {0, 0}}, {10, {4, 2}}}},
+            chroma::AnimatedScaleEffect{.keyframes = {{0, {1, 1}}, {10, {3, 5}}}, .origin = {1, 1}},
+            chroma::AnimatedRotationEffect{.keyframes = {{0, 0}, {10, 180}}, .origin = {1, 1}}})}});
+  CHECK(chroma::compile_frame(composition, chroma::FrameIndex(9)).operations().size() == 1);
+  CHECK(chroma::compile_frame(composition, chroma::FrameIndex(20)).operations().size() == 1);
+  const auto start = chroma::compile_frame(composition, chroma::FrameIndex(10));
+  CHECK(std::get<chroma::CompositeSolidOperation>(start.operations().back()).effects.effects().empty());
+  const auto plan = chroma::compile_frame(composition, chroma::FrameIndex(15));
+  const auto& operation = std::get<chroma::CompositeSolidOperation>(plan.operations().back());
+  CHECK(operation.effects.effects().size() == 1);
+  const auto& matrix = std::get<chroma::Transform2DEffect>(operation.effects.effects().front());
+  CHECK(matrix.m00 == 0 && matrix.m01 == -3 && matrix.m02 == 1);
+  CHECK(matrix.m10 == 2 && matrix.m11 == 0 && matrix.m12 == 3);
+  CHECK(operation.effect_rewrite_count == 2);
+  CHECK(chroma::execution_plan_json(plan).find("animated_") == std::string::npos);
+}
+
 }  // namespace
 
 int main() {
@@ -683,6 +706,7 @@ int main() {
   optimized_plan_exposes_rewrites_without_changing_execution();
   physical_planner_splits_barriers_and_tracks_resources();
   animated_opacity_resolves_in_layer_time_before_optimization();
+  animated_transforms_lower_in_layer_time_and_compose();
 
   if (failures != 0) {
     std::cerr << failures << " test assertion(s) failed\n";

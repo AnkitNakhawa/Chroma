@@ -78,6 +78,33 @@ struct AnimatedOpacityEffect {
   friend bool operator==(const AnimatedOpacityEffect&, const AnimatedOpacityEffect&) = default;
 };
 
+struct Vector2Keyframe {
+  std::int64_t frame;
+  std::array<double, 2> value;
+  EasingCurve easing{EasingCurve::linear};
+
+  friend bool operator==(const Vector2Keyframe&, const Vector2Keyframe&) = default;
+};
+
+struct AnimatedTranslationEffect {
+  std::vector<Vector2Keyframe> keyframes;
+  friend bool operator==(const AnimatedTranslationEffect&, const AnimatedTranslationEffect&) = default;
+};
+
+struct AnimatedScaleEffect {
+  std::vector<Vector2Keyframe> keyframes;
+  std::array<double, 2> origin{0.0, 0.0};
+  friend bool operator==(const AnimatedScaleEffect&, const AnimatedScaleEffect&) = default;
+};
+
+// Degrees interpolate without angle wrapping; positive angles rotate clockwise
+// in the canvas's downward-positive Y coordinate system.
+struct AnimatedRotationEffect {
+  std::vector<ScalarKeyframe> keyframes;
+  std::array<double, 2> origin{0.0, 0.0};
+  friend bool operator==(const AnimatedRotationEffect&, const AnimatedRotationEffect&) = default;
+};
+
 enum class MaskShape {
   rectangle,
   ellipse,
@@ -121,6 +148,7 @@ struct ExternalEffect {
 };
 
 using Effect = std::variant<Transform2DEffect, CropEffect, OpacityEffect, AnimatedOpacityEffect,
+                            AnimatedTranslationEffect, AnimatedScaleEffect, AnimatedRotationEffect,
                             MaskEffect, ColorMatrixEffect, GaussianBlurEffect,
                             TemporalSampleEffect, ExternalEffect>;
 
@@ -172,6 +200,12 @@ class OptimizedEffectProgram {
 [[nodiscard]] double evaluate_easing(EasingCurve easing, double progress) noexcept;
 [[nodiscard]] double evaluate_animated_opacity(const AnimatedOpacityEffect& effect,
                                                std::int64_t local_frame) noexcept;
+[[nodiscard]] Transform2DEffect evaluate_animated_transform(
+    const AnimatedTranslationEffect& effect, std::int64_t local_frame);
+[[nodiscard]] Transform2DEffect evaluate_animated_transform(
+    const AnimatedScaleEffect& effect, std::int64_t local_frame);
+[[nodiscard]] Transform2DEffect evaluate_animated_transform(
+    const AnimatedRotationEffect& effect, std::int64_t local_frame);
 [[nodiscard]] OptimizedEffectProgram optimize_effect_program(const EffectProgram& program);
 [[nodiscard]] std::string effect_program_json(const EffectProgram& program);
 [[nodiscard]] std::string optimized_effect_program_json(const OptimizedEffectProgram& program);

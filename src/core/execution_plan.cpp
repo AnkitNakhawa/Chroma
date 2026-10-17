@@ -77,6 +77,12 @@ OptimizedEffectProgram compile_effects(const EffectProgram& program, std::int64_
     if (const auto* animated = std::get_if<AnimatedOpacityEffect>(&effect)) {
       effects.emplace_back(
           OpacityEffect{.opacity = evaluate_animated_opacity(*animated, local_frame)});
+    } else if (const auto* translation = std::get_if<AnimatedTranslationEffect>(&effect)) {
+      effects.emplace_back(evaluate_animated_transform(*translation, local_frame));
+    } else if (const auto* scale = std::get_if<AnimatedScaleEffect>(&effect)) {
+      effects.emplace_back(evaluate_animated_transform(*scale, local_frame));
+    } else if (const auto* rotation = std::get_if<AnimatedRotationEffect>(&effect)) {
+      effects.emplace_back(evaluate_animated_transform(*rotation, local_frame));
     } else {
       effects.push_back(effect);
     }
@@ -98,6 +104,9 @@ bool preserves_transparency(const Effect& effect) noexcept {
         return std::is_same_v<Type, Transform2DEffect> || std::is_same_v<Type, CropEffect> ||
                std::is_same_v<Type, OpacityEffect> ||
                std::is_same_v<Type, AnimatedOpacityEffect> ||
+               std::is_same_v<Type, AnimatedTranslationEffect> ||
+               std::is_same_v<Type, AnimatedScaleEffect> ||
+               std::is_same_v<Type, AnimatedRotationEffect> ||
                std::is_same_v<Type, MaskEffect> ||
                std::is_same_v<Type, GaussianBlurEffect>;
       },

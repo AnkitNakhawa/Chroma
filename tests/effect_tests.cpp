@@ -191,6 +191,56 @@ void invalid_animations_are_rejected() {
       std::invalid_argument);
 }
 
+void animated_transforms_evaluate_and_validate() {
+  const chroma::AnimatedTranslationEffect translation{
+      .keyframes = {{3, {0.0, -4.0}, chroma::EasingCurve::ease_out}, {7, {8.0, 4.0}}}};
+  CHECK(chroma::evaluate_animated_transform(translation, 0).m12 == -4.0);
+  const auto moved = chroma::evaluate_animated_transform(translation, 5);
+  CHECK(moved.m02 == 7.0);
+  CHECK(moved.m12 == 3.0);
+  CHECK(chroma::evaluate_animated_transform(translation, 20).m02 == 8.0);
+  const chroma::AnimatedScaleEffect scale{.keyframes = {{0, {1, 1}}, {4, {-1, 3}}},
+                                         .origin = {2, 3}};
+  const auto scaled = chroma::evaluate_animated_transform(scale, 2);
+  CHECK(scaled.m00 == 0.0); // Singular scales retain the existing transparent semantics.
+  CHECK(scaled.m11 == 2.0);
+  CHECK(scaled.m02 == 2.0);
+  CHECK(scaled.m12 == -3.0);
+  CHECK(chroma::evaluate_animated_transform(scale, 4).m00 == -1.0);
+  const chroma::AnimatedRotationEffect rotation{.keyframes = {{0, 0}, {8, 720}},
+                                               .origin = {2, 3}};
+  const auto rotated = chroma::evaluate_animated_transform(rotation, 1);
+  CHECK(rotated.m00 == 0.0 && rotated.m01 == -1.0 && rotated.m10 == 1.0);
+  CHECK(rotated.m02 == 5.0 && rotated.m12 == 1.0);
+  CHECK(rotated.m00 * 2 + rotated.m01 * 3 + rotated.m02 == 2);
+  CHECK(rotated.m10 * 2 + rotated.m11 * 3 + rotated.m12 == 3);
+  CHECK(chroma::evaluate_animated_transform(rotation, 4) == chroma::Transform2DEffect{});
+  CHECK(chroma::evaluate_animated_transform(rotation, 8) == chroma::Transform2DEffect{});
+  const chroma::AnimatedRotationEffect reverse{.keyframes = {{0, -90}}};
+  CHECK(chroma::evaluate_animated_transform(reverse, 0).m10 == -1.0);
+  for (const auto& effect : std::vector<chroma::Effect>{translation, scale, rotation}) {
+    const auto traits = chroma::effect_traits(effect);
+    CHECK(traits.domain == chroma::EffectDomain::coordinate);
+    CHECK(traits.deterministic && !traits.gpu_fusible);
+    const auto json = chroma::effect_program_json(chroma::EffectProgram({effect}));
+    CHECK(json.find("keyframes") != std::string::npos);
+    CHECK(json == chroma::effect_program_json(chroma::EffectProgram({effect})));
+  }
+  CHECK_THROWS_AS(chroma::EffectProgram({chroma::AnimatedTranslationEffect{}}), std::invalid_argument);
+  CHECK_THROWS_AS(chroma::EffectProgram({chroma::AnimatedScaleEffect{
+      .keyframes = {{0, {1, std::nan("")}}}}}), std::invalid_argument);
+  CHECK_THROWS_AS(chroma::EffectProgram({chroma::AnimatedRotationEffect{
+      .keyframes = {{0, 0}, {0, 90}}}}), std::invalid_argument);
+  CHECK_THROWS_AS(chroma::EffectProgram({chroma::AnimatedRotationEffect{
+      .keyframes = {{-1, 0}}}}), std::invalid_argument);
+  CHECK_THROWS_AS(chroma::EffectProgram({chroma::AnimatedRotationEffect{
+      .keyframes = {{0, 0}}, .origin = {std::nan(""), 0}}}), std::invalid_argument);
+  CHECK_THROWS_AS(chroma::EffectProgram({chroma::AnimatedTranslationEffect{
+      .keyframes = {{0, {0, 0}, static_cast<chroma::EasingCurve>(99)}}}}), std::invalid_argument);
+  CHECK_THROWS_AS(chroma::EffectProgram({chroma::AnimatedRotationEffect{
+      .keyframes = std::vector<chroma::ScalarKeyframe>(1025)}}), std::invalid_argument);
+}
+
 }  // namespace
 
 int main() {
@@ -202,6 +252,7 @@ int main() {
   inspection_is_stable_and_includes_groups();
   easing_and_animated_opacity_are_deterministic();
   invalid_animations_are_rejected();
+  animated_transforms_evaluate_and_validate();
 
   if (failures != 0) {
     std::cerr << failures << " test assertion(s) failed\n";
