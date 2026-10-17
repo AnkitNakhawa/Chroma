@@ -216,6 +216,12 @@ void animated_transforms_evaluate_and_validate() {
   CHECK(rotated.m10 * 2 + rotated.m11 * 3 + rotated.m12 == 3);
   CHECK(chroma::evaluate_animated_transform(rotation, 4) == chroma::Transform2DEffect{});
   CHECK(chroma::evaluate_animated_transform(rotation, 8) == chroma::Transform2DEffect{});
+  const chroma::AnimatedRotationEffect long_way{.keyframes = {{0, 350}, {10, 10}}};
+  CHECK(chroma::evaluate_animated_transform(long_way, 5).m00 == -1.0);
+  const chroma::AnimatedTranslationEffect wide{
+      .keyframes = {{0, {-1e308, 1e308}}, {10, {1e308, -1e308}}}};
+  const auto midpoint = chroma::evaluate_animated_transform(wide, 5);
+  CHECK(midpoint.m02 == 0.0 && midpoint.m12 == 0.0);
   const chroma::AnimatedRotationEffect reverse{.keyframes = {{0, -90}}};
   CHECK(chroma::evaluate_animated_transform(reverse, 0).m10 == -1.0);
   for (const auto& effect : std::vector<chroma::Effect>{translation, scale, rotation}) {

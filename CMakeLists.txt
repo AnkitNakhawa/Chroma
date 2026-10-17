@@ -195,6 +195,10 @@ if(CHROMA_BUILD_TESTS)
   if(CHROMA_HAS_FFMPEG AND CHROMA_FFMPEG_EXECUTABLE)
     find_package(Python3 COMPONENTS Interpreter REQUIRED)
     find_program(CHROMA_FFPROBE_EXECUTABLE ffprobe REQUIRED)
+    add_test(NAME chroma_animation_cli_integration
+      COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/animation_integration.py
+              $<TARGET_FILE:chroma_cli> ${CHROMA_FFMPEG_EXECUTABLE} ${CHROMA_FFPROBE_EXECUTABLE})
+    set_tests_properties(chroma_animation_cli_integration PROPERTIES TIMEOUT 120)
     add_test(NAME chroma_audio_cli_integration
       COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/audio_integration.py
               $<TARGET_FILE:chroma_cli> ${CHROMA_FFMPEG_EXECUTABLE} ${CHROMA_FFPROBE_EXECUTABLE})

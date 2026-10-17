@@ -294,3 +294,18 @@ video decode
 ```
 
 It must run through the CPU reference path and the CUDA path, emit per-stage timing and transfer counts, and compare output within a documented tolerance. It should be benchmarked against equivalent FFmpeg and GPU-configured Remotion compositions before expanding the feature set.
+
+### Transform animation lowering
+
+Translation, scale, and rotation use typed scalar/vector keyframes with the same
+layer-relative integer time and cubic easing as opacity. Per-frame compilation
+lowers them to affine matrices in declaration order before ordinary identity
+removal and adjacent matrix composition. Scale and rotation use explicit fixed
+canvas-space origins; rotations interpolate degrees without shortest-path wrapping.
+Eligible image/video source chains reuse the existing fused CPU transform path.
+
+Composite operations retain an `effects_frame_varying` flag after lowering, even
+when a particular frame's matrix is an identity that gets removed. This prevents
+cache analysis from treating animated effect output as static. Prepared source
+images and glyphs remain reusable independently of their animated effects. A
+single-keyframe or static-value transform remains eligible for static planning.

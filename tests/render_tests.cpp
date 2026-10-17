@@ -495,6 +495,31 @@ void fused_image_sampling_and_effects_match_the_reference_path(const char* path)
   CHECK(reference_context.last_execution_stats().reference_operations == 1);
 }
 
+void animated_images_match_fused_and_reference_across_frames(const char* path) {
+  for (const auto blend : {chroma::BlendMode::source_over, chroma::BlendMode::multiply,
+                           chroma::BlendMode::screen, chroma::BlendMode::plus}) {
+    const chroma::FrameRange range(chroma::FrameIndex(0), chroma::FrameIndex(30));
+    const chroma::Composition composition(1, 32, 32, chroma::FrameRate(chroma::Rational(30)), range,
+      std::vector<chroma::VideoAsset>{}, {{"image", path}}, {
+        chroma::SolidLayer{.id = "background", .range = range, .color = {0.1, 0.2, 0.3, 1}},
+        chroma::ImageLayer{.id = "motion", .range = chroma::FrameRange(chroma::FrameIndex(5), chroma::FrameIndex(25)),
+          .asset_id = "image", .effects = chroma::EffectProgram({
+            chroma::AnimatedScaleEffect{.keyframes = {{0, {0.5, 1.25}}, {10, {1.25, 0.75}}}, .origin = {16, 16}},
+            chroma::AnimatedRotationEffect{.keyframes = {{0, -30}, {10, 45}}, .origin = {16, 16}},
+            chroma::AnimatedTranslationEffect{.keyframes = {{0, {0, -1}}, {10, {5, 4}}}},
+            chroma::CropEffect{.x = 1, .y = 2, .width = 28, .height = 26},
+            chroma::OpacityEffect{.opacity = 0.7}}), .blend_mode = blend}});
+    chroma::CpuRenderContext fused;
+    chroma::CpuRenderContext reference;
+    for (const auto frame : {5, 10, 15, 24, 5}) {
+      const auto plan = chroma::compile_frame(composition, chroma::FrameIndex(frame));
+      CHECK(fused.execute(plan).pixels() == reference.execute(plan, chroma::CpuExecutionMode::reference).pixels());
+      CHECK(fused.last_execution_stats().fused_operations == 1);
+      CHECK(fused.last_execution_stats().full_frame_intermediates_avoided == 1);
+    }
+  }
+}
+
 void fused_transform_matches_reference_and_unsafe_order_falls_back(const char* path) {
   for (const auto blend_mode : {chroma::BlendMode::source_over, chroma::BlendMode::multiply,
                                 chroma::BlendMode::screen, chroma::BlendMode::plus}) {
@@ -682,6 +707,7 @@ int main(int argc, char** argv) {
     image_layers_decode_once_and_execute_effects(argv[2]);
     fused_image_sampling_and_effects_match_the_reference_path(argv[2]);
     fused_transform_matches_reference_and_unsafe_order_falls_back(argv[2]);
+    animated_images_match_fused_and_reference_across_frames(argv[2]);
   }
 
   if (failures != 0) {

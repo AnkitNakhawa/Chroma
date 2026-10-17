@@ -188,3 +188,9 @@ Each item is a separate test-and-commit gate.
 | The first per-pixel effect-variant dispatch made the transformed color workload slower | 1 | Specialized the legal kernel, measured individual chains, and narrowed the authoritative profitability gate rather than enabling all planner candidates. |
 | Color-matrix and small placement fusion remained slower after hot-loop specialization | 1 | Kept both on the materializing reference path and documented the negative results; only the measured-positive leading-transform subset is authoritative. |
 | The first decode-LUT baseline run configured the generated composition but had not built its media fixture target | 1 | Built `chroma_benchmark_fixture` in the detached baseline worktree before rerunning only the missing baseline batches. |
+
+### Animated transform checkpoint
+
+1. [complete] Add typed vector/scalar translation, scale, and rotation keyframes, easing, origins, and lowering to affine matrices before optimization.
+2. [complete] Expose static values and keyframes in composition JSON, validate inputs, document semantics, and add a representative animated-card example.
+3. [complete] Preserve animation dependencies in cache planning and verify exact CPU reference/fused equivalence across frames and blend modes, rational-rate MP4 output, geometry, and failure paths.

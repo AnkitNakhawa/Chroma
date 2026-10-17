@@ -683,6 +683,48 @@ void animated_transforms_lower_in_layer_time_and_compose() {
   CHECK(chroma::execution_plan_json(plan).find("animated_") == std::string::npos);
 }
 
+void unrepresentable_animated_matrices_fail_cleanly() {
+  const auto parsed = chroma::parse_composition(R"({"schema_version":1,
+    "canvas":{"width":8,"height":8,"frame_rate":{"numerator":30,"denominator":1},"duration_frames":10},
+    "layers":[{"id":"huge","type":"solid","start_frame":0,"end_frame":10,"color":[1,1,1,1],
+      "effects":[{"type":"scale","value":[-1,1],"origin":[1e308,0]}]}]})");
+  CHECK(parsed.valid());
+  if (parsed.composition) CHECK_THROWS_AS(chroma::compile_frame(*parsed.composition, chroma::FrameIndex(0)), std::invalid_argument);
+}
+
+void lowered_animation_preserves_cache_safety() {
+  const std::string prefix = R"({"schema_version":1,"canvas":{"width":16,"height":16,
+    "frame_rate":{"numerator":30,"denominator":1},"duration_frames":30},
+    "assets":[{"id":"image","type":"image","path":"not-needed.png"}],
+    "layers":[{"id":"moving","type":"image","asset":"image","start_frame":0,
+    "end_frame":30,"effects":[)";
+  for (const auto& effect : {
+      R"({"type":"translation","keyframes":[{"frame":0,"value":[0,0]},{"frame":10,"value":[4,0]}]})",
+      R"({"type":"scale","keyframes":[{"frame":0,"value":[1,1]},{"frame":10,"value":[2,2]}]})",
+      R"({"type":"rotation","keyframes":[{"frame":0,"value":0},{"frame":10,"value":90}]})",
+      R"({"type":"opacity","keyframes":[{"frame":0,"value":1},{"frame":10,"value":0.5}]})"}) {
+    const auto parsed = chroma::parse_composition(prefix + effect + R"(,{"type":"gaussian_blur","radius":1}]}]})");
+    CHECK(parsed.valid());
+    if (!parsed.composition) continue;
+    // At frame zero each animation lowers to an identity that is removed. The
+    // original time dependency must still keep the effect output out of cache.
+    const auto plan = chroma::compile_frame(*parsed.composition, chroma::FrameIndex(0));
+    const auto& image = std::get<chroma::CompositeImageOperation>(plan.operations().back());
+    CHECK(image.effects_frame_varying);
+    const auto analysis = chroma::analyze_execution_plan(plan);
+    CHECK(analysis.cache_opportunities.front().decision == chroma::CacheDecision::not_cacheable);
+    CHECK(analysis.cache_opportunities.front().reason == chroma::CacheReason::frame_variant_source);
+    CHECK(analysis.prepared_resources.size() == 1); // Static image preparation remains reusable.
+  }
+  const auto parsed = chroma::parse_composition(prefix + R"({"type":"rotation","value":45}]}]})");
+  CHECK(parsed.valid());
+  if (parsed.composition) {
+    const auto plan = chroma::compile_frame(*parsed.composition, chroma::FrameIndex(0));
+    CHECK(!std::get<chroma::CompositeImageOperation>(plan.operations().back()).effects_frame_varying);
+    CHECK(chroma::analyze_execution_plan(plan).cache_opportunities.front().decision == chroma::CacheDecision::cache_candidate);
+  }
+}
+
 }  // namespace
 
 int main() {
@@ -707,6 +749,8 @@ int main() {
   physical_planner_splits_barriers_and_tracks_resources();
   animated_opacity_resolves_in_layer_time_before_optimization();
   animated_transforms_lower_in_layer_time_and_compose();
+  lowered_animation_preserves_cache_safety();
+  unrepresentable_animated_matrices_fail_cleanly();
 
   if (failures != 0) {
     std::cerr << failures << " test assertion(s) failed\n";

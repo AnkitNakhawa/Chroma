@@ -26,6 +26,7 @@ struct CompositeSolidOperation {
   EffectProgram effects;
   std::size_t effect_rewrite_count{0};
   BlendMode blend_mode{BlendMode::source_over};
+  bool effects_frame_varying{false};
 
   friend bool operator==(const CompositeSolidOperation&, const CompositeSolidOperation&) = default;
 };
@@ -38,6 +39,7 @@ struct CompositeVideoFrameOperation {
   EffectProgram effects;
   std::size_t effect_rewrite_count{0};
   BlendMode blend_mode{BlendMode::source_over};
+  bool effects_frame_varying{false};
 
   friend bool operator==(const CompositeVideoFrameOperation&,
                          const CompositeVideoFrameOperation&) = default;
@@ -50,6 +52,7 @@ struct CompositeImageOperation {
   EffectProgram effects;
   std::size_t effect_rewrite_count{0};
   BlendMode blend_mode{BlendMode::source_over};
+  bool effects_frame_varying{false};
 
   friend bool operator==(const CompositeImageOperation&, const CompositeImageOperation&) = default;
 };
@@ -62,6 +65,7 @@ struct CompositeShapeOperation {
   EffectProgram effects;
   std::size_t effect_rewrite_count{0};
   BlendMode blend_mode{BlendMode::source_over};
+  bool effects_frame_varying{false};
 
   friend bool operator==(const CompositeShapeOperation&, const CompositeShapeOperation&) = default;
 };
@@ -77,6 +81,7 @@ struct CompositeTextOperation {
   EffectProgram effects;
   std::size_t effect_rewrite_count{0};
   BlendMode blend_mode{BlendMode::source_over};
+  bool effects_frame_varying{false};
 
   friend bool operator==(const CompositeTextOperation&, const CompositeTextOperation&) = default;
 };

@@ -215,7 +215,10 @@ translation. These operations transform the same canvas-sized source surface as
 does not accept an origin. Per-frame compilation resolves each animation to an
 affine matrix before existing identity removal, adjacent matrix composition, and
 fusion planning. The CPU reference and eligible fused source paths execute the
-same lowered matrix. See `examples/animated-transforms.json`.
+same lowered matrix. Inspection retains `effects_frame_varying` for multi-keyframe
+programs after lowering, so cache diagnostics do not suggest reusing animated
+effect output; static image/text preparation remains reusable. See
+`examples/animated-transforms.json`.
 
 Simple transitions are compositions of existing primitives rather than a separate execution type. For a source-over crossfade between opaque layers, keep the outgoing layer opaque underneath and animate the incoming layer's opacity from 0 to 1; this preserves full output alpha while interpolating the colors. See `examples/crossfade.json`.
 

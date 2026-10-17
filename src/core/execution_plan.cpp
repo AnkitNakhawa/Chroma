@@ -69,6 +69,15 @@ nlohmann::json shape_geometry_json(const ShapeGeometry& geometry) {
           {"corner_radius", geometry.corner_radius}};
 }
 
+bool has_frame_varying_effects(const EffectProgram& program) {
+  return std::any_of(program.effects().begin(), program.effects().end(), [](const Effect& effect) {
+    return std::visit([](const auto& typed) {
+      if constexpr (requires { typed.keyframes; }) return typed.keyframes.size() > 1;
+      else return false;
+    }, effect);
+  });
+}
+
 OptimizedEffectProgram compile_effects(const EffectProgram& program, std::int64_t local_frame,
                                        std::optional<double> final_opacity = std::nullopt) {
   std::vector<Effect> effects;
@@ -376,7 +385,8 @@ ExecutionPlan compile_frame(const Composition& composition, FrameIndex frame) {
                                                         .effects = optimized.program(),
                                                         .effect_rewrite_count =
                                                             optimized.rewrite_count(),
-                                                        .blend_mode = solid->blend_mode});
+                                                        .blend_mode = solid->blend_mode,
+          .effects_frame_varying = has_frame_varying_effects(solid->effects)});
       }
       continue;
     }
@@ -402,7 +412,8 @@ ExecutionPlan compile_frame(const Composition& composition, FrameIndex frame) {
           .placement = video->placement,
           .effects = optimized.program(),
           .effect_rewrite_count = optimized.rewrite_count(),
-          .blend_mode = video->blend_mode});
+          .blend_mode = video->blend_mode,
+          .effects_frame_varying = has_frame_varying_effects(video->effects)});
       continue;
     }
 
@@ -425,7 +436,8 @@ ExecutionPlan compile_frame(const Composition& composition, FrameIndex frame) {
           .placement = image->placement,
           .effects = optimized.program(),
           .effect_rewrite_count = optimized.rewrite_count(),
-          .blend_mode = image->blend_mode});
+          .blend_mode = image->blend_mode,
+          .effects_frame_varying = has_frame_varying_effects(image->effects)});
       continue;
     }
 
@@ -447,7 +459,8 @@ ExecutionPlan compile_frame(const Composition& composition, FrameIndex frame) {
           .stroke = shape->stroke,
           .effects = optimized.program(),
           .effect_rewrite_count = optimized.rewrite_count(),
-          .blend_mode = shape->blend_mode});
+          .blend_mode = shape->blend_mode,
+          .effects_frame_varying = has_frame_varying_effects(shape->effects)});
       continue;
     }
 
@@ -472,7 +485,8 @@ ExecutionPlan compile_frame(const Composition& composition, FrameIndex frame) {
           .color = text.color,
           .effects = optimized.program(),
           .effect_rewrite_count = optimized.rewrite_count(),
-          .blend_mode = text.blend_mode});
+          .blend_mode = text.blend_mode,
+          .effects_frame_varying = has_frame_varying_effects(text.effects)});
     }
   }
 
@@ -548,7 +562,10 @@ ExecutionPlanAnalysis analyze_execution_plan(const ExecutionPlan& plan) {
     std::size_t pending_rewrites = 0;
     BlendMode blend_mode = BlendMode::source_over;
     std::string source_node;
-    bool frame_variant = false;
+    bool frame_variant = std::visit([](const auto& typed) {
+      if constexpr (std::is_same_v<std::decay_t<decltype(typed)>, ClearOperation>) return false;
+      else return typed.effects_frame_varying;
+    }, operation);
     bool static_resource = false;
     if (const auto* solid = std::get_if<CompositeSolidOperation>(&operation)) {
       source_id = solid->source_id;
@@ -683,6 +700,7 @@ std::string execution_plan_json(const ExecutionPlan& plan) {
                             {"color", color_json(solid->color)},
                             {"effects", effects_json(solid->effects)},
                             {"effect_rewrite_count", solid->effect_rewrite_count},
+                            {"effects_frame_varying", solid->effects_frame_varying},
                             {"blend_mode", blend_mode_name(solid->blend_mode)}});
       continue;
     }
@@ -696,6 +714,7 @@ std::string execution_plan_json(const ExecutionPlan& plan) {
            {"placement", placement_json(video->placement)},
            {"effects", effects_json(video->effects)},
            {"effect_rewrite_count", video->effect_rewrite_count},
+                            {"effects_frame_varying", video->effects_frame_varying},
            {"blend_mode", blend_mode_name(video->blend_mode)}});
       continue;
     }
@@ -706,6 +725,7 @@ std::string execution_plan_json(const ExecutionPlan& plan) {
                             {"placement", placement_json(image->placement)},
                             {"effects", effects_json(image->effects)},
                             {"effect_rewrite_count", image->effect_rewrite_count},
+                            {"effects_frame_varying", image->effects_frame_varying},
                             {"blend_mode", blend_mode_name(image->blend_mode)}});
       continue;
     }
@@ -722,6 +742,7 @@ std::string execution_plan_json(const ExecutionPlan& plan) {
                             {"stroke", std::move(stroke)},
                             {"effects", effects_json(shape->effects)},
                             {"effect_rewrite_count", shape->effect_rewrite_count},
+                            {"effects_frame_varying", shape->effects_frame_varying},
                             {"blend_mode", blend_mode_name(shape->blend_mode)}});
       continue;
     }
@@ -735,6 +756,7 @@ std::string execution_plan_json(const ExecutionPlan& plan) {
                           {"color", color_json(text.color)},
                           {"effects", effects_json(text.effects)},
                           {"effect_rewrite_count", text.effect_rewrite_count},
+                          {"effects_frame_varying", text.effects_frame_varying},
                           {"blend_mode", blend_mode_name(text.blend_mode)}});
   }
 
