@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "chroma/core/render.hpp"
+#include "chroma/media/audio.hpp"
 
 #include <nlohmann/json.hpp>
 
@@ -53,6 +54,7 @@ double frames_per_second(std::int64_t frames, std::int64_t nanoseconds) {
 
 nlohmann::json profile_json(const VideoRenderResult& result) {
   return {{"frames_encoded", result.frames_encoded},
+          {"audio_samples_encoded", result.audio_samples_encoded},
           {"frames_per_second",
            frames_per_second(result.frames_encoded, result.total_nanoseconds)},
           {"counts",
@@ -68,7 +70,8 @@ nlohmann::json profile_json(const VideoRenderResult& result) {
             {"encode_rgb24_written", result.encode.rgb24_bytes_written},
             {"encode_yuv420_written", result.encode.yuv420_bytes_written}}},
           {"milliseconds",
-           {{"setup", milliseconds(result.setup_nanoseconds)},
+           {{"audio", milliseconds(result.audio_nanoseconds)},
+            {"setup", milliseconds(result.setup_nanoseconds)},
             {"compile", milliseconds(result.compile_nanoseconds)},
             {"decode", milliseconds(result.decode.decode_nanoseconds)},
             {"decode_conversion", milliseconds(result.decode.conversion_nanoseconds)},
@@ -154,39 +157,119 @@ std::uint8_t linear_to_byte(float value) noexcept {
 }
 
 void write_available_packets(AVCodecContext* codec, AVFormatContext* format, AVStream* stream,
-                             AVPacket* packet) {
+                             AVPacket* packet, std::int64_t sample_limit = -1) {
   while (true) {
     const auto status = avcodec_receive_packet(codec, packet);
     if (status == AVERROR(EAGAIN) || status == AVERROR_EOF) {
       return;
     }
     if (status < 0) {
-      throw std::runtime_error("video encode failed: " + ffmpeg_error(status));
+      throw std::runtime_error("media encode failed: " + ffmpeg_error(status));
+    }
+    if (sample_limit >= 0 && packet->pts != AV_NOPTS_VALUE) {
+      if (packet->pts >= sample_limit) { av_packet_unref(packet); continue; }
+      packet->duration = std::min(packet->duration, sample_limit - packet->pts);
     }
     av_packet_rescale_ts(packet, codec->time_base, stream->time_base);
     packet->stream_index = stream->index;
     const auto write_status = av_interleaved_write_frame(format, packet);
     av_packet_unref(packet);
     if (write_status < 0) {
-      throw std::runtime_error("unable to mux encoded video packet: " +
+      throw std::runtime_error("unable to mux encoded media packet: " +
                                ffmpeg_error(write_status));
     }
   }
 }
 
 void submit_frame(AVCodecContext* codec, AVFormatContext* format, AVStream* stream,
-                  AVPacket* packet, AVFrame* frame) {
+                  AVPacket* packet, AVFrame* frame, std::int64_t sample_limit = -1) {
   auto status = avcodec_send_frame(codec, frame);
   if (status == AVERROR(EAGAIN)) {
-    write_available_packets(codec, format, stream, packet);
+    write_available_packets(codec, format, stream, packet, sample_limit);
     status = avcodec_send_frame(codec, frame);
   }
   if (status < 0 && !(frame == nullptr && status == AVERROR_EOF)) {
-    throw std::runtime_error("unable to submit video frame to encoder: " +
+    throw std::runtime_error("unable to submit media frame to encoder: " +
                              ffmpeg_error(status));
   }
-  write_available_packets(codec, format, stream, packet);
+  write_available_packets(codec, format, stream, packet, sample_limit);
 }
+// Native AAC uses planar float stereo. Keep its codec/frame state job-local and
+// feed full codec blocks except for the final partial block. Mux packet durations
+// are capped at the actual sample count, excluding AAC tail padding.
+class AudioOutput {
+ public:
+  AudioOutput(const Composition& composition, AVFormatContext* format)
+      : mixer_(composition), format_(format) {
+    const auto* encoder = avcodec_find_encoder_by_name("aac");
+    if (!encoder) throw std::runtime_error("this FFmpeg build does not provide the native AAC encoder");
+    codec_.reset(avcodec_alloc_context3(encoder));
+    if (!codec_) throw std::bad_alloc();
+    codec_->sample_rate = audio_sample_rate;
+    codec_->sample_fmt = AV_SAMPLE_FMT_FLTP;
+    codec_->time_base = AVRational{1, audio_sample_rate};
+    codec_->bit_rate = 192000;
+    av_channel_layout_default(&codec_->ch_layout, audio_channels);
+    if (format->oformat->flags & AVFMT_GLOBALHEADER) codec_->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
+    auto status = avcodec_open2(codec_.get(), encoder, nullptr);
+    if (status < 0) throw std::runtime_error("unable to open AAC encoder: " + ffmpeg_error(status));
+    if (codec_->frame_size <= 0) throw std::runtime_error("AAC encoder has invalid frame size");
+    stream_ = avformat_new_stream(format, nullptr);
+    if (!stream_) throw std::bad_alloc();
+    stream_->time_base = codec_->time_base;
+    status = avcodec_parameters_from_context(stream_->codecpar, codec_.get());
+    if (status < 0) throw std::runtime_error("unable to configure audio stream: " + ffmpeg_error(status));
+    frame_.reset(av_frame_alloc());
+    packet_.reset(av_packet_alloc());
+    if (!frame_ || !packet_) throw std::bad_alloc();
+    frame_->format = codec_->sample_fmt;
+    frame_->sample_rate = audio_sample_rate;
+    frame_->nb_samples = codec_->frame_size;
+    status = av_channel_layout_copy(&frame_->ch_layout, &codec_->ch_layout);
+    if (status < 0) throw std::runtime_error("unable to configure audio frame: " + ffmpeg_error(status));
+    status = av_frame_get_buffer(frame_.get(), 0);
+    if (status < 0) throw std::runtime_error("unable to allocate audio frame: " + ffmpeg_error(status));
+  }
+  void through(std::int64_t boundary, bool final) {
+    while (mixer_.position() < boundary) {
+      const auto remaining = mixer_.sample_count() - mixer_.position();
+      const auto count = static_cast<int>(std::min<std::int64_t>(codec_->frame_size, remaining));
+      if (!final && count > boundary - mixer_.position()) break;
+      const auto start = Clock::now();
+      const auto pts = mixer_.position();
+      const auto samples = mixer_.read(count);
+      const auto status = av_frame_make_writable(frame_.get());
+      if (status < 0) throw std::runtime_error("audio frame is not writable: " + ffmpeg_error(status));
+      frame_->nb_samples = count;
+      frame_->pts = pts;
+      frame_->duration = count;
+      for (int channel = 0; channel < audio_channels; ++channel) {
+        auto* output = reinterpret_cast<float*>(frame_->data[channel]);
+        for (int sample = 0; sample < count; ++sample)
+          output[sample] = samples[static_cast<std::size_t>(sample * audio_channels + channel)];
+      }
+      submit_frame(codec_.get(), format_, stream_, packet_.get(), frame_.get(), mixer_.sample_count());
+      nanoseconds_ += elapsed_nanoseconds(start, Clock::now());
+    }
+  }
+  void finish() {
+    through(mixer_.sample_count(), true);
+    const auto start = Clock::now();
+    submit_frame(codec_.get(), format_, stream_, packet_.get(), nullptr, mixer_.sample_count());
+    stream_->duration = av_rescale_q(mixer_.sample_count(), codec_->time_base, stream_->time_base);
+    nanoseconds_ += elapsed_nanoseconds(start, Clock::now());
+  }
+  std::int64_t samples() const noexcept { return mixer_.position(); }
+  std::int64_t nanoseconds() const noexcept { return nanoseconds_; }
+ private:
+  AudioMixer mixer_;
+  AVFormatContext* format_;
+  CodecPointer codec_;
+  AVStream* stream_ = nullptr;
+  FramePointer frame_;
+  PacketPointer packet_;
+  std::int64_t nanoseconds_ = 0;
+};
 #endif
 
 }  // namespace
@@ -262,6 +345,11 @@ VideoRenderResult render_video_cpu(const Composition& composition,
   }
   stream->time_base = codec->time_base;
   stream->avg_frame_rate = codec->framerate;
+
+  std::unique_ptr<AudioOutput> audio;
+  if (!composition.audio_tracks().empty()) {
+    audio = std::make_unique<AudioOutput>(composition, format.get());
+  }
 
   if (!(format->oformat->flags & AVFMT_NOFILE)) {
     status = avio_open(&format->pb, output_string.c_str(), AVIO_FLAG_WRITE);
@@ -362,11 +450,18 @@ VideoRenderResult render_video_cpu(const Composition& composition,
     submit_frame(codec.get(), format.get(), stream, packet.get(), frame.get());
     ++encoded;
     encode_nanoseconds += elapsed_nanoseconds(encode_start, Clock::now());
+    if (audio) {
+      const auto boundary = audio_sample_at(composition.frame_rate(), FrameIndex(index + 1)) -
+                            audio_sample_at(composition.frame_rate(), composition.range().start());
+      audio->through(boundary, false);
+    }
   }
 
+  const auto audio_before_finalize = audio ? audio->nanoseconds() : 0;
   const auto finalize_start = Clock::now();
   submit_frame(codec.get(), format.get(), stream, packet.get(), nullptr);
   stream->duration = av_rescale_q(encoded, codec->time_base, stream->time_base);
+  if (audio) audio->finish();
   status = av_write_trailer(format.get());
   if (status < 0) {
     throw std::runtime_error("unable to finalize video output: " + ffmpeg_error(status));
@@ -374,6 +469,8 @@ VideoRenderResult render_video_cpu(const Composition& composition,
   output_guard.commit();
   const auto total_end = Clock::now();
   encode_nanoseconds += elapsed_nanoseconds(finalize_start, total_end);
+  // Audio work inside finalization is reported separately from video encoding.
+  if (audio) encode_nanoseconds -= audio->nanoseconds() - audio_before_finalize;
   encode_telemetry.codec_mux_nanoseconds = std::max<std::int64_t>(
       0, encode_nanoseconds - encode_telemetry.linear_to_rgb_nanoseconds -
              encode_telemetry.rgb_to_yuv_nanoseconds);
@@ -385,7 +482,9 @@ VideoRenderResult render_video_cpu(const Composition& composition,
                            .total_nanoseconds = elapsed_nanoseconds(total_start, total_end),
                            .composition_nanoseconds = composition_nanoseconds,
                            .decode = decode_telemetry,
-                           .encode = encode_telemetry};
+                           .encode = encode_telemetry,
+                           .audio_samples_encoded = audio ? audio->samples() : 0,
+                           .audio_nanoseconds = audio ? audio->nanoseconds() : 0};
 #else
   static_cast<void>(composition);
   static_cast<void>(output_path);
@@ -411,6 +510,8 @@ std::string video_benchmark_json(const std::vector<VideoRenderResult>& iteration
   std::int64_t total_execute = 0;
   std::int64_t total_encode = 0;
   std::int64_t total_composition = 0;
+  std::int64_t total_audio = 0;
+  std::int64_t total_audio_samples = 0;
   DecodeTelemetry total_decode;
   EncodeTelemetry total_encode_telemetry;
   nlohmann::json runs = nlohmann::json::array();
@@ -423,6 +524,8 @@ std::string video_benchmark_json(const std::vector<VideoRenderResult>& iteration
     total_execute += iteration.execute_nanoseconds;
     total_encode += iteration.encode_nanoseconds;
     total_composition += iteration.composition_nanoseconds;
+    total_audio += iteration.audio_nanoseconds;
+    total_audio_samples += iteration.audio_samples_encoded;
     total_decode += iteration.decode;
     total_encode_telemetry += iteration.encode;
     runs.push_back(profile_json(iteration));
@@ -434,7 +537,8 @@ std::string video_benchmark_json(const std::vector<VideoRenderResult>& iteration
       {"iteration_count", iterations.size()},
       {"telemetry_totals",
        {{"counts",
-         {{"decode_requests", total_decode.frame_requests},
+         {{"audio_samples_encoded", total_audio_samples},
+          {"decode_requests", total_decode.frame_requests},
           {"frames_decoded", total_decode.frames_decoded},
           {"decode_conversions", total_decode.frames_converted},
           {"encode_conversions", total_encode_telemetry.frames_converted}}},
@@ -448,7 +552,8 @@ std::string video_benchmark_json(const std::vector<VideoRenderResult>& iteration
       {"summary",
        {{"frames_per_second", frames_per_second(total_frames, total_time)},
         {"milliseconds",
-         {{"setup_mean", milliseconds(static_cast<std::int64_t>(total_setup / count))},
+         {{"audio_mean", milliseconds(static_cast<std::int64_t>(total_audio / count))},
+          {"setup_mean", milliseconds(static_cast<std::int64_t>(total_setup / count))},
           {"compile_mean", milliseconds(static_cast<std::int64_t>(total_compile / count))},
           {"decode_mean",
            milliseconds(static_cast<std::int64_t>(total_decode.decode_nanoseconds / count))},

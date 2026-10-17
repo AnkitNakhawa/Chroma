@@ -163,6 +163,23 @@ Backend selection is capability-based. Unsupported operations may create a trans
 
 ### 7. Media and audio
 
+Audio tracks are independent of visual layer order. A job-scoped streaming mixer
+owns one decoder and resampler per active track, trims in composition-frame time,
+and produces 48 kHz stereo float blocks. Frame boundaries map independently to
+nearest samples, preventing accumulated drift at rational frame rates. Decoding
+starts at source sample zero to preserve codec priming and resampler state. The
+mixer inserts timeline silence, applies linear gains, sums in double precision,
+and saturates once. Source EOF inside a requested trim is an error.
+
+The output writer registers the AAC stream before the container header, submits
+full codec blocks alongside successive video frames, submits the final partial
+block, and drains both encoders before writing the trailer. It caps AAC packet
+durations at the intended sample count so encoder tail padding does not extend
+the track. MP4 carries codec priming metadata; lossy decoded samples may retain
+up to one trailing codec block even though stream presentation duration is exact.
+Audio timing and sample counts are separate from video conversion telemetry.
+
+
 FFmpeg libraries provide demuxing, decoding, encoding, audio resampling, and muxing. The CUDA path should use FFmpeg hardware frames so supported videos can travel through NVDEC, CUDA effects, and NVENC without unnecessary CPU readback.
 
 The first implemented media boundary discovers libavformat, libavcodec, libavutil, and libswscale through `pkg-config`. It can be disabled at configure time, and all public metadata uses Chroma-owned strings, integers, optionals, and exact rationals. No FFmpeg structs or enum types cross the public header boundary. The `probe` command currently exposes the selected video stream's dimensions, codec, pixel format, time base, frame rate, duration, and reported frame count as JSON.
@@ -175,7 +192,7 @@ RGBA8 decode conversion uses a 256-entry sRGB-to-linear table because every poss
 
 Audio remains CPU-side in v1 and is scheduled independently from video until muxing.
 
-The implemented CPU video writer renders surfaces in memory, converts linear premultiplied RGB over black to 8-bit RGB, converts to YUV420P with libswscale, encodes H.264, and muxes directly to the requested container. It assigns explicit frame and stream durations so rational frame rates survive muxing. The initial writer is sequential, requires even dimensions, and has no audio path yet.
+The implemented CPU video writer renders surfaces in memory, converts linear premultiplied RGB over black to 8-bit RGB, converts to YUV420P with libswscale, encodes H.264, and muxes directly to the requested container. It assigns explicit frame and stream durations so rational frame rates survive muxing. The initial writer is sequential, requires even dimensions, and optionally interleaves a stereo AAC stream from declared audio tracks.
 
 During sequential renders, a CPU execution context owns one persistent decoder per video layer and asset path. Monotonically increasing requests retain demux, codec, decoded-frame lookahead, and conversion state; backward requests trigger an explicit seek and codec flush. The context lifetime is scoped to one render job, so it contains no shared mutable global cache.
 

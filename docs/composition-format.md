@@ -206,3 +206,13 @@ double precision; the final mix saturates to [-1, 1], without automatic gain
 normalization. A trim extending beyond decoded source samples is an error,
 including muted tracks. Decode and mix storage is block-based rather than sized
 to the entire composition; each overlapping track owns its own decoder.
+
+`render` adds an AAC stream when at least one track is declared, muxed alongside
+H.264 video in MP4. The stream's presentation duration matches the composition to
+the nearest 48 kHz sample. Encoder priming is represented by MP4 metadata; generic
+raw PCM decoders can expose up to one extra trailing AAC block. AAC is lossy, so
+encoded-output comparisons use documented tolerances rather than exact equality.
+The mixer itself is deterministic and tested with exact PCM fixtures. Benchmark
+JSON reports `audio_samples_encoded` and `milliseconds.audio` separately from
+video encoding/conversion work. Audio integration CTest coverage additionally
+requires Python 3 and the FFmpeg/ffprobe command-line tools.

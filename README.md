@@ -29,7 +29,7 @@ Chroma is not intended to be a visual editor, preview platform, hosted rendering
 
 ## Status
 
-Post-baseline compiler spike. Chroma can parse and validate solid, static-image, native-shape, shaped-text, and video compositions; resolve assets; probe and decode media at exact rational times; compile typed per-frame plans; render through a persistent CPU execution context; write PPM frames; encode H.264/MP4 directly; and emit per-stage benchmark JSON. Image and video sources support `none`, `contain`, `cover`, and `fill` placement with normalized alignment. Native rectangles, rounded rectangles, and ellipses support fill and optional inside stroke. HarfBuzz shapes UTF-8 text and FreeType rasterizes glyph coverage into Chroma-owned prepared resources. Composition layers can request transform, crop, static or keyframed opacity, analytic rectangle/ellipse masks, color-matrix, and Gaussian-blur effects plus source-over, multiply, screen, and plus blending. Keyframed opacity uses layer-relative integer frames and deterministic cubic easing, then lowers to the existing static effect IR before optimization; overlapping animated layers provide a native crossfade pattern. Gaussian blur is the first executable neighborhood barrier, preserving separate fusible groups on either side. Static images and prepared text are reused within a render context while Chroma retains ownership of effects and compositing. The CPU runtime now executes a conservative, profitable subset of native-size video/image sampling, one leading transform, crop, opacity, and compositing as one destination-pixel loop; unsupported or slower chains use the materializing reference path. The compiler makes conservative algebraic rewrites authoritative for execution, removes provably dead work, and produces a typed physical-pass analysis with fusion candidates, explicit barriers, logical intermediate resources, reusable physical-buffer assignments, full-frame byte-traffic estimates, peak-live memory, and cache opportunities. CUDA execution, audio, production color management, persistent cross-job caching, parallel scheduling, and language bindings are not implemented yet.
+Post-baseline compiler spike. Chroma can parse and validate solid, static-image, native-shape, shaped-text, and video compositions; resolve assets; probe and decode media at exact rational times; compile typed per-frame plans; render through a persistent CPU execution context; write PPM frames; encode H.264/MP4 directly; and emit per-stage benchmark JSON. Image and video sources support `none`, `contain`, `cover`, and `fill` placement with normalized alignment. Native rectangles, rounded rectangles, and ellipses support fill and optional inside stroke. HarfBuzz shapes UTF-8 text and FreeType rasterizes glyph coverage into Chroma-owned prepared resources. Composition layers can request transform, crop, static or keyframed opacity, analytic rectangle/ellipse masks, color-matrix, and Gaussian-blur effects plus source-over, multiply, screen, and plus blending. Keyframed opacity uses layer-relative integer frames and deterministic cubic easing, then lowers to the existing static effect IR before optimization; overlapping animated layers provide a native crossfade pattern. Gaussian blur is the first executable neighborhood barrier, preserving separate fusible groups on either side. Static images and prepared text are reused within a render context while Chroma retains ownership of effects and compositing. The CPU runtime now executes a conservative, profitable subset of native-size video/image sampling, one leading transform, crop, opacity, and compositing as one destination-pixel loop; unsupported or slower chains use the materializing reference path. The compiler makes conservative algebraic rewrites authoritative for execution, removes provably dead work, and produces a typed physical-pass analysis with fusion candidates, explicit barriers, logical intermediate resources, reusable physical-buffer assignments, full-frame byte-traffic estimates, peak-live memory, and cache opportunities. CUDA execution, production color management, persistent cross-job caching, parallel scheduling, and language bindings are not implemented yet.
 
 ## Build and test
 
@@ -75,7 +75,18 @@ Render a complete composition directly to H.264/MP4 without intermediate image f
 ./build/chroma render composition.json --output result.mp4
 ```
 
-The current encoder path is CPU-only, uses 8-bit YUV420P, requires even canvas dimensions, and does not yet include audio.
+The current encoder path is CPU-only, uses 8-bit YUV420P, requires even canvas dimensions, and optionally mixes declared audio tracks to 48 kHz stereo AAC. Audio supports frame-based source trimming and placement, linear gain, overlapping tracks, and silence gaps.
+
+Render the audio example after supplying a two-second `examples/sound.wav`:
+
+```sh
+ffmpeg -f lavfi -i "sine=frequency=440:sample_rate=48000:duration=2" examples/sound.wav
+./build/chroma render examples/audio.json --output audio.mp4
+```
+
+See [audio track semantics](docs/composition-format.md#audio-tracks) for timing,
+resampling, clipping, source-length errors, and current format restrictions.
+Benchmark reports include audio sample counts and separate audio processing time.
 
 CPU decode uses a pixel-exact 256-entry sRGB-to-linear lookup for RGBA8 input; `CpuDecodeConversionMode::reference` retains the original transfer-function implementation as a correctness oracle.
 

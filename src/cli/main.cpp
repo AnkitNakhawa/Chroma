@@ -136,7 +136,8 @@ int main(int argc, char** argv) {
               << "frame rate: " << composition.frame_rate().value().numerator() << '/'
               << composition.frame_rate().value().denominator() << '\n'
               << "duration: " << composition.range().length() << " frames\n"
-              << "layers: " << composition.layers().size() << '\n';
+              << "layers: " << composition.layers().size() << '\n'
+              << "audio tracks: " << composition.audio_tracks().size() << '\n';
     return 0;
   }
 

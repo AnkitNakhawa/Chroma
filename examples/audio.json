@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "canvas": {
+    "width": 320,
+    "height": 180,
+    "frame_rate": {"numerator": 30, "denominator": 1},
+    "duration_frames": 90
+  },
+  "assets": [{"id": "sound", "type": "audio", "path": "sound.wav"}],
+  "layers": [
+    {"id": "background", "type": "solid", "start_frame": 0, "end_frame": 90,
+     "color": [0.05, 0.25, 0.95, 1.0]}
+  ],
+  "audio_tracks": [
+    {"id": "trimmed", "asset": "sound", "start_frame": 15, "end_frame": 45,
+     "source_start_frame": 30, "gain": 0.5},
+    {"id": "overlap", "asset": "sound", "start_frame": 30, "end_frame": 60,
+     "gain": 0.25}
+  ]
+}
