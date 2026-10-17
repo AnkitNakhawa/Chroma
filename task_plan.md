@@ -88,7 +88,7 @@ The first useful product target is template-style programmatic video: a backgrou
 4. [complete] Add image layers plus text and basic shapes. Prefer a narrow text shaping/raster dependency, cache static raster results, and avoid adopting a general compositor dependency at this stage.
 5. [pending] Build the first Linux/NVIDIA CUDA vertical slice: retain decoded surfaces on the GPU where supported and fuse sample/transform/color/opacity/composite for the benchmark-critical path. Compare output against the CPU reference backend.
 6. [complete] Add keyframes/easing, simple masks, blur, and transitions. Keyframed opacity, cubic easing, analytic rectangle/ellipse masks, deterministic CPU Gaussian blur, and a crossfade composition pattern are implemented. Blur is exposed as two physical neighborhood passes, with fusion retained on both sides.
-7. [pending] Add audio input, trim, gain, simple mixing, and muxing through FFmpeg to complete the useful basic-video path.
+7. [complete] Add audio input, frame-based trim/placement, linear gain, deterministic streaming stereo mixing, and AAC/MP4 muxing through FFmpeg. Exact PCM and independent encoded-output tests cover overlap, silence, rational timing, priming/tail handling, and failure cleanup.
 8. [pending] Publish benchmark comparisons against equivalent FFmpeg and GPU-configured Remotion workloads. Report end-to-end time, GPU/CPU transfer bytes, peak memory, kernel/pass count, and warm/cold behavior.
 
 ### Active fit/placement checkpoint
@@ -143,7 +143,7 @@ Each item is a separate test-and-commit gate.
 2. [complete] Introduce a dependency-neutral resident-frame descriptor and ownership contract without leaking FFmpeg or CUDA types across Chroma's core/public boundary.
 3. [complete] Implement and benchmark the first safe CPU conversion reduction, retaining the current path as a correctness oracle and avoiding premature color-management claims.
 4. [complete] Specify and scaffold the Linux/NVIDIA hardware-frame path, including runtime CUDA/device/decoder/NVENC readiness checks and explicit unimplemented status. Actual kernels remain gated on a capable Linux/NVIDIA environment and CPU-reference comparison.
-5. [in_progress] Resume the user-visible MVP sequence: keyframes/easing and masks/blur/transitions are implemented; audio, bounded caches, stable C API, packaging, and published comparison corpus remain.
+5. [in_progress] Resume the user-visible MVP sequence: keyframes/easing and masks/blur/transitions are implemented; audio is now implemented; bounded caches, stable C API, packaging, and published comparison corpus remain.
 
 ### Dependency policy for these slices
 

@@ -25,7 +25,7 @@ jobs:
 
       - name: Install FFmpeg development libraries
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y libavformat-dev libavcodec-dev libavutil-dev libswscale-dev libswresample-dev libharfbuzz-dev libfreetype6-dev fonts-dejavu-core
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg python3 libavformat-dev libavcodec-dev libavutil-dev libswscale-dev libswresample-dev libharfbuzz-dev libfreetype6-dev fonts-dejavu-core
 
       - name: Install text development libraries
         if: runner.os == 'macOS'

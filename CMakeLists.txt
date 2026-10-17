@@ -186,14 +186,12 @@ if(CHROMA_BUILD_TESTS)
     add_test(NAME chroma_text_tests COMMAND chroma_text_tests)
   endif()
   if(CHROMA_HAS_FFMPEG AND CHROMA_FFMPEG_EXECUTABLE)
-    find_package(Python3 COMPONENTS Interpreter QUIET)
-    find_program(CHROMA_FFPROBE_EXECUTABLE ffprobe)
-    if(Python3_Interpreter_FOUND AND CHROMA_FFPROBE_EXECUTABLE)
-      add_test(NAME chroma_audio_cli_integration
-        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/audio_integration.py
-                $<TARGET_FILE:chroma_cli> ${CHROMA_FFMPEG_EXECUTABLE} ${CHROMA_FFPROBE_EXECUTABLE})
-      set_tests_properties(chroma_audio_cli_integration PROPERTIES TIMEOUT 120)
-    endif()
+    find_package(Python3 COMPONENTS Interpreter REQUIRED)
+    find_program(CHROMA_FFPROBE_EXECUTABLE ffprobe REQUIRED)
+    add_test(NAME chroma_audio_cli_integration
+      COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/audio_integration.py
+              $<TARGET_FILE:chroma_cli> ${CHROMA_FFMPEG_EXECUTABLE} ${CHROMA_FFPROBE_EXECUTABLE})
+    set_tests_properties(chroma_audio_cli_integration PROPERTIES TIMEOUT 120)
     set(CHROMA_MEDIA_FIXTURE ${CMAKE_CURRENT_BINARY_DIR}/fixtures/color-segments.mkv)
     set(CHROMA_IMAGE_FIXTURE ${CMAKE_CURRENT_BINARY_DIR}/fixtures/red.png)
     add_custom_command(

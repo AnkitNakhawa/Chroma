@@ -126,4 +126,41 @@ with tempfile.TemporaryDirectory(prefix="chroma-audio-integration-") as director
     audio = next(s for s in probe(output)["streams"] if s["codec_type"] == "audio")
     assert int(audio["duration_ts"]) == 1600, audio
 
+    # A timeline that rounds to zero samples must fail before creating output.
+    document["canvas"]["frame_rate"] = dict(numerator=192000, denominator=1)
+    composition.write_text(json.dumps(document))
+    too_short = root / "too-short.mp4"
+    run(chroma, "render", composition, "--output", too_short, ok=False)
+    assert not too_short.exists()
+    document["canvas"]["frame_rate"] = dict(numerator=30, denominator=1)
+
+    # Normalize a nonzero container timestamp origin; accept compressed audio
+    # embedded in a video file; reject a timestamp discontinuity explicitly.
+    run(ffmpeg, "-v", "error", "-i", root / "sound.wav", "-af", "asetpts=PTS+5/TB",
+        "-c:a", "pcm_s16le", root / "offset.mka")
+    run(ffmpeg, "-v", "error", "-f", "lavfi", "-i", "color=size=32x18:rate=30:duration=2",
+        "-i", root / "sound.wav", "-c:v", "libx264", "-c:a", "aac", "-b:a", "192k", root / "embedded.mp4")
+    document["canvas"]["duration_frames"] = 60
+    document["audio_tracks"] = [dict(id="trim", asset="sound", start_frame=15,
+                                      end_frame=45, source_start_frame=30, gain=0.5)]
+    for asset in ["offset.mka", "embedded.mp4"]:
+        document["assets"][0]["path"] = asset
+        composition.write_text(json.dumps(document))
+        run(chroma, "render", composition, "--output", output)
+        decoded = array.array("f")
+        decoded.frombytes(run(ffmpeg, "-v", "error", "-i", output, "-map", "0:a:0",
+                              "-f", "f32le", "-acodec", "pcm_f32le", "-"))
+        error = math.sqrt(sum((decoded[sample * 2] - source[(48000 + sample - 24000) * 2] / 65536) ** 2
+                              for sample in range(26000, 70000)) / 44000)
+        assert error < 0.015, (asset, error)
+    run(ffmpeg, "-v", "error", "-i", root / "sound.wav",
+        "-af", "asetpts=PTS+gte(T\\,1)*0.5/TB", "-c:a", "pcm_s16le", root / "gap.mka")
+    document["assets"][0]["path"] = "gap.mka"
+    document["audio_tracks"] = [dict(id="gap", asset="sound", start_frame=0, end_frame=60)]
+    composition.write_text(json.dumps(document))
+    bad = root / "gap-failed.mp4"
+    result = subprocess.run([chroma, "render", str(composition), "--output", str(bad)], capture_output=True)
+    assert result.returncode != 0 and b"discontinuous audio timestamps" in result.stderr, result.stderr
+    assert not bad.exists()
+
 print("Audio CLI integration passed: sample content, MP4/AAC timing, rational rates, short tails, failure cleanup")

@@ -201,6 +201,8 @@ class AudioOutput {
  public:
   AudioOutput(const Composition& composition, AVFormatContext* format)
       : mixer_(composition), format_(format) {
+    if (mixer_.sample_count() <= 0)
+      throw std::invalid_argument("audio composition must span at least one output sample");
     const auto* encoder = avcodec_find_encoder_by_name("aac");
     if (!encoder) throw std::runtime_error("this FFmpeg build does not provide the native AAC encoder");
     codec_.reset(avcodec_alloc_context3(encoder));

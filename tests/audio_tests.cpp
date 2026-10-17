@@ -97,6 +97,13 @@ void mixer_tests(const std::filesystem::path& wave) {
   CHECK(std::all_of(silence.begin(), silence.end(), [](float v) { return v == 0; }));
   chroma::AudioMixer short_source(composition(wave, {track("too-long", 0, 90)}));
   throws([&] { static_cast<void>(collect(short_source)); });
+  // A direct C++ composition may have a nonzero timeline origin.
+  chroma::Composition offset(1, 16, 16, chroma::FrameRate(chroma::Rational(30)),
+    chroma::FrameRange(chroma::FrameIndex(30), chroma::FrameIndex(60)), {}, {}, {}, {},
+    {{"sound", wave}}, {track("offset", 30, 60, 30, 0.5)});
+  chroma::AudioMixer offset_mixer(offset);
+  CHECK(offset_mixer.sample_count() == 48000);
+  CHECK(offset_mixer.read(1)[0] == 0.25F);
   chroma::AudioMixer missing(composition(wave.parent_path() / "absent.wav", {track("bad", 0, 30)}));
   throws([&] { static_cast<void>(missing.read(1)); });
 }
