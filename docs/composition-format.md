@@ -171,6 +171,52 @@ For example, this fades in during the first 12 frames of a layer:
 ]}
 ```
 
+### Translation, scale, and rotation
+
+`translation`, `scale`, and `rotation` accept exactly one of a static `value` or
+1–1024 `keyframes`. Translation values are `[x, y]` offsets in canvas pixels;
+scale values are independent `[x, y]` factors; rotation values are degrees.
+Keyframe frames and easing follow the same layer-relative rules as opacity,
+including endpoint clamping and easing on the outgoing segment.
+
+```json
+{"type": "translation", "keyframes": [
+  {"frame": 0, "value": [-100, 0], "easing": "ease_out"},
+  {"frame": 30, "value": [0, 0]}
+]}
+```
+
+```json
+{"type": "scale", "origin": [160, 90], "keyframes": [
+  {"frame": 0, "value": [0.5, 0.5]},
+  {"frame": 30, "value": [1, 1]}
+]}
+```
+
+```json
+{"type": "rotation", "origin": [160, 90], "keyframes": [
+  {"frame": 0, "value": 0},
+  {"frame": 60, "value": 720}
+]}
+```
+
+Scale and rotation accept a fixed canvas-space `origin`, defaulting to `[0, 0]`.
+Positive rotation is clockwise in the downward-positive canvas Y coordinate
+system. Angles interpolate as written, without shortest-path wrapping: 0 → 720
+makes two full turns, while 350 → 10 rotates backwards through 340 degrees.
+Scale factors may be zero (the singular transform renders transparent) or
+negative (a reflection). All values and origins must be finite; an evaluated
+matrix that exceeds finite floating-point range fails during compilation.
+
+Effects apply in declaration order after source placement. To resize and turn a
+layer around its original center, then move it, declare scale, rotation, then
+translation. These operations transform the same canvas-sized source surface as
+`transform_2d`; they do not infer a layer's bounding box or anchor. Translation
+does not accept an origin. Per-frame compilation resolves each animation to an
+affine matrix before existing identity removal, adjacent matrix composition, and
+fusion planning. The CPU reference and eligible fused source paths execute the
+same lowered matrix. See `examples/animated-transforms.json`.
+
 Simple transitions are compositions of existing primitives rather than a separate execution type. For a source-over crossfade between opaque layers, keep the outgoing layer opaque underneath and animate the incoming layer's opacity from 0 to 1; this preserves full output alpha while interpolating the colors. See `examples/crossfade.json`.
 
 ## Audio tracks

@@ -133,6 +133,13 @@ if(CHROMA_BUILD_TESTS)
   include(CTest)
   enable_testing()
 
+  add_test(NAME chroma_cli_validates_animated_transforms
+    COMMAND chroma_cli validate ${CMAKE_CURRENT_SOURCE_DIR}/examples/animated-transforms.json)
+  add_test(NAME chroma_cli_inspects_animated_transforms
+    COMMAND chroma_cli inspect-plan ${CMAKE_CURRENT_SOURCE_DIR}/examples/animated-transforms.json --frame 25)
+  set_tests_properties(chroma_cli_inspects_animated_transforms PROPERTIES
+    PASS_REGULAR_EXPRESSION "transform_2d")
+
   add_test(NAME chroma_cli_validates_audio_example
     COMMAND chroma_cli validate ${CMAKE_CURRENT_SOURCE_DIR}/examples/audio.json)
 

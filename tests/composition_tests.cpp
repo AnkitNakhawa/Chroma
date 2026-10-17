@@ -1,4 +1,5 @@
 #include <cstdlib>
+#include <string>
 #include <iostream>
 #include <string_view>
 #include <variant>
@@ -583,11 +584,59 @@ void audio_tracks_are_normalized_and_validated() {
   CHECK(rejected);
 }
 
+void animated_transform_documents_validate_and_normalize() {
+  const std::string prefix = R"({"schema_version":1,"canvas":{"width":16,"height":16,
+    "frame_rate":{"numerator":30,"denominator":1},"duration_frames":30},
+    "layers":[{"id":"motion","type":"solid","start_frame":5,"end_frame":25,
+    "color":[1,0,0,1],"effects":[)";
+  auto parse = [&](const std::string& effects) { return chroma::parse_composition(prefix + effects + "]}]}"); };
+  const auto valid = parse(R"({"type":"translation","keyframes":[
+    {"frame":0,"value":[-2,3],"easing":"ease_out"},{"frame":10,"value":[4,8]}]},
+    {"type":"scale","value":[-1,0],"origin":[8,8]},
+    {"type":"rotation","keyframes":[{"frame":0,"value":0},{"frame":20,"value":720}],"origin":[8,8]})");
+  CHECK(valid.valid());
+  if (valid.composition) {
+    const auto& effects = std::get<chroma::SolidLayer>(valid.composition->layers().front()).effects.effects();
+    const auto& translation = std::get<chroma::AnimatedTranslationEffect>(effects[0]);
+    CHECK(translation.keyframes[0].value[0] == -2);
+    CHECK(translation.keyframes[0].easing == chroma::EasingCurve::ease_out);
+    const auto& scale = std::get<chroma::AnimatedScaleEffect>(effects[1]);
+    CHECK(scale.keyframes.size() == 1 && scale.keyframes[0].frame == 0);
+    CHECK(scale.origin[0] == 8);
+    CHECK(std::get<chroma::AnimatedRotationEffect>(effects[2]).keyframes.back().value == 720);
+  }
+  CHECK(parse(R"({"type":"translation","value":[0,0]},{"type":"scale","value":[1,1]},
+    {"type":"rotation","value":90})").valid());
+  CHECK(has_code(parse(R"({"type":"translation"})"), "effect.invalid_animation"));
+  CHECK(has_code(parse(R"({"type":"rotation","value":90,"keyframes":[]})"), "effect.invalid_animation"));
+  CHECK(has_code(parse(R"({"type":"rotation","keyframes":[]})"), "effect.invalid_keyframes"));
+  CHECK(has_code(parse(R"({"type":"rotation","keyframes":[{"frame":-1,"value":0}]})"), "effect.invalid_keyframe_order"));
+  CHECK(has_code(parse(R"({"type":"scale","keyframes":[{"frame":1,"value":[1,1]},
+    {"frame":1,"value":[2,2]}]})"), "effect.invalid_keyframe_order"));
+  CHECK(has_code(parse(R"({"type":"rotation","keyframes":[{"frame":0,"value":90,"easing":"bounce"}]})"), "effect.invalid_easing"));
+  CHECK(has_code(parse(R"({"type":"translation","value":[0,0],"origin":[1,1]})"), "effect.unexpected_origin"));
+  for (const auto& bad : {R"({"type":"scale","value":[1]})", R"({"type":"scale","value":2})",
+       R"({"type":"rotation","value":[90,0]})", R"({"type":"rotation","value":90,"origin":[1]})",
+       R"({"type":"translation","keyframes":{}})", R"({"type":"translation","keyframes":[0]})",
+       R"({"type":"translation","keyframes":[{"frame":0,"value":[0,"bad"]}]})",
+       R"({"type":"rotation","keyframes":[{"frame":0.5,"value":90}]})",
+       R"({"type":"rotation","keyframes":[{"frame":0}]})"}) {
+    CHECK(!parse(bad).valid());
+  }
+  std::string oversized = R"({"type":"rotation","keyframes":[)";
+  for (int index = 0; index < 1025; ++index) {
+    if (index != 0) oversized += ",";
+    oversized += "{\"frame\":" + std::to_string(index) + ",\"value\":0}";
+  }
+  CHECK(has_code(parse(oversized + "]}"), "effect.invalid_keyframes"));
+}
+
 }  // namespace
 
 int main() {
   valid_composition_is_normalized();
   audio_tracks_are_normalized_and_validated();
+  animated_transform_documents_validate_and_normalize();
   invalid_json_is_reported();
   invalid_timeline_is_reported();
   duplicate_and_out_of_bounds_layers_are_reported();

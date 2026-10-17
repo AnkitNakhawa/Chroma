@@ -613,6 +613,45 @@ void native_shapes_render_fill_stroke_and_coverage() {
   CHECK(near(ellipse.pixel(3, 3).alpha, 1.0F));
 }
 
+void animated_transform_pixels_match_static_reference() {
+  struct Case { std::string json; chroma::Transform2DEffect matrix; int x; int y; };
+  const std::vector<Case> cases{
+      {R"({"type":"translation","keyframes":[{"frame":0,"value":[0,0]},
+           {"frame":10,"value":[4,2]}]})", {.m02 = 2, .m12 = 1}, 4, 3},
+      {R"({"type":"scale","origin":[2,2],"keyframes":[{"frame":0,"value":[1,1]},
+           {"frame":10,"value":[3,3]}]})", {.m00 = 2, .m02 = -2, .m11 = 2, .m12 = -2}, 3, 3},
+      {R"({"type":"rotation","origin":[4,4],"keyframes":[{"frame":0,"value":0},
+           {"frame":10,"value":180}]})", {.m00 = 0, .m01 = -1, .m02 = 8, .m10 = 1, .m11 = 0}, 4, 2},
+      {R"({"type":"scale","origin":[4,4],"value":[-1,1]})",
+       {.m00 = -1, .m02 = 8}, 4, 2},
+      {R"({"type":"scale","value":[0,1]})", {.m00 = 0}, -1, -1}};
+  const std::string prefix = R"({"schema_version":1,"canvas":{"width":10,"height":10,
+    "frame_rate":{"numerator":30000,"denominator":1001},"duration_frames":30},
+    "layers":[{"id":"shape","type":"shape","shape":"rectangle","start_frame":5,
+      "end_frame":25,"bounds":[2,2,2,2],"fill":[1,0,0,1],"effects":[)";
+  for (const auto& item : cases) {
+    const auto parsed = chroma::parse_composition(prefix + item.json + "]}]}");
+    CHECK(parsed.valid());
+    if (!parsed.composition) continue;
+    const auto plan = chroma::compile_frame(*parsed.composition, chroma::FrameIndex(10));
+    chroma::CpuRenderContext context;
+    const auto animated = context.execute(plan);
+    auto shape = std::get<chroma::ShapeLayer>(parsed.composition->layers().front());
+    shape.effects = chroma::EffectProgram({item.matrix});
+    const chroma::Composition reference(1, 10, 10, chroma::FrameRate(chroma::Rational(30000, 1001)),
+      chroma::FrameRange(chroma::FrameIndex(0), chroma::FrameIndex(30)), {},
+      std::vector<chroma::CompositionLayer>{shape});
+    const auto static_pixels = context.execute(chroma::compile_frame(reference, chroma::FrameIndex(10)),
+                                                chroma::CpuExecutionMode::reference);
+    CHECK(animated.pixels() == static_pixels.pixels());
+    CHECK(context.execute(plan).pixels() == animated.pixels());
+    if (item.x >= 0) CHECK(animated.pixel(item.x, item.y).alpha == 1.0F);
+    else for (const auto& pixel : animated.pixels()) CHECK(pixel == chroma::Pixel{});
+    const auto inactive = chroma::render_frame_cpu(*parsed.composition, chroma::FrameIndex(25));
+    for (const auto& pixel : inactive.pixels()) CHECK(pixel == chroma::Pixel{});
+  }
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -630,6 +669,7 @@ int main(int argc, char** argv) {
   gaussian_blur_spreads_premultiplied_pixels_symmetrically();
   analytic_masks_apply_antialiased_premultiplied_coverage();
   animated_opacity_builds_an_opaque_source_over_crossfade();
+  animated_transform_pixels_match_static_reference();
   unavailable_cpu_effects_fail_explicitly();
   blend_modes_follow_premultiplied_source_over_semantics();
   composition_effects_execute_through_the_frame_plan();

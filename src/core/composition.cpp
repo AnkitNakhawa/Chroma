@@ -7,6 +7,7 @@
 #include <optional>
 #include <unordered_set>
 #include <utility>
+#include <type_traits>
 #include <variant>
 
 #include <nlohmann/json.hpp>
@@ -376,6 +377,67 @@ std::optional<AnimatedOpacityEffect> parse_animated_opacity(
   return AnimatedOpacityEffect{.keyframes = std::move(keyframes)};
 }
 
+template <typename Keyframe>
+std::optional<std::vector<Keyframe>> parse_transform_animation(
+    const Json& effect, const std::string& base, std::vector<Diagnostic>& diagnostics) {
+  const auto* value = optional_member(effect, "value");
+  const auto* keyframes = optional_member(effect, "keyframes");
+  if ((value == nullptr) == (keyframes == nullptr)) {
+    add_diagnostic(diagnostics, "effect.invalid_animation", base,
+                   "transform requires exactly one of value or keyframes");
+    return std::nullopt;
+  }
+  auto parse_value = [&](const Json* input, const std::string& path) {
+    if constexpr (std::is_same_v<Keyframe, ScalarKeyframe>) {
+      return number_value(input, path, diagnostics);
+    } else {
+      return parse_number_array<2>(input, path, diagnostics);
+    }
+  };
+  if (value != nullptr) {
+    const auto parsed = parse_value(value, base + "/value");
+    if (!parsed) return std::nullopt;
+    return std::vector<Keyframe>{{.frame = 0, .value = *parsed}};
+  }
+  const auto path = base + "/keyframes";
+  if (!keyframes->is_array()) {
+    add_diagnostic(diagnostics, "schema.type", path, "expected an array");
+    return std::nullopt;
+  }
+  if (keyframes->empty() || keyframes->size() > 1024) {
+    add_diagnostic(diagnostics, "effect.invalid_keyframes", path,
+                   "keyframes must contain between 1 and 1024 entries");
+    return std::nullopt;
+  }
+  std::vector<Keyframe> result;
+  std::int64_t previous = -1;
+  bool valid = true;
+  for (std::size_t index = 0; index < keyframes->size(); ++index) {
+    const auto& item = (*keyframes)[index];
+    const auto item_path = path + "/" + std::to_string(index);
+    if (!item.is_object()) {
+      add_diagnostic(diagnostics, "schema.type", item_path, "expected an object");
+      valid = false;
+      continue;
+    }
+    const auto frame = integer_value(required_member(item, "frame", item_path, diagnostics),
+                                      item_path + "/frame", diagnostics);
+    const auto parsed = parse_value(required_member(item, "value", item_path, diagnostics),
+                                     item_path + "/value");
+    const auto easing = parse_easing(optional_member(item, "easing"), item_path + "/easing", diagnostics);
+    if (frame && (*frame < 0 || *frame <= previous)) {
+      add_diagnostic(diagnostics, "effect.invalid_keyframe_order", item_path + "/frame",
+                     "keyframe frames must be nonnegative and strictly increasing");
+      valid = false;
+    }
+    if (!frame || !parsed || !easing) { valid = false; continue; }
+    previous = *frame;
+    result.push_back(Keyframe{.frame = *frame, .value = *parsed, .easing = *easing});
+  }
+  if (!valid) return std::nullopt;
+  return result;
+}
+
 std::optional<EffectProgram> parse_effects(const Json* value, std::string_view path,
                                            std::vector<Diagnostic>& diagnostics) {
   if (value == nullptr) {
@@ -420,6 +482,33 @@ std::optional<EffectProgram> parse_effects(const Json* value, std::string_view p
                                                .m12 = (*matrix)[5]});
       } else {
         valid = false;
+      }
+      continue;
+    }
+    if (*type == "translation" || *type == "scale" || *type == "rotation") {
+      std::optional<std::array<double, 2>> origin = std::array<double, 2>{0.0, 0.0};
+      if (const auto* input = optional_member(effect, "origin")) {
+        if (*type == "translation") {
+          add_diagnostic(diagnostics, "effect.unexpected_origin", base + "/origin",
+                         "only scale and rotation accept an origin");
+          valid = false;
+        } else {
+          origin = parse_number_array<2>(input, base + "/origin", diagnostics);
+        }
+      }
+      if (*type == "rotation") {
+        auto keyframes = parse_transform_animation<ScalarKeyframe>(effect, base, diagnostics);
+        if (keyframes && origin)
+          effects.emplace_back(AnimatedRotationEffect{.keyframes = std::move(*keyframes), .origin = *origin});
+        else valid = false;
+      } else {
+        auto keyframes = parse_transform_animation<Vector2Keyframe>(effect, base, diagnostics);
+        if (keyframes && origin) {
+          if (*type == "translation")
+            effects.emplace_back(AnimatedTranslationEffect{.keyframes = std::move(*keyframes)});
+          else
+            effects.emplace_back(AnimatedScaleEffect{.keyframes = std::move(*keyframes), .origin = *origin});
+        } else valid = false;
       }
       continue;
     }
@@ -538,7 +627,7 @@ std::optional<EffectProgram> parse_effects(const Json* value, std::string_view p
       continue;
     }
     add_diagnostic(diagnostics, "effect.unsupported_type", base + "/type",
-                   "supported effects are transform_2d, crop, opacity, mask, color_matrix, and "
+                   "supported effects are transform_2d, translation, scale, rotation, crop, opacity, mask, color_matrix, and "
                    "gaussian_blur");
     valid = false;
   }

@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "canvas": {
+    "width": 320,
+    "height": 180,
+    "frame_rate": {"numerator": 30, "denominator": 1},
+    "duration_frames": 90
+  },
+  "layers": [
+    {"id": "background", "type": "solid", "start_frame": 0, "end_frame": 90,
+     "color": [0.02, 0.03, 0.07, 1]},
+    {"id": "card", "type": "shape", "shape": "rounded_rectangle",
+     "start_frame": 10, "end_frame": 90, "bounds": [120, 65, 80, 50],
+     "corner_radius": 8, "fill": [0.15, 0.55, 1, 1],
+     "effects": [
+       {"type": "scale", "origin": [160, 90], "keyframes": [
+         {"frame": 0, "value": [0.5, 0.5], "easing": "ease_out"},
+         {"frame": 20, "value": [1, 1]}, {"frame": 60, "value": [1.25, 1.25]}
+       ]},
+       {"type": "rotation", "origin": [160, 90], "keyframes": [
+         {"frame": 0, "value": -30, "easing": "ease_in_out"},
+         {"frame": 60, "value": 330}
+       ]},
+       {"type": "translation", "keyframes": [
+         {"frame": 0, "value": [-90, 0], "easing": "ease_out"},
+         {"frame": 30, "value": [0, 0], "easing": "ease_in_out"},
+         {"frame": 60, "value": [60, 0]}
+       ]}
+     ]}
+  ]
+}
