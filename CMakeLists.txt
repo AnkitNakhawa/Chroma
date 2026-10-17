@@ -33,6 +33,7 @@ if(CHROMA_ENABLE_FFMPEG)
       libavcodec
       libavutil
       libswscale
+      libswresample
     )
   endif()
   if(TARGET PkgConfig::CHROMA_FFMPEG)
@@ -70,6 +71,7 @@ add_library(chroma_core
   src/core/rational.cpp
   src/core/render.cpp
   src/core/timeline.cpp
+  src/media/audio.cpp
   src/media/decode.cpp
   src/media/encode.cpp
   src/media/frame.cpp
@@ -131,6 +133,13 @@ if(CHROMA_BUILD_TESTS)
   include(CTest)
   enable_testing()
 
+  add_test(NAME chroma_cli_validates_audio_example
+    COMMAND chroma_cli validate ${CMAKE_CURRENT_SOURCE_DIR}/examples/audio.json)
+
+  add_executable(chroma_audio_tests tests/audio_tests.cpp)
+  target_link_libraries(chroma_audio_tests PRIVATE chroma::core)
+  add_test(NAME chroma_audio_tests COMMAND chroma_audio_tests)
+
   add_executable(chroma_timeline_tests tests/timeline_tests.cpp)
   target_link_libraries(chroma_timeline_tests PRIVATE chroma::core)
   add_test(NAME chroma_timeline_tests COMMAND chroma_timeline_tests)
@@ -177,6 +186,12 @@ if(CHROMA_BUILD_TESTS)
     add_test(NAME chroma_text_tests COMMAND chroma_text_tests)
   endif()
   if(CHROMA_HAS_FFMPEG AND CHROMA_FFMPEG_EXECUTABLE)
+    find_package(Python3 COMPONENTS Interpreter REQUIRED)
+    find_program(CHROMA_FFPROBE_EXECUTABLE ffprobe REQUIRED)
+    add_test(NAME chroma_audio_cli_integration
+      COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/audio_integration.py
+              $<TARGET_FILE:chroma_cli> ${CHROMA_FFMPEG_EXECUTABLE} ${CHROMA_FFPROBE_EXECUTABLE})
+    set_tests_properties(chroma_audio_cli_integration PROPERTIES TIMEOUT 120)
     set(CHROMA_MEDIA_FIXTURE ${CMAKE_CURRENT_BINARY_DIR}/fixtures/color-segments.mkv)
     set(CHROMA_IMAGE_FIXTURE ${CMAKE_CURRENT_BINARY_DIR}/fixtures/red.png)
     add_custom_command(

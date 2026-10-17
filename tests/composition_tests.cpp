@@ -544,10 +544,50 @@ void masks_are_normalized_and_validated() {
   CHECK(has_code(invalid_result, "schema.type"));
 }
 
+void audio_tracks_are_normalized_and_validated() {
+  const std::string prefix = R"({"schema_version":1,"canvas":{"width":8,"height":8,
+    "frame_rate":{"numerator":30000,"denominator":1001},"duration_frames":60},
+    "layers":[],"assets":[{"id":"music","type":"audio","path":"music.wav"}],"audio_tracks":)";
+  const auto valid = chroma::parse_composition(prefix + R"([{"id":"bed","asset":"music",
+    "start_frame":10,"end_frame":50,"source_start_frame":5,"gain":0.5}]})", "/assets");
+  CHECK(valid.valid());
+  if (valid.composition) {
+    CHECK(valid.composition->audio_assets().front().path == "/assets/music.wav");
+    const auto& track = valid.composition->audio_tracks().front();
+    CHECK(track.range.start().value() == 10);
+    CHECK(track.source_start.value() == 5);
+    CHECK(track.gain == 0.5);
+  }
+  const auto defaults = chroma::parse_composition(prefix + R"([{"id":"bed","asset":"music",
+    "start_frame":0,"end_frame":60}]})");
+  CHECK(defaults.valid());
+  CHECK(defaults.composition->audio_tracks().front().gain == 1.0);
+  const auto invalid = chroma::parse_composition(prefix + R"([{"id":"bad","asset":"absent",
+    "start_frame":-1,"end_frame":61,"source_start_frame":-1,"gain":-1}]})");
+  CHECK(has_code(invalid, "audio.unknown_asset"));
+  CHECK(has_code(invalid, "audio.invalid_range"));
+  CHECK(has_code(invalid, "audio.invalid_source_start"));
+  CHECK(has_code(invalid, "audio.invalid_gain"));
+  CHECK(!chroma::parse_composition(prefix + R"([{"id":"bed","asset":"music",
+    "start_frame":0,"end_frame":60,"gain":"loud"}]})").valid());
+  CHECK(!chroma::parse_composition(prefix + R"([{"id":"bed","asset":"music",
+    "start_frame":0,"end_frame":60},{"id":"bed","asset":"music",
+    "start_frame":0,"end_frame":60}]})").valid());
+  CHECK(!chroma::parse_composition(prefix + "{} }").valid());
+  bool rejected = false;
+  try {
+    chroma::Composition composition(1, 8, 8, chroma::FrameRate(chroma::Rational(30, 1)),
+      chroma::FrameRange(chroma::FrameIndex(0), chroma::FrameIndex(60)), {}, {}, {}, {},
+      {{"music", "music.wav"}}, {{"bad", chroma::FrameRange(chroma::FrameIndex(0), chroma::FrameIndex(61)), "music"}});
+  } catch (const std::invalid_argument&) { rejected = true; }
+  CHECK(rejected);
+}
+
 }  // namespace
 
 int main() {
   valid_composition_is_normalized();
+  audio_tracks_are_normalized_and_validated();
   invalid_json_is_reported();
   invalid_timeline_is_reported();
   duplicate_and_out_of_bounds_layers_are_reported();

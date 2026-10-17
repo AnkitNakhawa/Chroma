@@ -172,3 +172,47 @@ For example, this fades in during the first 12 frames of a layer:
 ```
 
 Simple transitions are compositions of existing primitives rather than a separate execution type. For a source-over crossfade between opaque layers, keep the outgoing layer opaque underneath and animate the incoming layer's opacity from 0 to 1; this preserves full output alpha while interpolating the colors. See `examples/crossfade.json`.
+
+## Audio tracks
+
+Audio is independent of visual layer order. Declare `{"id":"music","type":"audio",
+"path":"music.wav"}` in `assets`, then add an optional top-level array:
+
+```json
+"audio_tracks": [
+  {"id":"bed","asset":"music","start_frame":0,"end_frame":120,
+   "source_start_frame":30,"gain":0.5}
+]
+```
+
+Track ranges are half-open and must be inside the composition. Source trimming starts
+at `source_start_frame` (default 0), measured at the **composition** frame rate,
+including for audio embedded in video files. The track's range determines the trim
+length. Gain is a finite linear multiplier from 0 through 16 (default 1); 0 mutes.
+Audio asset IDs share the existing asset namespace; track IDs are unique within
+`audio_tracks`. Missing tracks preserve video-only output.
+
+The sequential CPU mixer resamples inputs through libswresample to 48 kHz stereo
+float PCM. Each frame boundary maps independently to the nearest sample (ties up),
+so fractional frame rates do not accumulate drift. Source time zero is the first
+decoded sample, independent of the container's timestamp origin. Discontinuous
+source timestamps and midstream format changes fail explicitly. Trimming decodes
+from the beginning to preserve decoder priming and resampler state; deep trims
+therefore have a startup cost. Input audio is not taken automatically from video
+layers: declare the file again as an audio asset when its sound is wanted.
+
+Samples outside active tracks are silence. Tracks sum in declaration order using
+double precision; the final mix saturates to [-1, 1], without automatic gain
+normalization. A trim extending beyond decoded source samples is an error,
+including muted tracks. Decode and mix storage is block-based rather than sized
+to the entire composition; each overlapping track owns its own decoder.
+
+`render` adds an AAC stream when at least one track is declared, muxed alongside
+H.264 video in MP4. The stream's presentation duration matches the composition to
+the nearest 48 kHz sample. Encoder priming is represented by MP4 metadata; generic
+raw PCM decoders can expose up to one extra trailing AAC block. AAC is lossy, so
+encoded-output comparisons use documented tolerances rather than exact equality.
+The mixer itself is deterministic and tested with exact PCM fixtures. Benchmark
+JSON reports `audio_samples_encoded` and `milliseconds.audio` separately from
+video encoding/conversion work. Audio integration CTest coverage additionally
+requires Python 3 and the FFmpeg/ffprobe command-line tools.

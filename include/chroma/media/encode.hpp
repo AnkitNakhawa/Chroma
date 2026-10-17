@@ -20,6 +20,8 @@ struct VideoRenderResult {
   std::int64_t composition_nanoseconds;
   DecodeTelemetry decode;
   EncodeTelemetry encode;
+  std::int64_t audio_samples_encoded{0};
+  std::int64_t audio_nanoseconds{0};
 };
 
 [[nodiscard]] VideoRenderResult render_video_cpu(const Composition& composition,
