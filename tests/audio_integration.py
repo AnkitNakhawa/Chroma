@@ -117,14 +117,15 @@ with tempfile.TemporaryDirectory(prefix="chroma-audio-integration-") as director
         assert not bad.exists()
 
     # A single video frame exercises AAC priming and a short final audio block.
-    document["canvas"]["frame_rate"] = dict(numerator=30, denominator=1)
     document["canvas"]["duration_frames"] = 1
     document["layers"] = []
     document["audio_tracks"] = [dict(id="short", asset="sound", start_frame=0, end_frame=1)]
-    composition.write_text(json.dumps(document))
-    run(chroma, "render", composition, "--output", output)
-    audio = next(s for s in probe(output)["streams"] if s["codec_type"] == "audio")
-    assert int(audio["duration_ts"]) == 1600, audio
+    for numerator, denominator in [(30, 1), (120, 1), (30000, 1001)]:
+        document["canvas"]["frame_rate"] = dict(numerator=numerator, denominator=denominator)
+        composition.write_text(json.dumps(document))
+        run(chroma, "render", composition, "--output", output)
+        audio = next(s for s in probe(output)["streams"] if s["codec_type"] == "audio")
+        assert int(audio["duration_ts"]) == samples_at(1, numerator, denominator), audio
 
     # A timeline that rounds to zero samples must fail before creating output.
     document["canvas"]["frame_rate"] = dict(numerator=192000, denominator=1)

@@ -351,6 +351,15 @@ VideoRenderResult render_video_cpu(const Composition& composition,
   std::unique_ptr<AudioOutput> audio;
   if (!composition.audio_tracks().empty()) {
     audio = std::make_unique<AudioOutput>(composition, format.get());
+    // Older MOV/MP4 muxers round edit-list duration to their default 1 kHz
+    // movie clock, truncating short AAC tracks despite exact packet durations.
+    // Use the audio sample clock when the container exposes this option.
+    if (format->priv_data != nullptr &&
+        av_opt_find(format->priv_data, "movie_timescale", nullptr, 0, 0) != nullptr) {
+      status = av_opt_set_int(format->priv_data, "movie_timescale", audio_sample_rate, 0);
+      if (status < 0)
+        throw std::runtime_error("unable to configure sample-accurate MP4 timing: " + ffmpeg_error(status));
+    }
   }
 
   if (!(format->oformat->flags & AVFMT_NOFILE)) {

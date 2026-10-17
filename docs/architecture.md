@@ -175,7 +175,8 @@ The output writer registers the AAC stream before the container header, submits
 full codec blocks alongside successive video frames, submits the final partial
 block, and drains both encoders before writing the trailer. It caps AAC packet
 durations at the intended sample count so encoder tail padding does not extend
-the track. MP4 carries codec priming metadata; lossy decoded samples may retain
+the track. The MP4 movie timescale is set to the audio sample clock to avoid
+millisecond edit-list rounding in older FFmpeg muxers. MP4 carries codec priming metadata; lossy decoded samples may retain
 up to one trailing codec block even though stream presentation duration is exact.
 Audio timing and sample counts are separate from video conversion telemetry.
 
