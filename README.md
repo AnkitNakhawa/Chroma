@@ -121,7 +121,7 @@ Its cost summary assumes a linear-premultiplied RGBA working surface of four flo
 
 The fused CPU source path is intentionally narrower than the planning diagnostics. It handles a native-size video/image source with one leading transform followed by crop and at most one opacity, then blends directly into the destination without a canvas-sized transform surface. Placement scaling, native no-effect copies, color matrices, multiple transforms or opacity nodes, crop after pointwise work, and all barrier effects use the reference executor. `CpuExecutionMode::reference` is available as a correctness oracle, and `CpuExecutionStats` reports fused/fallback operations plus avoided/materialized full-frame intermediates.
 
-Image and shaped-text preparation share deterministic request-key construction. Runtime maps use the full length-prefixed key; optimized-plan diagnostics expose a compact `fnv1a64:` identifier and deduplicate identical preparation requests across layers. The compact identifier is diagnostic—not a collision-proof persistent cache key—and currently incorporates normalized paths rather than asset contents. Cross-job content hashing and eviction remain future work.
+Image and shaped-text preparation share deterministic request-key construction. Runtime maps use the full length-prefixed key; optimized-plan diagnostics expose a compact `fnv1a64:` identifier and deduplicate identical preparation requests across layers. The compact identifier is diagnostic—not a collision-proof persistent cache key—and currently incorporates normalized paths rather than asset contents. Cross-job content hashing, disk storage, and persistent-cache eviction remain future work.
 
 Render the basic effects example:
 
@@ -184,3 +184,29 @@ Animate translation, scale, and rotation with fixed origins:
 
 See [transform animation semantics](docs/composition-format.md#translation-scale-and-rotation)
 for effect order, units, origins, reflections, and multiple rotation turns.
+
+### Prepared image and text cache budgets
+
+Render contexts retain prepared images and text with independent least-recently-used
+caches: 64 MiB for images and 16 MiB for text by default. Budgets count retained
+resource/key storage; they do not cap total process memory or temporary decoding.
+Zero disables retention, and oversized resources still render without being cached.
+
+```sh
+./build/chroma render composition.json --output result.mp4 \
+  --image-cache-bytes 33554432 --text-cache-bytes 8388608 \
+  --cache-report cache.json
+./build/chroma benchmark composition.json --iterations 3 --output benchmark.json \
+  --image-cache-bytes 33554432 --text-cache-bytes 8388608
+```
+
+Append these budget flags to `frame`, `render`, or `benchmark`; `frame` and `render`
+also accept `--cache-report`. Reports expose budgets, resident/peak bytes, entries,
+hits, misses, insertions, evictions, bypasses, and preparation failures for each
+cache. Benchmark snapshots appear at `iterations[i].cache`; each iteration starts
+with a fresh context. A render report captures usage before job cleanup.
+
+C++ callers can pass `CpuCacheConfig` to `CpuRenderContext` or as the third
+argument to `render_video_cpu`. Contexts also expose `set_cache_budgets`,
+`clear_prepared_caches`, and `cache_usage`. See [retention and accounting
+semantics](docs/architecture.md#bounded-prepared-resource-retention) for details.

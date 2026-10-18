@@ -58,6 +58,9 @@ int main() {
   chroma::detail::ResourceCache<int> empty(1);
   static_cast<void>(empty.get("empty", [] { return 0; }, [](int) { return 0; }));
   CHECK(empty.usage().bypasses == 1 && empty.usage().entries == 0);
+  const auto json = chroma::cpu_cache_usage_json({cache.usage(), empty.usage()});
+  CHECK(json.find("retained_resource_bytes") != std::string::npos);
+  CHECK(json.find("load_failures") != std::string::npos);
   // Repeated insert/evict/re-hash exercises borrowed-key lifetime and accounting.
   for (int index = 0; index < 1000; ++index) {
     static_cast<void>(cache.get(std::to_string(index), load, weight));

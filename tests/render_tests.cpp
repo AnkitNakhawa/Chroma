@@ -528,6 +528,13 @@ void image_cache_budgets_preserve_pixels_and_bound_retention(const char* path) {
   CHECK(bounded.cache_usage().images.entries == 0);
   CHECK(bounded.cache_usage().images.peak_resident_bytes == bytes * 2);
   CHECK(bounded.cache_usage().text.misses == 0);
+  chroma::CpuRenderContext original;
+  static_cast<void>(original.execute(pc));
+  chroma::CpuRenderContext moved(std::move(original));
+  chroma::CpuRenderContext assigned({0, 0});
+  assigned = std::move(moved);
+  CHECK(assigned.execute(pc).pixels() == expected.pixels());
+  CHECK(assigned.cache_usage().images.hits == 1 && assigned.cache_usage().images.misses == 1);
   std::filesystem::remove_all(directory);
 }
 

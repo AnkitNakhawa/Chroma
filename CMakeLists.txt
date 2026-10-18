@@ -64,6 +64,7 @@ if(CHROMA_HAS_FFMPEG)
 endif()
 
 add_library(chroma_core
+  src/core/cache.cpp
   src/core/composition.cpp
   src/core/effect.cpp
   src/core/execution_plan.cpp
@@ -200,6 +201,16 @@ if(CHROMA_BUILD_TESTS)
   if(CHROMA_HAS_FFMPEG AND CHROMA_FFMPEG_EXECUTABLE)
     find_package(Python3 COMPONENTS Interpreter REQUIRED)
     find_program(CHROMA_FFPROBE_EXECUTABLE ffprobe REQUIRED)
+    if(CHROMA_TEST_FONT)
+      add_test(NAME chroma_cache_cli_integration
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/cache_integration.py
+                $<TARGET_FILE:chroma_cli> ${CHROMA_FFMPEG_EXECUTABLE} ${CHROMA_TEST_FONT})
+    else()
+      add_test(NAME chroma_cache_cli_integration
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/cache_integration.py
+                $<TARGET_FILE:chroma_cli> ${CHROMA_FFMPEG_EXECUTABLE})
+    endif()
+    set_tests_properties(chroma_cache_cli_integration PROPERTIES TIMEOUT 120)
     add_test(NAME chroma_animation_cli_integration
       COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/animation_integration.py
               $<TARGET_FILE:chroma_cli> ${CHROMA_FFMPEG_EXECUTABLE} ${CHROMA_FFPROBE_EXECUTABLE})

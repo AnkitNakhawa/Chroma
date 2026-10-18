@@ -143,7 +143,7 @@ Each item is a separate test-and-commit gate.
 2. [complete] Introduce a dependency-neutral resident-frame descriptor and ownership contract without leaking FFmpeg or CUDA types across Chroma's core/public boundary.
 3. [complete] Implement and benchmark the first safe CPU conversion reduction, retaining the current path as a correctness oracle and avoiding premature color-management claims.
 4. [complete] Specify and scaffold the Linux/NVIDIA hardware-frame path, including runtime CUDA/device/decoder/NVENC readiness checks and explicit unimplemented status. Actual kernels remain gated on a capable Linux/NVIDIA environment and CPU-reference comparison.
-5. [in_progress] Resume the user-visible MVP sequence: keyframes/easing and masks/blur/transitions are implemented; audio is now implemented; bounded caches, stable C API, packaging, and published comparison corpus remain.
+5. [in_progress] Resume the user-visible MVP sequence: keyframes/easing and masks/blur/transitions are implemented; audio is now implemented; bounded image/text caches are now implemented; stable C API, packaging, and published comparison corpus remain.
 
 ### Dependency policy for these slices
 
@@ -194,3 +194,12 @@ Each item is a separate test-and-commit gate.
 1. [complete] Add typed vector/scalar translation, scale, and rotation keyframes, easing, origins, and lowering to affine matrices before optimization.
 2. [complete] Expose static values and keyframes in composition JSON, validate inputs, document semantics, and add a representative animated-card example.
 3. [complete] Preserve animation dependencies in cache planning and verify exact CPU reference/fused equivalence across frames and blend modes, rational-rate MP4 output, geometry, and failure paths.
+
+### Bounded prepared-resource cache checkpoint
+
+1. [complete] Implement independent deterministic LRU caches with byte budgets, oversize bypass, lifetime-safe handles, eviction and failure accounting.
+2. [complete] Bound image surfaces and shaped-text preparation in CPU contexts, expose budget changes/clear/usage, and prove pixel equivalence across cache policies.
+3. [complete] Expose CLI budgets and render/benchmark usage reports; test repeated request sequences, exact counters, disabled/oversized behavior, job isolation, configuration errors, and dependency-disabled builds.
+
+These are job-scoped prepared-source caches. Persistent content-addressed storage
+and effect-output caching remain separate future milestones.

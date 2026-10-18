@@ -62,9 +62,18 @@ class ResourceCache {
   }
 
   void set_budget(std::uint64_t budget) {
+    const auto previous_budget = usage_.budget_bytes;
     usage_.budget_bytes = budget;
     while (usage_.resident_bytes > budget) evict_one();
     if (budget == 0) release_index();
+    else if (budget < previous_budget) {
+      // Reclaim the old hash table as well as resource storage after a shrink.
+      Index compact;
+      compact.reserve(entries_.size());
+      for (auto entry = entries_.begin(); entry != entries_.end(); ++entry)
+        compact.emplace(entry->key, entry);
+      index_.swap(compact);
+    }
   }
   void clear() {
     while (!entries_.empty()) evict_one();

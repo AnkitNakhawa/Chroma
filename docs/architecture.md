@@ -319,7 +319,7 @@ disables retention. A resource larger than its cache budget is prepared and used
 without entering the cache or evicting useful entries. Preparation errors count
 as misses and load failures, and do not evict existing entries.
 
-Accounting includes retained image pixel vector capacity; text glyph vector and
+The conservative byte charge includes retained image pixel vector capacity; text glyph vector and
 coverage capacities; resource and entry objects; key capacity; and list links.
 Hash buckets/nodes, shared-pointer control blocks, allocator overhead, temporary
 decode/shaping storage, frame surfaces, video decoders, and resources held by an
@@ -331,7 +331,8 @@ key/object cost. Returned shared handles remain valid if their entry is evicted.
 bytes, entry count, hits, misses, insertions, evictions, bypasses, and load failures.
 Counters accumulate over a context's lifetime, including failed render requests.
 `clear_prepared_caches()` releases entries and the lookup index; removals due to
-clear or budget reduction count as evictions. Peak bytes are historical and may
+clear or budget reduction count as evictions. Budget reductions also compact the
+lookup table to release its previous high-water allocation. Peak bytes are historical and may
 exceed a subsequently reduced budget. Lookup hits promote entries to most recent
 use; ties follow deterministic request order. Cached source data is immutable,
 and effects/compositing operate on separate surfaces.
@@ -339,3 +340,13 @@ and effects/compositing operate on separate surfaces.
 Keys still use normalized paths and font/text parameters, so assets must remain
 stable during a render context's lifetime. Replacing a source file requires
 clearing the context's caches or using a new context. There is no disk cache.
+
+The CLI accepts appended `--image-cache-bytes` and `--text-cache-bytes` unsigned
+decimal byte budgets on `frame`, `render`, and `benchmark`. Values outside uint64,
+negative/partial numbers, duplicate flags, and missing values are rejected.
+`frame` and `render` support `--cache-report` for the usage snapshot; benchmark
+iterations include the same schema under `cache`. Report paths that alias the
+media output are rejected before rendering. Render-result snapshots are captured
+before context destruction; retained resources are released as the job ends.
+Snapshots are not summed across benchmark jobs because resident/peak values are
+per-context rather than additive process-memory measurements.

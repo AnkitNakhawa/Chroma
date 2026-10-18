@@ -54,6 +54,7 @@ double frames_per_second(std::int64_t frames, std::int64_t nanoseconds) {
 
 nlohmann::json profile_json(const VideoRenderResult& result) {
   return {{"frames_encoded", result.frames_encoded},
+          {"cache", nlohmann::json::parse(cpu_cache_usage_json(result.cache))},
           {"audio_samples_encoded", result.audio_samples_encoded},
           {"frames_per_second",
            frames_per_second(result.frames_encoded, result.total_nanoseconds)},
@@ -277,7 +278,7 @@ class AudioOutput {
 }  // namespace
 
 VideoRenderResult render_video_cpu(const Composition& composition,
-                                   const std::filesystem::path& output_path) {
+                                   const std::filesystem::path& output_path, CpuCacheConfig cache_config) {
 #if CHROMA_HAS_FFMPEG
   const auto total_start = Clock::now();
   if (output_path.empty()) {
@@ -405,7 +406,7 @@ VideoRenderResult render_video_cpu(const Composition& composition,
   std::int64_t composition_nanoseconds = 0;
   DecodeTelemetry decode_telemetry;
   EncodeTelemetry encode_telemetry;
-  CpuRenderContext render_context;
+  CpuRenderContext render_context(cache_config);
   for (auto index = composition.range().start().value();
        index < composition.range().end().value(); ++index) {
     const auto compile_start = Clock::now();
@@ -495,10 +496,12 @@ VideoRenderResult render_video_cpu(const Composition& composition,
                            .decode = decode_telemetry,
                            .encode = encode_telemetry,
                            .audio_samples_encoded = audio ? audio->samples() : 0,
-                           .audio_nanoseconds = audio ? audio->nanoseconds() : 0};
+                           .audio_nanoseconds = audio ? audio->nanoseconds() : 0,
+                           .cache = render_context.cache_usage()};
 #else
   static_cast<void>(composition);
   static_cast<void>(output_path);
+  static_cast<void>(cache_config);
   throw std::runtime_error("Chroma was built without FFmpeg media support");
 #endif
 }

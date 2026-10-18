@@ -1,4 +1,5 @@
 #include <chrono>
+#include <charconv>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
@@ -37,6 +38,63 @@ std::optional<std::string> read_file(const char* path) {
   return buffer.str();
 }
 
+struct CacheOptions {
+  chroma::CpuCacheConfig config;
+  std::optional<std::filesystem::path> report;
+};
+
+std::optional<CacheOptions> parse_cache_options(int start, int argc, char** argv, bool allow_report) {
+  CacheOptions options;
+  bool image_seen = false, text_seen = false, report_seen = false;
+  for (int index = start; index < argc; index += 2) {
+    const std::string_view flag(argv[index]);
+    if (index + 1 >= argc) {
+      std::cerr << "missing cache option value: " << flag << '\n';
+      return std::nullopt;
+    }
+    const std::string_view value(argv[index + 1]);
+    if (flag == "--cache-report" && allow_report && !report_seen && !value.empty()) {
+      options.report = std::filesystem::path(value);
+      report_seen = true;
+      continue;
+    }
+    std::uint64_t bytes = 0;
+    const auto parsed = std::from_chars(value.data(), value.data() + value.size(), bytes);
+    if (parsed.ec != std::errc{} || parsed.ptr != value.data() + value.size()) {
+      std::cerr << "cache budget must be an unsigned decimal byte count: " << value << '\n';
+      return std::nullopt;
+    }
+    if (flag == "--image-cache-bytes" && !image_seen) {
+      options.config.image_budget_bytes = bytes;
+      image_seen = true;
+    } else if (flag == "--text-cache-bytes" && !text_seen) {
+      options.config.text_budget_bytes = bytes;
+      text_seen = true;
+    } else {
+      std::cerr << "unknown or duplicate cache option: " << flag << '\n';
+      return std::nullopt;
+    }
+  }
+  return options;
+}
+
+void validate_cache_report_target(const CacheOptions& options, const std::filesystem::path& output) {
+  if (options.report && (std::filesystem::weakly_canonical(*options.report) ==
+                         std::filesystem::weakly_canonical(output) ||
+      (std::filesystem::exists(*options.report) && std::filesystem::exists(output) &&
+       std::filesystem::equivalent(*options.report, output))))
+    throw std::invalid_argument("cache report and media output must have different paths");
+}
+
+void write_cache_report(const CacheOptions& options, const chroma::CpuCacheUsage& usage) {
+  if (!options.report) return;
+  std::ofstream output(*options.report, std::ios::binary);
+  if (!output) throw std::runtime_error("unable to open cache report");
+  output << chroma::cpu_cache_usage_json(usage) << '\n';
+  output.close();
+  if (!output) throw std::runtime_error("unable to write cache report");
+}
+
 void print_usage(std::ostream& output) {
   output << "Usage:\n"
          << "  chroma --version\n"
@@ -49,7 +107,9 @@ void print_usage(std::ostream& output) {
          << "  chroma benchmark <composition.json> --iterations <count> --output <report.json>\n"
          << "  chroma inspect-plan <composition.json> --frame <index>\n"
          << "  chroma inspect-optimized-plan <composition.json> --frame <index>\n"
-         << "  chroma frame <composition.json> --frame <index> --output <frame.ppm>\n";
+         << "  chroma frame <composition.json> --frame <index> --output <frame.ppm>\n"
+         << "Append --image-cache-bytes <bytes> and --text-cache-bytes <bytes> to render, frame, or benchmark.\n"
+         << "Append --cache-report <report.json> to render or frame. Zero bytes disables retention.\n";
 }
 
 void print_diagnostics(const std::vector<chroma::Diagnostic>& diagnostics, bool json) {
@@ -182,8 +242,10 @@ int main(int argc, char** argv) {
     }
   }
 
-  if (argc == 5 && std::string_view(argv[1]) == "render" &&
+  if (argc >= 5 && std::string_view(argv[1]) == "render" &&
       std::string_view(argv[3]) == "--output") {
+    const auto cache_options = parse_cache_options(5, argc, argv, true);
+    if (!cache_options) return usage_error;
     chroma::CompositionParseResult result;
     if (const auto parse_status = parse_file(argv[2], result); parse_status != 0) {
       return parse_status;
@@ -193,7 +255,9 @@ int main(int argc, char** argv) {
       return invalid_composition;
     }
     try {
-      const auto rendered = chroma::render_video_cpu(*result.composition, argv[4]);
+      validate_cache_report_target(*cache_options, argv[4]);
+      const auto rendered = chroma::render_video_cpu(*result.composition, argv[4], cache_options->config);
+      write_cache_report(*cache_options, rendered.cache);
       std::cout << "rendered " << rendered.frames_encoded << " frames to " << argv[4] << '\n';
       return 0;
     } catch (const std::exception& error) {
@@ -202,9 +266,11 @@ int main(int argc, char** argv) {
     }
   }
 
-  if (argc == 7 && std::string_view(argv[1]) == "benchmark" &&
+  if (argc >= 7 && std::string_view(argv[1]) == "benchmark" &&
       std::string_view(argv[3]) == "--iterations" &&
       std::string_view(argv[5]) == "--output") {
+    const auto cache_options = parse_cache_options(7, argc, argv, false);
+    if (!cache_options) return usage_error;
     chroma::CompositionParseResult result;
     if (const auto parse_status = parse_file(argv[2], result); parse_status != 0) {
       return parse_status;
@@ -237,7 +303,7 @@ int main(int argc, char** argv) {
             ("chroma-benchmark-" + std::to_string(unique) + "-" + std::to_string(index) +
              ".mp4");
         try {
-          iterations.push_back(chroma::render_video_cpu(*result.composition, temporary));
+          iterations.push_back(chroma::render_video_cpu(*result.composition, temporary, cache_options->config));
         } catch (...) {
           std::error_code cleanup_error;
           std::filesystem::remove(temporary, cleanup_error);
@@ -297,8 +363,10 @@ int main(int argc, char** argv) {
     return 0;
   }
 
-  if (argc == 7 && std::string_view(argv[1]) == "frame" &&
+  if (argc >= 7 && std::string_view(argv[1]) == "frame" &&
       std::string_view(argv[3]) == "--frame" && std::string_view(argv[5]) == "--output") {
+    const auto cache_options = parse_cache_options(7, argc, argv, true);
+    if (!cache_options) return usage_error;
     chroma::CompositionParseResult result;
     if (const auto status = parse_file(argv[2], result); status != 0) {
       return status;
@@ -315,13 +383,16 @@ int main(int argc, char** argv) {
     }
 
     try {
-      const auto surface = chroma::render_frame_cpu(*result.composition, *frame);
+      validate_cache_report_target(*cache_options, argv[6]);
+      chroma::CpuRenderContext context(cache_options->config);
+      const auto surface = context.execute(chroma::compile_frame(*result.composition, *frame));
       std::ofstream output(argv[6], std::ios::binary);
       if (!output) {
         std::cerr << "unable to open output: " << argv[6] << '\n';
         return input_error;
       }
       chroma::write_ppm(surface, output);
+      write_cache_report(*cache_options, context.cache_usage());
     } catch (const std::exception& error) {
       std::cerr << "render failed: " << error.what() << '\n';
       return input_error;

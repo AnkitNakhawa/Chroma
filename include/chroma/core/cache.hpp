@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <string>
 
 namespace chroma {
 
@@ -32,5 +33,7 @@ struct CpuCacheUsage {
   CacheUsage text;
   friend bool operator==(const CpuCacheUsage&, const CpuCacheUsage&) = default;
 };
+
+[[nodiscard]] std::string cpu_cache_usage_json(const CpuCacheUsage& usage);
 
 }  // namespace chroma
