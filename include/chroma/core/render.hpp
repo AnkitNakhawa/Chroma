@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "chroma/media/telemetry.hpp"
+#include "chroma/core/cache.hpp"
 
 #include "chroma/core/execution_plan.hpp"
 
@@ -59,12 +60,17 @@ struct CpuExecutionStats {
 class CpuRenderContext {
  public:
   CpuRenderContext();
+  explicit CpuRenderContext(CpuCacheConfig config);
   ~CpuRenderContext();
 
   CpuRenderContext(CpuRenderContext&&) noexcept;
   CpuRenderContext& operator=(CpuRenderContext&&) noexcept;
   CpuRenderContext(const CpuRenderContext&) = delete;
   CpuRenderContext& operator=(const CpuRenderContext&) = delete;
+
+  void set_cache_budgets(CpuCacheConfig config);
+  void clear_prepared_caches();
+  [[nodiscard]] CpuCacheUsage cache_usage() const noexcept;
 
   [[nodiscard]] Surface execute(const ExecutionPlan& plan,
                                 CpuExecutionMode mode = CpuExecutionMode::fused);

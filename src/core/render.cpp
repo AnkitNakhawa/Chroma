@@ -12,6 +12,7 @@
 #include <variant>
 
 #include "chroma/core/prepared_resource.hpp"
+#include "resource_cache.hpp"
 #include "chroma/media/decode.hpp"
 #include "chroma/text/text.hpp"
 
@@ -713,11 +714,26 @@ Surface render_prepared_text(const PreparedText& prepared, double baseline_x, do
 
 struct CpuRenderContext::Impl {
   std::unordered_map<std::string, std::unique_ptr<VideoDecoder>> decoders;
-  std::unordered_map<std::string, Surface> images;
-  std::unordered_map<std::string, PreparedText> text;
+  detail::ResourceCache<Surface> images;
+  detail::ResourceCache<PreparedText> text;
+  explicit Impl(CpuCacheConfig config)
+      : images(config.image_budget_bytes), text(config.text_budget_bytes) {}
+
 };
 
-CpuRenderContext::CpuRenderContext() : impl_(std::make_unique<Impl>()) {}
+CpuRenderContext::CpuRenderContext() : CpuRenderContext(CpuCacheConfig{}) {}
+CpuRenderContext::CpuRenderContext(CpuCacheConfig config) : impl_(std::make_unique<Impl>(config)) {}
+void CpuRenderContext::set_cache_budgets(CpuCacheConfig config) {
+  impl_->images.set_budget(config.image_budget_bytes);
+  impl_->text.set_budget(config.text_budget_bytes);
+}
+void CpuRenderContext::clear_prepared_caches() {
+  impl_->images.clear();
+  impl_->text.clear();
+}
+CpuCacheUsage CpuRenderContext::cache_usage() const noexcept {
+  return {impl_->images.usage(), impl_->text.usage()};
+}
 CpuRenderContext::~CpuRenderContext() = default;
 CpuRenderContext::CpuRenderContext(CpuRenderContext&&) noexcept = default;
 CpuRenderContext& CpuRenderContext::operator=(CpuRenderContext&&) noexcept = default;
@@ -759,13 +775,15 @@ Surface CpuRenderContext::execute(const ExecutionPlan& plan, CpuExecutionMode mo
     if (const auto* text = std::get_if<CompositeTextOperation>(&operation)) {
       const auto key =
           prepared_text_request_key(text->font_path, text->text, text->font_size);
-      auto found = impl_->text.find(key);
-      if (found == impl_->text.end()) {
-        found = impl_->text
-                    .emplace(key, prepare_text(text->font_path, text->text, text->font_size))
-                    .first;
-      }
-      auto source_surface = render_prepared_text(found->second, text->x, text->y, text->color,
+      const auto prepared = impl_->text.get(key,
+          [&] { return prepare_text(text->font_path, text->text, text->font_size); },
+          [](const PreparedText& value) {
+            std::uint64_t bytes = value.glyphs.capacity() * sizeof(PreparedGlyph);
+            for (const auto& glyph : value.glyphs)
+              bytes = detail::add_cache_bytes(bytes, glyph.coverage.capacity());
+            return bytes;
+          });
+      auto source_surface = render_prepared_text(*prepared, text->x, text->y, text->color,
                                                  result.width(), result.height());
       source_surface = apply_effect_program_cpu(std::move(source_surface), text->effects);
       for (std::size_t index = 0; index < result.size(); ++index) {
@@ -794,13 +812,12 @@ Surface CpuRenderContext::execute(const ExecutionPlan& plan, CpuExecutionMode mo
     } else {
       const auto& image = std::get<CompositeImageOperation>(operation);
       const auto key = prepared_image_request_key(image.asset_path);
-      auto found = impl_->images.find(key);
-      if (found == impl_->images.end()) {
+      const auto prepared = impl_->images.get(key, [&] {
         auto decoded = decode_video_frame(image.asset_path, Rational(0));
         last_execution_stats_.decode += decoded.telemetry;
-        found = impl_->images.emplace(key, std::move(decoded.surface)).first;
-      }
-      source_surface = found->second;
+        return std::move(decoded.surface);
+      }, [](const Surface& value) { return value.pixels().capacity() * sizeof(Pixel); });
+      source_surface = *prepared;
       placement = image.placement;
       effects = &image.effects;
       blend_mode = image.blend_mode;

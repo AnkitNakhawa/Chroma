@@ -1,4 +1,5 @@
 #include <cmath>
+#include <chrono>
 #include <cstdlib>
 #include <filesystem>
 #include <iostream>
@@ -474,6 +475,62 @@ chroma::Composition image_effect_composition(const char* path, std::int32_t widt
            .blend_mode = blend_mode}});
 }
 
+void image_cache_budgets_preserve_pixels_and_bound_retention(const char* path) {
+  const auto directory = std::filesystem::temp_directory_path() /
+      ("chroma-image-budget-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+  std::filesystem::create_directory(directory);
+  const auto a = directory / "a.png";
+  const auto b = directory / "b.png";
+  const auto c = directory / "c.png";
+  for (const auto& destination : {a, b, c}) std::filesystem::copy_file(path, destination);
+  auto plan = [&](const std::filesystem::path& source) {
+    return chroma::compile_frame(image_effect_composition(source.string().c_str(), 32, 32,
+      {}, chroma::EffectProgram({chroma::Transform2DEffect{.m02 = 1.0}, chroma::OpacityEffect{0.5}})),
+      chroma::FrameIndex(0));
+  };
+  const auto pa = plan(a), pb = plan(b), pc = plan(c);
+  chroma::CpuRenderContext sizing;
+  const auto expected = sizing.execute(pa);
+  const auto bytes = sizing.cache_usage().images.resident_bytes;
+  CHECK(bytes >= 32 * 32 * sizeof(chroma::Pixel));
+  chroma::CpuRenderContext bounded({bytes * 2, 0});
+  CHECK(bounded.execute(pa).pixels() == expected.pixels());
+  static_cast<void>(bounded.execute(pb));
+  static_cast<void>(bounded.execute(pa));
+  static_cast<void>(bounded.execute(pc));
+  CHECK(bounded.cache_usage().images.evictions == 1);
+  CHECK(bounded.cache_usage().images.entries == 2);
+  CHECK(bounded.cache_usage().images.resident_bytes == bytes * 2);
+  std::filesystem::remove(a);
+  CHECK(bounded.execute(pa).pixels() == expected.pixels()); // a was promoted, so b was evicted.
+  std::filesystem::remove(b);
+  bool failed = false;
+  try { static_cast<void>(bounded.execute(pb)); } catch (const std::runtime_error&) { failed = true; }
+  CHECK(failed);
+  CHECK(bounded.cache_usage().images.load_failures == 1);
+  CHECK(bounded.cache_usage().images.evictions == 1); // Failed loading did not evict anything.
+  CHECK(bounded.cache_usage().images.hits == 2);
+  CHECK(bounded.cache_usage().images.misses == 4);
+  bounded.set_cache_budgets({0, 0});
+  CHECK(bounded.cache_usage().images.entries == 0 && bounded.cache_usage().images.resident_bytes == 0);
+  chroma::CpuRenderContext disabled({0, 0});
+  CHECK(disabled.execute(pc).pixels() == expected.pixels());
+  CHECK(disabled.execute(pc).pixels() == expected.pixels());
+  CHECK(disabled.cache_usage().images.misses == 2 && disabled.cache_usage().images.bypasses == 2);
+  CHECK(disabled.cache_usage().images.resident_bytes == 0);
+  chroma::CpuRenderContext oversized({bytes - 1, 0});
+  CHECK(oversized.execute(pc).pixels() == expected.pixels());
+  CHECK(oversized.cache_usage().images.bypasses == 1 && oversized.cache_usage().images.entries == 0);
+  bounded.set_cache_budgets({bytes, 0});
+  CHECK(bounded.execute(pc).pixels() == expected.pixels());
+  CHECK(bounded.cache_usage().images.resident_bytes == bytes);
+  bounded.clear_prepared_caches();
+  CHECK(bounded.cache_usage().images.entries == 0);
+  CHECK(bounded.cache_usage().images.peak_resident_bytes == bytes * 2);
+  CHECK(bounded.cache_usage().text.misses == 0);
+  std::filesystem::remove_all(directory);
+}
+
 void fused_image_sampling_and_effects_match_the_reference_path(const char* path) {
   const auto composition = image_effect_composition(
       path, 23, 19,
@@ -707,6 +764,7 @@ int main(int argc, char** argv) {
     image_layers_decode_once_and_execute_effects(argv[2]);
     fused_image_sampling_and_effects_match_the_reference_path(argv[2]);
     fused_transform_matches_reference_and_unsafe_order_falls_back(argv[2]);
+    image_cache_budgets_preserve_pixels_and_bound_retention(argv[2]);
     animated_images_match_fused_and_reference_across_frames(argv[2]);
   }
 

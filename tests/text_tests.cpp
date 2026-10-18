@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <cstdlib>
+#include <chrono>
 #include <filesystem>
 #include <iostream>
 #include <stdexcept>
@@ -92,11 +93,63 @@ void shaped_text_is_prepared_cached_and_rendered(const std::filesystem::path& fo
   }
 }
 
+void text_cache_budgets_preserve_pixels_and_bound_retention(const std::filesystem::path& font_path) {
+  const auto directory = std::filesystem::temp_directory_path() /
+    ("chroma-text-budget-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+  std::filesystem::create_directory(directory);
+  const auto a = directory / "a.ttf", b = directory / "b.ttf", c = directory / "c.ttf";
+  for (const auto& destination : {a, b, c}) std::filesystem::copy_file(font_path, destination);
+  auto plan = [&](const std::filesystem::path& source) {
+    const chroma::Composition composition(1, 160, 64, chroma::FrameRate(chroma::Rational(30)),
+      chroma::FrameRange(chroma::FrameIndex(0), chroma::FrameIndex(1)),
+      std::vector<chroma::VideoAsset>{}, std::vector<chroma::ImageAsset>{}, {{"font", source}},
+      {chroma::TextLayer{.id = "title", .range = chroma::FrameRange(chroma::FrameIndex(0), chroma::FrameIndex(1)),
+        .font_asset_id = "font", .text = "Hello", .font_size = 32, .x = 8, .y = 44, .color = {1, 0, 0, 1}}});
+    return chroma::compile_frame(composition, chroma::FrameIndex(0));
+  };
+  const auto pa = plan(a), pb = plan(b), pc = plan(c);
+  chroma::CpuRenderContext sizing;
+  const auto expected = sizing.execute(pa);
+  const auto bytes = sizing.cache_usage().text.resident_bytes;
+  CHECK(bytes > 0 && sizing.cache_usage().images.entries == 0);
+  chroma::CpuRenderContext bounded({0, bytes * 2});
+  static_cast<void>(bounded.execute(pa));
+  static_cast<void>(bounded.execute(pb));
+  static_cast<void>(bounded.execute(pa));
+  static_cast<void>(bounded.execute(pc));
+  CHECK(bounded.cache_usage().text.evictions == 1 && bounded.cache_usage().text.entries == 2);
+  CHECK(bounded.cache_usage().text.resident_bytes == bytes * 2);
+  std::filesystem::remove(a);
+  CHECK(bounded.execute(pa).pixels() == expected.pixels());
+  std::filesystem::remove(b);
+  bool failed = false;
+  try { static_cast<void>(bounded.execute(pb)); } catch (const std::runtime_error&) { failed = true; }
+  CHECK(failed);
+  CHECK(bounded.cache_usage().text.load_failures == 1);
+  CHECK(bounded.cache_usage().text.evictions == 1 && bounded.cache_usage().text.hits == 2);
+  bounded.set_cache_budgets({0, 0});
+  CHECK(bounded.cache_usage().text.entries == 0 && bounded.cache_usage().text.resident_bytes == 0);
+  chroma::CpuRenderContext disabled({0, 0});
+  CHECK(disabled.execute(pc).pixels() == expected.pixels());
+  CHECK(disabled.execute(pc).pixels() == expected.pixels());
+  CHECK(disabled.cache_usage().text.misses == 2 && disabled.cache_usage().text.bypasses == 2);
+  chroma::CpuRenderContext oversized({0, bytes - 1});
+  CHECK(oversized.execute(pc).pixels() == expected.pixels());
+  CHECK(oversized.cache_usage().text.bypasses == 1 && oversized.cache_usage().text.entries == 0);
+  bounded.set_cache_budgets({0, bytes});
+  CHECK(bounded.execute(pc).pixels() == expected.pixels());
+  bounded.clear_prepared_caches();
+  CHECK(bounded.cache_usage().text.resident_bytes == 0 && bounded.cache_usage().text.entries == 0);
+  CHECK(bounded.cache_usage().text.peak_resident_bytes == bytes * 2);
+  std::filesystem::remove_all(directory);
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
   if (argc == 2) {
     shaped_text_is_prepared_cached_and_rendered(argv[1]);
+    text_cache_budgets_preserve_pixels_and_bound_retention(argv[1]);
   } else if (chroma::text_support_available()) {
     CHECK(chroma::text_support_available());
   } else {

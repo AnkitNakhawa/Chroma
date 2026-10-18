@@ -107,7 +107,7 @@ Text uses a narrow preparation boundary: HarfBuzz converts UTF-8 plus a font int
 
 The first physical resource model assigns single-static-assignment names to logical intermediate surfaces and reports each pass's reads and write. A deterministic linear-scan allocator derives each temporary's definition-to-last-read interval and maps non-overlapping intervals onto the lowest available physical buffer. Reuse requires the prior interval to end strictly before the next definition, so an operation never reads and overwrites the same buffer in one pass. Cost diagnostics use a deliberately simple full-frame model: one linear-premultiplied RGBA surface costs `width × height × 4 × sizeof(float)` bytes. Temporal barriers add their neighboring frame inputs; other passes count declared surface reads and one output write. Peak-live bytes are derived from the resources simultaneously involved in each pass, with the canvas treated as resident. Logical and physical temporary counts remain visible separately. These are planning estimates, not measured allocator or transfer telemetry, and the CPU renderer does not yet execute the physical allocation plan.
 
-Cache opportunity analysis is similarly conservative and planning-only. Video sources are frame-varying, temporal effects depend on neighboring frames, and nondeterministic effects cannot be reused safely. Cheap deterministic solid subgraphs are marked for recomputation to avoid cache overhead; static deterministic subgraphs containing neighborhood or external work are cache candidates with one full-surface storage estimate. Job-scoped image and text preparation reuse is implemented, but persistent cross-job storage, eviction, and cache lookup are not.
+Cache opportunity analysis is similarly conservative and planning-only. Video sources are frame-varying, temporal effects depend on neighboring frames, and nondeterministic effects cannot be reused safely. Cheap deterministic solid subgraphs are marked for recomputation to avoid cache overhead; static deterministic subgraphs containing neighborhood or external work are cache candidates with one full-surface storage estimate. Job-scoped image and text preparation reuse now uses bounded LRU caches. Persistent cross-job storage and effect-output caching remain unimplemented.
 
 Static image and text preparation now share versioned, length-prefixed request keys. Image keys contain the normalized asset path; text keys contain normalized font path, exact floating-point size bits, and UTF-8 text. CPU render-context maps use the complete key, avoiding ambiguity between components. Plan diagnostics deduplicate matching requests and expose a compact FNV-1a identifier plus every consuming source ID. That compact identifier is for inspection only: it is not collision-safe enough for a persistent cache, and path-based identity does not detect changed file contents. A future cross-job cache must incorporate content hashes, engine/schema versions, relevant library versions, and output-semantics versions before using the identity for correctness.
 
@@ -309,3 +309,33 @@ when a particular frame's matrix is an identity that gets removed. This prevents
 cache analysis from treating animated effect output as static. Prepared source
 images and glyphs remain reusable independently of their animated effects. A
 single-keyframe or static-value transform remains eligible for static planning.
+
+### Bounded prepared-resource retention
+
+`CpuRenderContext(CpuCacheConfig)` owns independent LRU image and text caches,
+with default budgets of 64 MiB and 16 MiB. `set_cache_budgets` changes both limits
+and evicts least recently used entries immediately when reducing a budget. Zero
+disables retention. A resource larger than its cache budget is prepared and used
+without entering the cache or evicting useful entries. Preparation errors count
+as misses and load failures, and do not evict existing entries.
+
+Accounting includes retained image pixel vector capacity; text glyph vector and
+coverage capacities; resource and entry objects; key capacity; and list links.
+Hash buckets/nodes, shared-pointer control blocks, allocator overhead, temporary
+decode/shaping storage, frame surfaces, video decoders, and resources held by an
+active caller are outside these retained-byte budgets. This is an enforceable
+retention limit, not a bound on process RSS. Empty resources still have nonzero
+key/object cost. Returned shared handles remain valid if their entry is evicted.
+
+`cache_usage()` exposes each cache's configured budget, current/peak retained
+bytes, entry count, hits, misses, insertions, evictions, bypasses, and load failures.
+Counters accumulate over a context's lifetime, including failed render requests.
+`clear_prepared_caches()` releases entries and the lookup index; removals due to
+clear or budget reduction count as evictions. Peak bytes are historical and may
+exceed a subsequently reduced budget. Lookup hits promote entries to most recent
+use; ties follow deterministic request order. Cached source data is immutable,
+and effects/compositing operate on separate surfaces.
+
+Keys still use normalized paths and font/text parameters, so assets must remain
+stable during a render context's lifetime. Replacing a source file requires
+clearing the context's caches or using a new context. There is no disk cache.
