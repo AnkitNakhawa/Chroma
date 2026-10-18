@@ -143,6 +143,11 @@ if(CHROMA_BUILD_TESTS)
   add_test(NAME chroma_cli_validates_audio_example
     COMMAND chroma_cli validate ${CMAKE_CURRENT_SOURCE_DIR}/examples/audio.json)
 
+  add_executable(chroma_cache_tests tests/cache_tests.cpp)
+  target_include_directories(chroma_cache_tests PRIVATE src/core)
+  target_link_libraries(chroma_cache_tests PRIVATE chroma::core)
+  add_test(NAME chroma_cache_tests COMMAND chroma_cache_tests)
+
   add_executable(chroma_audio_tests tests/audio_tests.cpp)
   target_link_libraries(chroma_audio_tests PRIVATE chroma::core)
   add_test(NAME chroma_audio_tests COMMAND chroma_audio_tests)
