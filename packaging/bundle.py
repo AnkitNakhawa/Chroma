@@ -32,7 +32,9 @@ def binaries(root):
 def deps(path):
     if platform.system() == 'Darwin':
         lines = output(['otool', '-L', path]).splitlines()[1:]
-        return [line.strip().split(' (compatibility')[0] for line in lines]
+        links = [line.strip().split(' (compatibility')[0] for line in lines]
+        # otool -L lists a dylib's own install ID first; it is not a load edge.
+        return links[1:] if path.suffix == '.dylib' else links
     return re.findall(r'\(NEEDED\).*\[(.*?)\]', output(['readelf', '-d', path]))
 
 
@@ -65,6 +67,11 @@ def audit(root):
             loads = output(['otool', '-l', path])
             if 'cmd LC_RPATH' in loads:
                 raise RuntimeError(f'{relative}: unnecessary runtime search path')
+            if path.suffix == '.dylib':
+                install_id = output(['otool', '-D', path]).splitlines()[1].strip()
+                alias = root / 'lib' / install_id.removeprefix('@rpath/')
+                if not install_id.startswith('@rpath/') or alias.resolve() != path.resolve():
+                    raise RuntimeError(f'{relative}: SDK install ID must support consumer RPATHs: {install_id}')
             run(['codesign', '--verify', '--strict', path])
         evidence[relative] = links
     if not evidence:
@@ -82,7 +89,9 @@ def relocate(root):
             # install_name_tool invalidates the signature; re-sign below.
             changes = []
             if path.suffix == '.dylib':
-                changes += ['-id', '@loader_path/' + path.name]
+                original_id = output(['otool', '-D', path]).splitlines()[1].strip()
+                # Preserve the ABI-major name, not the physical file's version.
+                changes += ['-id', '@rpath/' + Path(original_id).name]
             for link in deps(path):
                 if link.startswith(('/usr/lib/', '/System/Library/')):
                     continue
@@ -166,6 +175,11 @@ def main():
     run(['cmake', '--build', consumer_build, '--parallel', '2'])
     run(['cmake', '--install', consumer_build, '--prefix', stage])
     evidence = relocate(stage)
+    # Compile again against the actual relocated SDK. In particular, a dylib
+    # install ID must let a NEW consumer resolve it through its own RPATH.
+    run(['cmake', '--build', consumer_build, '--clean-first', '--parallel', '2'])
+    subprocess.run([str(consumer_build / 'chroma-sdk-consumer')], check=True,
+                   env={'PATH': '/usr/bin:/bin', 'HOME': str(work)})
     share = stage / 'share/chroma'
     licenses = share / 'licenses'
     licenses.mkdir()
