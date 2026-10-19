@@ -8,6 +8,8 @@
 #include <vector>
 #include <variant>
 
+#include "chroma/text/layout.hpp"
+
 #include "chroma/core/effect.hpp"
 #include "chroma/core/timeline.hpp"
 
@@ -161,6 +163,7 @@ struct TextLayer {
   Color color;
   EffectProgram effects;
   BlendMode blend_mode{BlendMode::source_over};
+  std::optional<TextLayout> layout;
 };
 
 using CompositionLayer =

@@ -33,6 +33,23 @@ class WrapperTests(unittest.TestCase):
         self.addCleanup(engine.close)
         return engine
 
+    def test_text_layout_round_trips_through_c_api_and_diagnostics(self):
+        engine = self.engine()
+        source = document()
+        source['assets'] = [dict(id='font', type='font', path='font.ttf')]
+        layout = dict(width=100, height=80, wrap='word', align='center',
+                      line_spacing=1.5, max_lines=2, overflow='ellipsis')
+        source['layers'] = [dict(id='title', type='text', font='font', text='Hello world',
+            font_size=24, position=[0,24], color=[1,1,1,1], start_frame=0, end_frame=6, layout=layout)]
+        with engine.parse_composition(source) as scene:
+            operation = next(op for op in scene.inspect_plan()['operations'] if op['op'] == 'composite_text')
+            self.assertEqual(operation['layout'], layout)
+            self.assertIsInstance(scene.inspect_plan(optimized=True), dict)
+        source['layers'][0]['layout']['width'] = -1
+        with self.assertRaises(InvalidCompositionError) as caught:
+            engine.parse_composition(source)
+        self.assertEqual(caught.exception.diagnostics[0]['path'], '/layers/0/layout/width')
+
     def test_real_abi_layouts(self):
         self.assertEqual([ctypes.sizeof(c) for c in (_native.EngineOptions, _native.CompositionInfo,
             _native.FrameInfo, _native.NativeProgress, _native.RenderOptions)], [24, 48, 32, 48, 32])

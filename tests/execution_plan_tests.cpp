@@ -337,6 +337,21 @@ void prepared_resource_plans_are_stable_and_deduplicated() {
   CHECK(base_key == chroma::prepared_text_request_key("body.ttf", "Hello", 24.0));
   CHECK(base_key != chroma::prepared_text_request_key("body.ttf", "Hello", 25.0));
   CHECK(base_key != chroma::prepared_text_request_key("body.ttf", "Hello!", 24.0));
+  chroma::TextLayout layout;
+  const auto key = [&](const chroma::TextLayout& value) {
+    return chroma::prepared_text_request_key("body.ttf", "Hello", 24, value);
+  };
+  const auto default_key = key(layout);
+  CHECK(base_key != default_key);
+  auto width = layout; width.width = 100; CHECK(key(width) != default_key);
+  auto height = layout; height.height = 100; CHECK(key(height) != default_key);
+  auto wrap = layout; wrap.wrap = chroma::TextWrap::none; CHECK(key(wrap) != default_key);
+  auto align = width; align.align = chroma::TextAlign::right; CHECK(key(align) != key(width));
+  auto spacing = layout; spacing.line_spacing = 1.5; CHECK(key(spacing) != default_key);
+  auto count = layout; count.max_lines = 2; CHECK(key(count) != default_key);
+  auto clip = layout; clip.overflow = chroma::TextOverflow::clip; CHECK(key(clip) != default_key);
+  auto ellipsis = width; ellipsis.overflow = chroma::TextOverflow::ellipsis; CHECK(key(ellipsis) != key(width));
+
   const auto json = chroma::optimized_execution_plan_json(plan);
   CHECK(json.find("prepared_resource_count") != std::string::npos);
   CHECK(json.find("fnv1a64:") != std::string::npos);

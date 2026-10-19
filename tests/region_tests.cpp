@@ -72,15 +72,20 @@ void text(const std::filesystem::path& font) {
       EffectProgram({Transform2DEffect{-1,0,70,0,1,0}, CropEffect{3,-4,80,64}}),
       EffectProgram({CropEffect{5,2,40,40}, Transform2DEffect{1,0,-40,0,1,0}, Transform2DEffect{1,0,40,0,1,0}}),
       EffectProgram({GaussianBlurEffect{.8}}), EffectProgram({color})};
+  const std::vector<std::optional<TextLayout>> layouts{
+    std::nullopt, TextLayout{.width=40, .height=38, .line_spacing=1.1, .max_lines=2, .overflow=TextOverflow::clip},
+    TextLayout{.width=50, .align=TextAlign::right, .max_lines=1, .overflow=TextOverflow::ellipsis},
+    TextLayout{.width=68, .align=TextAlign::center}, TextLayout{.width=1, .overflow=TextOverflow::ellipsis}};
+  for (const auto& layout : layouts)
   for (auto mode : {BlendMode::source_over, BlendMode::plus, BlendMode::multiply, BlendMode::screen})
-    for (const auto word : {"jÁffi", "A\xCC\x81", "مرحبا", "   "})
+    for (const auto word : {"jÁffi", "A\xCC\x81", "مرحبا", "Hello world\nnext line", "   "})
       for (auto position : {std::pair{4.25,28.75}, std::pair{-10.25,-.75}, std::pair{88.5,56.2}, std::pair{1e100,0.}})
         for (std::size_t i = 0; i < programs.size(); ++i) {
           const ExecutionPlan plan(96,64,FrameIndex(0),{
               ClearOperation{{.red=.12,.green=.43,.blue=.21,.alpha=.63}},
               CompositeTextOperation{.source_id="text",.font_path=font,.text=word,.font_size=24,
                   .x=position.first,.y=position.second,.color={.red=.8,.green=.2,.blue=.7,.alpha=.73},
-                  .effects=programs[i],.blend_mode=mode}});
+                  .effects=programs[i],.blend_mode=mode,.layout=layout}});
           const auto actual = fast.execute(plan);
           const auto expected = reference.execute(plan, CpuExecutionMode::unbounded_graphics);
           require(std::memcmp(actual.pixels().data(),expected.pixels().data(),actual.size()*sizeof(Pixel))==0,

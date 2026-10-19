@@ -90,6 +90,65 @@ std::optional<double> number_value(const Json* value, std::string_view path,
   return number;
 }
 
+std::optional<TextLayout> parse_text_layout(const Json* value, const std::string& path,
+                                                std::vector<Diagnostic>& diagnostics) {
+  if (!value) return std::nullopt;
+  if (!value->is_object()) {
+    add_diagnostic(diagnostics, "schema.type", path, "expected a text layout object");
+    return std::nullopt;
+  }
+  TextLayout layout;
+  const auto invalid = [&](const std::string& field, const std::string& message) {
+    add_diagnostic(diagnostics, "layer.invalid_text_layout", path + "/" + field, message);
+  };
+  for (const auto& [key, item] : value->items()) {
+    if (key != "width" && key != "height" && key != "wrap" && key != "align" &&
+        key != "line_spacing" && key != "max_lines" && key != "overflow")
+      invalid(key, "unknown text layout field");
+  }
+  for (auto field : {"width", "height", "line_spacing"}) {
+    if (const auto* item = optional_member(*value, field)) {
+      const auto number = number_value(item, path + "/" + field, diagnostics);
+      const double maximum = std::string_view(field) == "line_spacing" ? 100 : 65536;
+      if (number && (*number <= 0 || *number > maximum)) invalid(field, "value must be positive and within the supported range");
+      else if (number) {
+        if (std::string_view(field) == "width") layout.width = *number;
+        else if (std::string_view(field) == "height") layout.height = *number;
+        else layout.line_spacing = *number;
+      }
+    }
+  }
+  if (const auto* item = optional_member(*value, "max_lines")) {
+    const auto count = integer_value(item, path + "/max_lines", diagnostics);
+    if (count && (*count < 1 || *count > 16384)) invalid("max_lines", "max_lines must be between 1 and 16384");
+    else if (count) layout.max_lines = static_cast<std::int32_t>(*count);
+  }
+  for (auto field : {"wrap", "align", "overflow"}) {
+    const auto* item = optional_member(*value, field);
+    if (!item) continue;
+    const auto name = string_value(item, path + "/" + field, diagnostics);
+    if (!name) continue;
+    if (std::string_view(field) == "wrap") {
+      if (*name == "word") layout.wrap = TextWrap::word;
+      else if (*name == "none") layout.wrap = TextWrap::none;
+      else invalid(field, "wrap must be word or none");
+    } else if (std::string_view(field) == "align") {
+      if (*name == "left") layout.align = TextAlign::left;
+      else if (*name == "center") layout.align = TextAlign::center;
+      else if (*name == "right") layout.align = TextAlign::right;
+      else invalid(field, "align must be left, center, or right");
+    } else {
+      if (*name == "visible") layout.overflow = TextOverflow::visible;
+      else if (*name == "clip") layout.overflow = TextOverflow::clip;
+      else if (*name == "ellipsis") layout.overflow = TextOverflow::ellipsis;
+      else invalid(field, "overflow must be visible, clip, or ellipsis");
+    }
+  }
+  if (!layout.width && layout.align != TextAlign::left) invalid("align", "center/right alignment requires width");
+  if (!layout.width && layout.overflow == TextOverflow::ellipsis) invalid("overflow", "ellipsis requires width");
+  return layout;
+}
+
 std::vector<CompositionLayer> wrap_solid_layers(std::vector<SolidLayer> layers) {
   std::vector<CompositionLayer> output;
   output.reserve(layers.size());
@@ -852,7 +911,8 @@ Composition::Composition(std::int32_t schema_version, std::int32_t width, std::i
     if (find_font_asset(text.font_asset_id) == nullptr || text.text.empty() ||
         text.text.size() > 16'384 || !std::isfinite(text.font_size) || text.font_size <= 0.0 ||
         text.font_size > 4096.0 || !std::isfinite(text.x) || !std::isfinite(text.y) ||
-        !valid_color(text.color) || !valid_blend_mode(text.blend_mode)) {
+        !valid_color(text.color) || !valid_blend_mode(text.blend_mode) ||
+        (text.layout && !valid_text_layout(*text.layout))) {
       throw std::invalid_argument("composition text layer is invalid");
     }
   }
@@ -1197,6 +1257,7 @@ CompositionParseResult parse_composition(std::string_view source,
                          .blend_mode = *blend_mode});
         }
       } else if (type && *type == "text") {
+        const auto layout = parse_text_layout(optional_member(layer, "layout"), base + "/layout", result.diagnostics);
         auto font = string_value(required_member(layer, "font", base, result.diagnostics),
                                  base + "/font", result.diagnostics);
         auto text = string_value(required_member(layer, "text", base, result.diagnostics),
@@ -1234,7 +1295,8 @@ CompositionParseResult parse_composition(std::string_view source,
                         .y = (*position)[1],
                         .color = *color,
                         .effects = std::move(*effects),
-                        .blend_mode = *blend_mode});
+                        .blend_mode = *blend_mode,
+                        .layout = layout});
         }
       }
     }

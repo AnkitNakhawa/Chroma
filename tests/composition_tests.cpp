@@ -631,9 +631,44 @@ void animated_transform_documents_validate_and_normalize() {
   CHECK(has_code(parse(oversized + "]}"), "effect.invalid_keyframes"));
 }
 
+void text_layout_is_normalized_and_validated() {
+  const auto parse = [](std::string_view layout) {
+    return chroma::parse_composition(std::string(R"({"schema_version":1,"canvas":{"width":320,"height":180,
+      "frame_rate":{"numerator":30,"denominator":1},"duration_frames":1},
+      "assets":[{"id":"font","type":"font","path":"font.ttf"}],
+      "layers":[{"id":"text","type":"text","font":"font","text":"Hello world",
+      "font_size":24,"position":[0,30],"color":[1,1,1,1],"start_frame":0,"end_frame":1,"layout":)") +
+      std::string(layout) + "}]}");
+  };
+  const auto result = parse(R"({"width":100,"height":80,"wrap":"none","align":"center",
+      "line_spacing":1.5,"max_lines":2,"overflow":"ellipsis"})");
+  CHECK(result.valid());
+  if (result.composition) {
+    const auto& layout = std::get<chroma::TextLayer>(result.composition->layers()[0]).layout;
+    CHECK(layout.has_value());
+    CHECK(layout->width == 100 && layout->height == 80);
+    CHECK(layout->wrap == chroma::TextWrap::none && layout->align == chroma::TextAlign::center);
+    CHECK(layout->line_spacing == 1.5 && layout->max_lines == 2);
+    CHECK(layout->overflow == chroma::TextOverflow::ellipsis);
+  }
+  CHECK(parse("{}").valid());
+  for (const auto invalid : {"null", "[]", "true", R"({"width":0})", R"({"width":-1})",
+      R"({"width":65537})", R"({"height":"bad"})", R"({"width":null})", R"({"width":true})",
+      R"({"line_spacing":0})", R"({"line_spacing":101})", R"({"max_lines":1.5})",
+      R"({"max_lines":0})", R"({"max_lines":16385})", R"({"wrap":"character"})",
+      R"({"align":"justify"})", R"({"overflow":"hidden"})", R"({"align":"right"})",
+      R"({"overflow":"ellipsis"})", R"({"widht":100})"}) {
+    const auto bad = parse(invalid);
+    CHECK(!bad.valid());
+    CHECK(!bad.diagnostics.empty());
+    CHECK(bad.diagnostics[0].path.starts_with("/layers/0/layout"));
+  }
+}
+
 }  // namespace
 
 int main() {
+  text_layout_is_normalized_and_validated();
   valid_composition_is_normalized();
   audio_tracks_are_normalized_and_validated();
   animated_transform_documents_validate_and_normalize();

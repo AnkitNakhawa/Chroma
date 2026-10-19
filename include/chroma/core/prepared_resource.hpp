@@ -4,6 +4,8 @@
 #include <string>
 #include <string_view>
 
+#include "chroma/text/layout.hpp"
+
 namespace chroma {
 
 enum class PreparedResourceKind {
@@ -14,7 +16,8 @@ enum class PreparedResourceKind {
 [[nodiscard]] std::string_view prepared_resource_kind_name(PreparedResourceKind kind) noexcept;
 [[nodiscard]] std::string prepared_image_request_key(const std::filesystem::path& path);
 [[nodiscard]] std::string prepared_text_request_key(const std::filesystem::path& font_path,
-                                                    std::string_view text, double font_size);
+                                                    std::string_view text, double font_size,
+                                                    const std::optional<TextLayout>& layout = std::nullopt);
 [[nodiscard]] std::string prepared_resource_identity(std::string_view request_key);
 
 }  // namespace chroma

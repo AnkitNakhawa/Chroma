@@ -943,11 +943,12 @@ Surface CpuRenderContext::execute(const ExecutionPlan& plan, CpuExecutionMode mo
     }
     if (const auto* text = std::get_if<CompositeTextOperation>(&operation)) {
       const auto key =
-          prepared_text_request_key(text->font_path, text->text, text->font_size);
+          prepared_text_request_key(text->font_path, text->text, text->font_size, text->layout);
       const auto prepared = impl_->text.get(key,
-          [&] { return prepare_text(text->font_path, text->text, text->font_size); },
+          [&] { return prepare_text(text->font_path, text->text, text->font_size, text->layout); },
           [](const PreparedText& value) {
-            std::uint64_t bytes = value.glyphs.capacity() * sizeof(PreparedGlyph);
+            std::uint64_t bytes = value.glyphs.capacity() * sizeof(PreparedGlyph) +
+                                  value.lines.capacity() * sizeof(PreparedTextLine);
             for (const auto& glyph : value.glyphs)
               bytes = detail::add_cache_bytes(bytes, glyph.coverage.capacity());
             return bytes;

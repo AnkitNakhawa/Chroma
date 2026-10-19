@@ -8,6 +8,8 @@
 #include <variant>
 #include <vector>
 
+#include "chroma/text/layout.hpp"
+
 #include "chroma/core/composition.hpp"
 #include "chroma/core/effect.hpp"
 #include "chroma/core/prepared_resource.hpp"
@@ -82,6 +84,8 @@ struct CompositeTextOperation {
   std::size_t effect_rewrite_count{0};
   BlendMode blend_mode{BlendMode::source_over};
   bool effects_frame_varying{false};
+
+  std::optional<TextLayout> layout;
 
   friend bool operator==(const CompositeTextOperation&, const CompositeTextOperation&) = default;
 };

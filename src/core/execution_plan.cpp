@@ -354,7 +354,7 @@ ExecutionPlan::ExecutionPlan(std::int32_t width, std::int32_t height, FrameIndex
     if (text.font_path.empty() || text.text.empty() || text.text.size() > 16'384 ||
         !std::isfinite(text.font_size) || text.font_size <= 0.0 || text.font_size > 4096.0 ||
         !std::isfinite(text.x) || !std::isfinite(text.y) || !valid_color(text.color) ||
-        !valid_blend_mode(text.blend_mode)) {
+        !valid_blend_mode(text.blend_mode) || (text.layout && !valid_text_layout(*text.layout))) {
       throw std::invalid_argument("execution plan text operation is invalid");
     }
   }
@@ -486,7 +486,8 @@ ExecutionPlan compile_frame(const Composition& composition, FrameIndex frame) {
           .effects = optimized.program(),
           .effect_rewrite_count = optimized.rewrite_count(),
           .blend_mode = text.blend_mode,
-          .effects_frame_varying = has_frame_varying_effects(text.effects)});
+          .effects_frame_varying = has_frame_varying_effects(text.effects),
+          .layout = text.layout});
     }
   }
 
@@ -615,7 +616,7 @@ ExecutionPlanAnalysis analyze_execution_plan(const ExecutionPlan& plan) {
       blend_mode = text.blend_mode;
       record_prepared_resource(
           PreparedResourceKind::text, source_id,
-          prepared_text_request_key(text.font_path, text.text, text.font_size));
+          prepared_text_request_key(text.font_path, text.text, text.font_size, text.layout));
     }
 
     const auto optimized = optimize_effect_program(EffectProgram(std::move(effects)));
@@ -758,6 +759,17 @@ std::string execution_plan_json(const ExecutionPlan& plan) {
                           {"effect_rewrite_count", text.effect_rewrite_count},
                           {"effects_frame_varying", text.effects_frame_varying},
                           {"blend_mode", blend_mode_name(text.blend_mode)}});
+    if (text.layout) {
+      const auto& layout = *text.layout;
+      nlohmann::json value{{"wrap", layout.wrap == TextWrap::word ? "word" : "none"},
+        {"align", layout.align == TextAlign::left ? "left" : layout.align == TextAlign::center ? "center" : "right"},
+        {"line_spacing", layout.line_spacing},
+        {"overflow", layout.overflow == TextOverflow::visible ? "visible" : layout.overflow == TextOverflow::clip ? "clip" : "ellipsis"}};
+      if (layout.width) value["width"] = *layout.width;
+      if (layout.height) value["height"] = *layout.height;
+      if (layout.max_lines) value["max_lines"] = *layout.max_lines;
+      operations.back()["layout"] = std::move(value);
+    }
   }
 
   return nlohmann::json{{"frame", plan.frame().value()},

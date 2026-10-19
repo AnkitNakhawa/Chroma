@@ -35,6 +35,9 @@ if (a.output / 'test-font.ttf').exists():
 # Runtime smoke is short but covers text, image, footage, shapes, transforms and audio.
 # Asset paths are relative; it must survive moving to a different machine.
 doc = json.loads((a.output / 'fractional.json').read_text())
+for layer in doc['layers']:
+    if layer['type'] == 'text':
+        layer['layout'] = dict(width=100, wrap='word', align='center', line_spacing=1.4, max_lines=2, overflow='ellipsis')
 (a.output / 'smoke.json').write_text(json.dumps(doc, indent=2) + '\n')
 tiny = dict(schema_version=1, canvas=dict(width=8, height=4,
             frame_rate=dict(numerator=30, denominator=1), duration_frames=1), layers=[])

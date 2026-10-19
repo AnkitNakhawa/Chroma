@@ -39,11 +39,22 @@ std::string prepared_image_request_key(const std::filesystem::path& path) {
 }
 
 std::string prepared_text_request_key(const std::filesystem::path& font_path,
-                                      std::string_view text, double font_size) {
+                                      std::string_view text, double font_size,
+                                      const std::optional<TextLayout>& layout) {
   std::string output = "chroma-prepared-text-v1|";
   append_component(output, font_path.lexically_normal().generic_string());
   append_component(output, double_bits(font_size));
   append_component(output, text);
+  if (layout) {
+    append_component(output, "layout-v1");
+    append_component(output, layout->width ? double_bits(*layout->width) : "none");
+    append_component(output, layout->height ? double_bits(*layout->height) : "none");
+    append_component(output, std::to_string(static_cast<int>(layout->wrap)));
+    append_component(output, std::to_string(static_cast<int>(layout->align)));
+    append_component(output, double_bits(layout->line_spacing));
+    append_component(output, layout->max_lines ? std::to_string(*layout->max_lines) : "none");
+    append_component(output, std::to_string(static_cast<int>(layout->overflow)));
+  }
   return output;
 }
 

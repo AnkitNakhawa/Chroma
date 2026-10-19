@@ -32,6 +32,8 @@ def scale_scene(document, factor):
         if layer['type'] == 'text':
             layer['position'] = [v * factor for v in layer['position']]
             layer['font_size'] *= factor
+            for dimension in ('width', 'height'):
+                if dimension in layer.get('layout', {}): layer['layout'][dimension] *= factor
         for effect in layer.get('effects', []):
             if 'origin' in effect:
                 effect['origin'] = [v * factor for v in effect['origin']]
@@ -116,6 +118,17 @@ def fixtures(root, ffmpeg, font):
             simple['layers'].append(dict(id='image', type='image', asset='image', fit='none', position=[.85, .2],
                 start_frame=0, end_frame=frames, effects=[dict(type='translation', value=[.25, -.5]), dict(type='opacity', value=.8)]))
         documents.append((name, scale_scene(simple, ratio), [0, frames // 2, frames - 1]))
+    layout_doc = copy.deepcopy(documents[1][1])
+    layout_doc['canvas']['width'], layout_doc['canvas']['height'] = 320, 180
+    layout_doc['layers'] = [dict(id='background', type='solid', color=[.04,.06,.09,1], start_frame=0, end_frame=36)]
+    for index, (align, overflow) in enumerate([('left','visible'), ('center','clip'), ('right','ellipsis')]):
+        layout_doc['layers'].append(dict(id=f'layout-{index}', type='text', font='font',
+            text='Chroma ffi Á — wrapped typography with overflow handling', font_size=17,
+            position=[12 + 103*index, 30], color=[.9,.95,.9,1], start_frame=0, end_frame=36,
+            layout=dict(width=90, height=105, wrap='word', align=align, line_spacing=1.4, max_lines=3, overflow=overflow),
+            effects=[dict(type='translation', keyframes=[dict(frame=0,value=[0,0]),dict(frame=35,value=[0,12])]),
+                     dict(type='opacity',value=.9)]))
+    documents.append(('text-layout', layout_doc, [0,18,35]))
     result = []
     for name, document, snapshots in documents:
         path = root / f'{name}.json'

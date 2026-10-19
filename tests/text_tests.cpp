@@ -232,10 +232,41 @@ void overflow_clips_or_ellipsizes_and_validates(const std::filesystem::path& fon
   CHECK_THROWS_AS(chroma::prepare_text(font, "Hello", 24, layout), std::invalid_argument);
 }
 
+void layout_cache_entries_are_distinct_and_accounted(const std::filesystem::path& font) {
+  using namespace chroma;
+  CpuRenderContext cached;
+  std::vector<TextLayout> layouts(7, TextLayout{.width=90});
+  layouts[1].width = 40;
+  layouts[2].height = 20; layouts[2].overflow = TextOverflow::clip;
+  layouts[3].align = TextAlign::center;
+  layouts[4].line_spacing = 2;
+  layouts[5].max_lines = 1; layouts[5].overflow = TextOverflow::ellipsis;
+  layouts[6].wrap = TextWrap::none;
+  for (const auto& layout : layouts) {
+    const ExecutionPlan plan(160,120,FrameIndex(0), {ClearOperation{{0,0,0,0}},
+      CompositeTextOperation{.source_id="text",.font_path=font,.text="Hello world\nsecond line",.font_size=24,
+        .x=8,.y=28,.color={1,1,1,1},.layout=layout}});
+    CpuRenderContext fresh(CpuCacheConfig{0,0});
+    const auto expected = fresh.execute(plan, CpuExecutionMode::reference);
+    CHECK(cached.execute(plan).pixels() == expected.pixels());
+    CHECK(cached.execute(plan).pixels() == expected.pixels());
+  }
+  const auto usage = cached.cache_usage().text;
+  CHECK(usage.entries == layouts.size() && usage.misses == layouts.size() && usage.hits == layouts.size());
+  CHECK(usage.resident_bytes > 0 && usage.resident_bytes <= usage.budget_bytes);
+  cached.clear_prepared_caches();
+  CHECK(cached.cache_usage().text.resident_bytes == 0);
+  TextLayout invalid; invalid.line_spacing = 0;
+  CHECK_THROWS_AS(ExecutionPlan(32,32,FrameIndex(0), {ClearOperation{{0,0,0,0}},
+      CompositeTextOperation{.source_id="text",.font_path=font,.text="Hello",.font_size=24,
+        .x=0,.y=24,.color={1,1,1,1},.layout=invalid}}), std::invalid_argument);
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
   if (argc == 2) {
+    layout_cache_entries_are_distinct_and_accounted(argv[1]);
     text_layout_shapes_lines_without_changing_legacy_pixels(argv[1]);
     overflow_clips_or_ellipsizes_and_validates(argv[1]);
     shaped_text_is_prepared_cached_and_rendered(argv[1]);
