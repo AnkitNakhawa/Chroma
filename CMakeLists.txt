@@ -149,6 +149,11 @@ else()
   target_compile_options(chroma_core PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion)
 endif()
 
+add_executable(chroma_c_example examples/c-api-render.c)
+target_compile_features(chroma_c_example PRIVATE c_std_99)
+set_target_properties(chroma_c_example PROPERTIES LINKER_LANGUAGE C)
+target_link_libraries(chroma_c_example PRIVATE chroma::c)
+
 add_executable(chroma_cli src/cli/main.cpp)
 set_target_properties(chroma_cli PROPERTIES OUTPUT_NAME chroma)
 target_link_libraries(chroma_cli PRIVATE chroma::core)
@@ -191,7 +196,7 @@ if(CHROMA_BUILD_TESTS)
   target_compile_features(chroma_c_api_tests PRIVATE c_std_99)
   set_target_properties(chroma_c_api_tests PROPERTIES LINKER_LANGUAGE C)
   target_link_libraries(chroma_c_api_tests PRIVATE chroma::c)
-  add_test(NAME chroma_c_api_tests COMMAND chroma_c_api_tests)
+  add_test(NAME chroma_c_api_tests COMMAND chroma_c_api_tests ${CMAKE_CURRENT_BINARY_DIR}/c-api-test.mp4)
 
   add_executable(chroma_cache_tests tests/cache_tests.cpp)
   target_include_directories(chroma_cache_tests PRIVATE src/core)
@@ -250,6 +255,10 @@ if(CHROMA_BUILD_TESTS)
   if(CHROMA_HAS_FFMPEG AND CHROMA_FFMPEG_EXECUTABLE)
     find_package(Python3 COMPONENTS Interpreter REQUIRED)
     find_program(CHROMA_FFPROBE_EXECUTABLE ffprobe REQUIRED)
+    add_test(NAME chroma_c_api_integration
+      COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/c_api_integration.py
+              $<TARGET_FILE:chroma_c_example> ${CHROMA_FFMPEG_EXECUTABLE} ${CHROMA_FFPROBE_EXECUTABLE})
+    set_tests_properties(chroma_c_api_integration PROPERTIES TIMEOUT 120)
     if(CHROMA_TEST_FONT)
       add_test(NAME chroma_cache_cli_integration
         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/cache_integration.py

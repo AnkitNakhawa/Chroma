@@ -43,6 +43,7 @@ typedef int32_t chroma_status;
 typedef struct chroma_engine chroma_engine;
 typedef struct chroma_composition chroma_composition;
 typedef struct chroma_string chroma_string;
+typedef struct chroma_frame chroma_frame;
 
 typedef struct chroma_engine_options {
   uint32_t struct_size;
@@ -62,6 +63,16 @@ typedef struct chroma_composition_info {
   int64_t start_frame;
   int64_t duration_frames;
 } chroma_composition_info;
+
+#define CHROMA_PIXEL_RGBA_F32_LINEAR_PREMULTIPLIED UINT32_C(1)
+typedef struct chroma_frame_info {
+  uint32_t struct_size;
+  int32_t width;
+  int32_t height;
+  uint32_t pixel_format;
+  uint64_t row_stride_bytes;
+  uint64_t data_bytes;
+} chroma_frame_info;
 
 CHROMA_API uint32_t CHROMA_CALL chroma_abi_version(void) CHROMA_NOEXCEPT;
 CHROMA_API const char* CHROMA_CALL chroma_version_string(void) CHROMA_NOEXCEPT;
@@ -86,11 +97,29 @@ CHROMA_API chroma_status CHROMA_CALL chroma_engine_cache_usage(chroma_engine* en
 CHROMA_API chroma_status CHROMA_CALL chroma_composition_parse(const char* json, uint64_t json_bytes,
     const char* base_directory, chroma_composition** out_composition,
     chroma_string** out_diagnostics) CHROMA_NOEXCEPT;
+/* Loads a UTF-8 path and resolves assets relative to the file's parent directory. */
+CHROMA_API chroma_status CHROMA_CALL chroma_composition_load_file(const char* path,
+    chroma_composition** out_composition, chroma_string** out_diagnostics) CHROMA_NOEXCEPT;
 CHROMA_API void CHROMA_CALL chroma_composition_destroy(chroma_composition* composition) CHROMA_NOEXCEPT;
 CHROMA_API chroma_status CHROMA_CALL chroma_composition_get_info(const chroma_composition* composition,
     chroma_composition_info* out_info, uint64_t out_size) CHROMA_NOEXCEPT;
 CHROMA_API chroma_status CHROMA_CALL chroma_composition_inspect_plan(const chroma_composition* composition,
     int64_t frame, uint32_t optimized, chroma_string** out_json) CHROMA_NOEXCEPT;
+
+/* Frame output owns a tightly packed float RGBA copy, independent of engine,
+ * composition, caches, and subsequent renders. Data lives until frame_destroy. */
+CHROMA_API chroma_status CHROMA_CALL chroma_engine_render_frame(chroma_engine* engine,
+    const chroma_composition* composition, int64_t frame, chroma_frame** out_frame) CHROMA_NOEXCEPT;
+CHROMA_API chroma_status CHROMA_CALL chroma_frame_get_info(const chroma_frame* frame,
+    chroma_frame_info* out_info, uint64_t out_size) CHROMA_NOEXCEPT;
+CHROMA_API const float* CHROMA_CALL chroma_frame_data(const chroma_frame* frame) CHROMA_NOEXCEPT;
+CHROMA_API void CHROMA_CALL chroma_frame_destroy(chroma_frame* frame) CHROMA_NOEXCEPT;
+/* Synchronous video job using engine budgets and a fresh per-job cache context.
+ * Optional profile JSON is caller-owned; engine frame-cache usage is unchanged.
+ * No asynchronous jobs, callbacks, or cancellation are provided by ABI v1. */
+CHROMA_API chroma_status CHROMA_CALL chroma_engine_render_video(chroma_engine* engine,
+    const chroma_composition* composition, const char* output_path,
+    chroma_string** out_profile) CHROMA_NOEXCEPT;
 
 /* Returned strings are owned by the caller; always destroy using this library.
  * Data is borrowed, NUL-terminated, immutable, and excludes the terminator in size.
