@@ -14,7 +14,7 @@
 
 namespace chroma {
 
-enum class VideoRenderPhase : std::uint32_t { preparing, rendering, finalizing, completed };
+enum class VideoRenderPhase : std::uint32_t { preparing = 0, rendering = 1, finalizing = 2, completed = 3 };
 struct VideoRenderProgress {
   VideoRenderPhase phase;
   std::int64_t frames_encoded;

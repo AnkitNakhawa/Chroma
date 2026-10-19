@@ -595,6 +595,8 @@ set(CHROMA_PACKAGE_DIR ${CMAKE_INSTALL_LIBDIR}/cmake/Chroma)
 install(TARGETS chroma_cli RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT CLI)
 install(TARGETS chroma_c_example RUNTIME DESTINATION ${CMAKE_INSTALL_LIBEXECDIR}/chroma COMPONENT Examples)
 install(FILES LICENSE README.md DESTINATION ${CMAKE_INSTALL_DATADIR}/chroma COMPONENT Documentation)
+install(FILES docs/c-api.md docs/render-control.md
+  DESTINATION ${CMAKE_INSTALL_DATADIR}/chroma/docs COMPONENT Documentation)
 install(FILES examples/solid.json examples/animated-transforms.json
   DESTINATION ${CMAKE_INSTALL_DATADIR}/chroma/examples COMPONENT Examples)
 install(TARGETS chroma_c EXPORT ChromaTargets

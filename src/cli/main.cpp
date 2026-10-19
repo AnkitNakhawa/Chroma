@@ -1,4 +1,5 @@
 #include <chrono>
+#include <atomic>
 #include <csignal>
 #include <charconv>
 #include <cstdint>
@@ -100,13 +101,15 @@ std::optional<CacheOptions> parse_cache_options(int start, int argc, char** argv
   return options;
 }
 
-// Only the signal flag is touched by the handler; all I/O/cleanup runs normally.
-volatile std::sig_atomic_t render_signal = 0;
-extern "C" void handle_render_signal(int signal) { render_signal = signal; }
+// A process-directed signal can run on an encoder worker thread. Use a
+// guaranteed lock-free atomic; the handler performs no I/O or cleanup.
+static_assert(std::atomic<int>::is_always_lock_free);
+std::atomic<int> render_signal{0};
+extern "C" void handle_render_signal(int signal) { render_signal.store(signal, std::memory_order_relaxed); }
 class RenderSignals {
  public:
   RenderSignals() {
-    render_signal = 0;
+    render_signal.store(0, std::memory_order_relaxed);
     interrupt_ = std::signal(SIGINT, handle_render_signal);
     if (interrupt_ == SIG_ERR) throw std::runtime_error("unable to install SIGINT handler");
     terminate_ = std::signal(SIGTERM, handle_render_signal);
@@ -353,7 +356,7 @@ int main(int argc, char** argv) {
       RenderSignals signals;
       RenderProgress progress(cache_options->progress);
       chroma::VideoRenderControl control;
-      control.cancelled = [] { return render_signal != 0; };
+      control.cancelled = [] { return render_signal.load(std::memory_order_relaxed) != 0; };
       if (cache_options->progress != "none")
         control.progress = [&](const auto& value) { return progress(value); };
       const auto rendered = chroma::render_video_cpu(*result.composition, argv[4], cache_options->config, cache_options->mode, control);
@@ -363,7 +366,7 @@ int main(int argc, char** argv) {
     } catch (const chroma::RenderCancelled&) {
       if (cache_options->progress == "json" && std::cout.good()) std::cout << "{\"event\":\"cancelled\"}\n" << std::flush;
       std::cerr << "render cancelled\n";
-      return render_signal == SIGTERM ? 143 : 130;
+      return render_signal.load(std::memory_order_relaxed) == SIGTERM ? 143 : 130;
     } catch (const std::exception& error) {
       std::cerr << "render failed: " << error.what() << '\n';
       return input_error;
