@@ -35,15 +35,18 @@ typedef int32_t chroma_status;
 #define CHROMA_ERROR_IO INT32_C(7)
 #define CHROMA_ERROR_RENDER INT32_C(8)
 #define CHROMA_ERROR_INTERNAL INT32_C(9)
+#define CHROMA_ERROR_CANCELLED INT32_C(10)
 
 #define CHROMA_CAP_CPU_RENDER UINT64_C(1)
 #define CHROMA_CAP_FFMPEG UINT64_C(2)
 #define CHROMA_CAP_TEXT UINT64_C(4)
+#define CHROMA_CAP_RENDER_CONTROL UINT64_C(8)
 
 typedef struct chroma_engine chroma_engine;
 typedef struct chroma_composition chroma_composition;
 typedef struct chroma_string chroma_string;
 typedef struct chroma_frame chroma_frame;
+typedef struct chroma_cancel_token chroma_cancel_token;
 
 typedef struct chroma_engine_options {
   uint32_t struct_size;
@@ -114,9 +117,51 @@ CHROMA_API chroma_status CHROMA_CALL chroma_frame_get_info(const chroma_frame* f
     chroma_frame_info* out_info, uint64_t out_size) CHROMA_NOEXCEPT;
 CHROMA_API const float* CHROMA_CALL chroma_frame_data(const chroma_frame* frame) CHROMA_NOEXCEPT;
 CHROMA_API void CHROMA_CALL chroma_frame_destroy(chroma_frame* frame) CHROMA_NOEXCEPT;
+#define CHROMA_RENDER_PREPARING UINT32_C(0)
+#define CHROMA_RENDER_RENDERING UINT32_C(1)
+#define CHROMA_RENDER_FINALIZING UINT32_C(2)
+#define CHROMA_RENDER_COMPLETED UINT32_C(3)
+typedef struct chroma_render_progress {
+  uint32_t struct_size;
+  uint32_t phase;
+  int64_t frames_encoded;
+  int64_t total_frames;
+  int64_t audio_samples_encoded;
+  int64_t total_audio_samples;
+  int64_t elapsed_nanoseconds;
+} chroma_render_progress;
+/* Borrowed progress lives only during the callback, on the rendering thread.
+ * Return nonzero to cancel. COMPLETED is notification only, after publication;
+ * its return value is ignored. Never throw, destroy/reenter the active engine,
+ * or destroy the composition/options user data/token from a callback. */
+typedef int32_t (CHROMA_CALL *chroma_progress_callback)(const chroma_render_progress* progress, void* user_data);
+typedef struct chroma_video_render_options {
+  uint32_t struct_size;
+  uint32_t abi_version;
+  chroma_progress_callback progress;
+  void* user_data;
+  const chroma_cancel_token* cancel_token;
+} chroma_video_render_options;
+#define CHROMA_VIDEO_RENDER_OPTIONS_INIT { (uint32_t)sizeof(chroma_video_render_options), CHROMA_ABI_VERSION, 0, 0, 0 }
+
+/* Tokens are latched, reusable, thread-safe for requests, and never reset.
+ * Keep the token alive until every render using it has returned. A NULL token
+ * means no cancellation; requesting/destroying NULL is harmless. These calls
+ * are NOT async-signal-safe. Request from another thread or a progress callback. */
+CHROMA_API chroma_status CHROMA_CALL chroma_cancel_token_create(chroma_cancel_token** out_token) CHROMA_NOEXCEPT;
+CHROMA_API void CHROMA_CALL chroma_cancel_token_request(chroma_cancel_token* token) CHROMA_NOEXCEPT;
+CHROMA_API void CHROMA_CALL chroma_cancel_token_destroy(chroma_cancel_token* token) CHROMA_NOEXCEPT;
+/* Additive ABI-v1 entry point. NULL options behaves like render_video. Unknown
+ * tails are ignored. Cancellation returns CHROMA_ERROR_CANCELLED and NULL profile.
+ * Checks occur between frames/audio blocks; an in-flight operation may finish.
+ * Failure/cancellation preserves the destination and removes temporary output. */
+CHROMA_API chroma_status CHROMA_CALL chroma_engine_render_video_with_options(chroma_engine* engine,
+    const chroma_composition* composition, const char* output_path,
+    const chroma_video_render_options* options, chroma_string** out_profile) CHROMA_NOEXCEPT;
+
 /* Synchronous video job using engine budgets and a fresh per-job cache context.
  * Optional profile JSON is caller-owned; engine frame-cache usage is unchanged.
- * No asynchronous jobs, callbacks, or cancellation are provided by ABI v1. */
+ * Use render_video_with_options for progress and cooperative cancellation. */
 CHROMA_API chroma_status CHROMA_CALL chroma_engine_render_video(chroma_engine* engine,
     const chroma_composition* composition, const char* output_path,
     chroma_string** out_profile) CHROMA_NOEXCEPT;

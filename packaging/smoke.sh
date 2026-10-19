@@ -9,8 +9,18 @@ clean() {
   env -i PATH=/usr/bin:/bin HOME="$result" LC_ALL=C "$@"
 }
 clean "$package/bin/chroma" validate "$fixture/smoke.json"
-clean "$package/bin/chroma" render "$fixture/smoke.json" --output "$result/cli.mp4"
-clean "$package/libexec/chroma/chroma_c_example" "$fixture/smoke.json" "$result/c-api.mp4"
+clean "$package/bin/chroma" render "$fixture/smoke.json" --output "$result/cli.mp4" --progress json > "$result/progress.ndjson"
+grep -q '"phase":"completed","frames_encoded":36' "$result/progress.ndjson"
+clean "$package/libexec/chroma/chroma_c_example" "$fixture/smoke.json" "$result/c-api.mp4" --progress
+# Exercise cancellation against the actual bundled C library and its new symbols.
+printf 'original\n' > "$result/cancelled.mp4"
+status=0
+clean "$package/libexec/chroma/chroma_c_example" "$fixture/smoke.json" "$result/cancelled.mp4" --cancel-after 2 || status=$?
+test "$status" -eq 130
+grep -qx original "$result/cancelled.mp4"
+for leftover in "$result"/.chroma-render-*; do
+  test ! -e "$leftover"
+done
 # A separately compiled CMake find_package() consumer, relocated with the bundle.
 clean "$package/bin/chroma-sdk-consumer"
 clean "$package/bin/chroma" frame "$fixture/tiny.json" --frame 0 --output "$result/tiny.ppm"

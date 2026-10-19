@@ -213,6 +213,18 @@ if(CHROMA_BUILD_TESTS)
     COMMAND chroma_cli validate ${CMAKE_CURRENT_SOURCE_DIR}/examples/audio.json)
 
   find_package(Threads REQUIRED)
+  file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/c-api-control-test)
+  add_executable(chroma_c_api_control_tests tests/c_api_control_tests.c)
+  target_compile_features(chroma_c_api_control_tests PRIVATE c_std_99)
+  set_target_properties(chroma_c_api_control_tests PROPERTIES LINKER_LANGUAGE C)
+  target_link_libraries(chroma_c_api_control_tests PRIVATE chroma::c)
+  add_test(NAME chroma_c_api_control_tests COMMAND chroma_c_api_control_tests ${CMAKE_CURRENT_BINARY_DIR}/c-api-control-test)
+  add_executable(chroma_c_api_cancel_thread_tests tests/c_api_cancel_thread_tests.cpp)
+  target_compile_features(chroma_c_api_cancel_thread_tests PRIVATE cxx_std_20)
+  target_link_libraries(chroma_c_api_cancel_thread_tests PRIVATE chroma::c Threads::Threads)
+  add_test(NAME chroma_c_api_cancel_thread_tests COMMAND chroma_c_api_cancel_thread_tests ${CMAKE_CURRENT_BINARY_DIR}/cancel-thread.mp4)
+  set_tests_properties(chroma_c_api_control_tests chroma_c_api_cancel_thread_tests PROPERTIES TIMEOUT 30)
+
   add_executable(chroma_c_api_thread_tests tests/c_api_thread_tests.cpp)
   target_compile_features(chroma_c_api_thread_tests PRIVATE cxx_std_20)
   target_link_libraries(chroma_c_api_thread_tests PRIVATE chroma::c Threads::Threads)
@@ -343,6 +355,10 @@ if(CHROMA_BUILD_TESTS)
     endif()
 
 
+    add_test(NAME chroma_progress_cli_tests
+      COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/progress_cli_tests.py
+        $<TARGET_FILE:chroma_cli> ${CHROMA_FFPROBE_EXECUTABLE})
+    set_tests_properties(chroma_progress_cli_tests PROPERTIES TIMEOUT 90)
     add_test(NAME chroma_c_api_integration
       COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/c_api_integration.py
               $<TARGET_FILE:chroma_c_example> ${CHROMA_FFMPEG_EXECUTABLE} ${CHROMA_FFPROBE_EXECUTABLE})

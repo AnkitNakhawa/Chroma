@@ -224,8 +224,8 @@ cmake --install build --prefix /your/prefix --component CAPI
 
 A C-only application can use `find_package(Chroma CONFIG REQUIRED)` and link
 `chroma::c`. See [the ABI, ownership, and installation contract](docs/c-api.md) and
-[the C99 example](examples/c-api-render.c). Async jobs and cancellation callbacks
-are not part of this initial interface.
+[the C99 example](examples/c-api-render.c). Progress callbacks and thread-safe cancellation tokens are available through an
+additive ABI-v1 render-options entry point; rendering remains synchronous.
 
 ### 1080p showcase
 
@@ -262,3 +262,15 @@ Linux and macOS release packaging includes the CLI, C SDK and a controlled share
 media/text runtime. See [installation, supported systems, dependency licenses and
 release testing](packaging/README.md). Main builds upload tested snapshot archives;
 version tags publish only after build, quality and clean-runtime jobs pass.
+
+### Render progress and cancellation
+
+```sh
+chroma render composition.json --output result.mp4 --progress text
+chroma render composition.json --output result.mp4 --progress json > progress.ndjson
+```
+
+Ctrl+C and SIGTERM cancel cooperatively, preserving existing output and removing
+temporary media. JSON progress stays separate from FFmpeg diagnostics. The C API
+supports callbacks and cancellation tokens without breaking ABI v1.
+See [the progress, signal and output contract](docs/render-control.md).

@@ -1,4 +1,5 @@
 #include <chrono>
+#include <csignal>
 #include <charconv>
 #include <cstdint>
 #include <filesystem>
@@ -42,11 +43,12 @@ struct CacheOptions {
   chroma::CpuCacheConfig config;
   chroma::CpuExecutionMode mode{chroma::CpuExecutionMode::fused};
   std::optional<std::filesystem::path> report;
+  std::string progress{"none"};
 };
 
-std::optional<CacheOptions> parse_cache_options(int start, int argc, char** argv, bool allow_report) {
+std::optional<CacheOptions> parse_cache_options(int start, int argc, char** argv, bool allow_report, bool allow_progress = false) {
   CacheOptions options;
-  bool image_seen = false, text_seen = false, report_seen = false, graphics_seen = false;
+  bool image_seen = false, text_seen = false, report_seen = false, graphics_seen = false, progress_seen = false;
   for (int index = start; index < argc; index += 2) {
     const std::string_view flag(argv[index]);
     if (index + 1 >= argc) {
@@ -54,6 +56,15 @@ std::optional<CacheOptions> parse_cache_options(int start, int argc, char** argv
       return std::nullopt;
     }
     const std::string_view value(argv[index + 1]);
+    if (flag == "--progress" && allow_progress) {
+      if (progress_seen || (value != "none" && value != "text" && value != "json")) {
+        std::cerr << "progress must be none, text, or json, without duplicates\n";
+        return std::nullopt;
+      }
+      progress_seen = true;
+      options.progress = value;
+      continue;
+    }
     if (flag == "--cache-report" && allow_report && !report_seen && !value.empty()) {
       options.report = std::filesystem::path(value);
       report_seen = true;
@@ -89,6 +100,76 @@ std::optional<CacheOptions> parse_cache_options(int start, int argc, char** argv
   return options;
 }
 
+// Only the signal flag is touched by the handler; all I/O/cleanup runs normally.
+volatile std::sig_atomic_t render_signal = 0;
+extern "C" void handle_render_signal(int signal) { render_signal = signal; }
+class RenderSignals {
+ public:
+  RenderSignals() {
+    render_signal = 0;
+    interrupt_ = std::signal(SIGINT, handle_render_signal);
+    if (interrupt_ == SIG_ERR) throw std::runtime_error("unable to install SIGINT handler");
+    terminate_ = std::signal(SIGTERM, handle_render_signal);
+    if (terminate_ == SIG_ERR) {
+      std::signal(SIGINT, interrupt_);
+      throw std::runtime_error("unable to install SIGTERM handler");
+    }
+#ifdef SIGPIPE
+    pipe_ = std::signal(SIGPIPE, SIG_IGN);
+    if (pipe_ == SIG_ERR) {
+      std::signal(SIGINT, interrupt_); std::signal(SIGTERM, terminate_);
+      throw std::runtime_error("unable to install SIGPIPE handler");
+    }
+#endif
+  }
+  ~RenderSignals() {
+    std::signal(SIGINT, interrupt_); std::signal(SIGTERM, terminate_);
+#ifdef SIGPIPE
+    // stdio may retry a buffered failed write during process shutdown.
+    // Keep SIGPIPE ignored after a broken progress pipe so cleanup exits 130.
+    if (std::cout.good()) std::signal(SIGPIPE, pipe_);
+#endif
+  }
+ private:
+  using Handler = void (*)(int);
+  Handler interrupt_, terminate_;
+#ifdef SIGPIPE
+  Handler pipe_;
+#endif
+};
+const char* phase_name(chroma::VideoRenderPhase phase) {
+  switch (phase) {
+    case chroma::VideoRenderPhase::preparing: return "preparing";
+    case chroma::VideoRenderPhase::rendering: return "rendering";
+    case chroma::VideoRenderPhase::finalizing: return "finalizing";
+    case chroma::VideoRenderPhase::completed: return "completed";
+  }
+  return "unknown";
+}
+class RenderProgress {
+ public:
+  explicit RenderProgress(std::string mode) : mode_(std::move(mode)) {}
+  bool operator()(const chroma::VideoRenderProgress& p) {
+    if (mode_ == "json") {
+      std::cout << "{\"event\":\"progress\",\"phase\":\"" << phase_name(p.phase)
+                << "\",\"frames_encoded\":" << p.frames_encoded << ",\"total_frames\":" << p.total_frames
+                << ",\"audio_samples_encoded\":" << p.audio_samples_encoded
+                << ",\"total_audio_samples\":" << p.total_audio_samples
+                << ",\"elapsed_nanoseconds\":" << p.elapsed_nanoseconds << "}\n" << std::flush;
+      if (!std::cout) return true;
+    } else if (mode_ == "text" && (p.phase != chroma::VideoRenderPhase::rendering ||
+               p.elapsed_nanoseconds - last_update_ >= 250'000'000 || p.frames_encoded == 1)) {
+      std::cerr << phase_name(p.phase) << ": " << p.frames_encoded << '/' << p.total_frames
+                << " frames, " << p.audio_samples_encoded << '/' << p.total_audio_samples << " audio samples\n";
+      last_update_ = p.elapsed_nanoseconds;
+    }
+    return false;
+  }
+ private:
+  std::string mode_;
+  std::int64_t last_update_{0};
+};
+
 void validate_cache_report_target(const CacheOptions& options, const std::filesystem::path& output) {
   if (options.report && (std::filesystem::weakly_canonical(*options.report) ==
                          std::filesystem::weakly_canonical(output) ||
@@ -114,13 +195,14 @@ void print_usage(std::ostream& output) {
          << "  chroma inspect <composition.json>\n"
          << "  chroma probe <media-file>\n"
          << "  chroma decode <media-file> --frame <index> --output <frame.ppm>\n"
-         << "  chroma render <composition.json> --output <video.mp4>\n"
+         << "  chroma render <composition.json> --output <video.mp4> [--progress none|text|json]\n"
          << "  chroma benchmark <composition.json> --iterations <count> --output <report.json>\n"
          << "  chroma inspect-plan <composition.json> --frame <index>\n"
          << "  chroma inspect-optimized-plan <composition.json> --frame <index>\n"
          << "  chroma frame <composition.json> --frame <index> --output <frame.ppm>\n"
          << "Append --graphics-mode bounded|full-frame to render, frame, or benchmark (default: bounded).\n"
          << "Append --image-cache-bytes <bytes> and --text-cache-bytes <bytes> to render, frame, or benchmark.\n"
+         << "Render: Ctrl+C/SIGTERM cancels safely; JSON progress is newline-delimited on stdout.\n"
          << "Append --cache-report <report.json> to render or frame. Zero bytes disables retention.\n";
 }
 
@@ -256,7 +338,7 @@ int main(int argc, char** argv) {
 
   if (argc >= 5 && std::string_view(argv[1]) == "render" &&
       std::string_view(argv[3]) == "--output") {
-    const auto cache_options = parse_cache_options(5, argc, argv, true);
+    const auto cache_options = parse_cache_options(5, argc, argv, true, true);
     if (!cache_options) return usage_error;
     chroma::CompositionParseResult result;
     if (const auto parse_status = parse_file(argv[2], result); parse_status != 0) {
@@ -268,10 +350,20 @@ int main(int argc, char** argv) {
     }
     try {
       validate_cache_report_target(*cache_options, argv[4]);
-      const auto rendered = chroma::render_video_cpu(*result.composition, argv[4], cache_options->config, cache_options->mode);
+      RenderSignals signals;
+      RenderProgress progress(cache_options->progress);
+      chroma::VideoRenderControl control;
+      control.cancelled = [] { return render_signal != 0; };
+      if (cache_options->progress != "none")
+        control.progress = [&](const auto& value) { return progress(value); };
+      const auto rendered = chroma::render_video_cpu(*result.composition, argv[4], cache_options->config, cache_options->mode, control);
       write_cache_report(*cache_options, rendered.cache);
-      std::cout << "rendered " << rendered.frames_encoded << " frames to " << argv[4] << '\n';
+      if (cache_options->progress != "json") std::cout << "rendered " << rendered.frames_encoded << " frames to " << argv[4] << '\n';
       return 0;
+    } catch (const chroma::RenderCancelled&) {
+      if (cache_options->progress == "json" && std::cout.good()) std::cout << "{\"event\":\"cancelled\"}\n" << std::flush;
+      std::cerr << "render cancelled\n";
+      return render_signal == SIGTERM ? 143 : 130;
     } catch (const std::exception& error) {
       std::cerr << "render failed: " << error.what() << '\n';
       return input_error;
