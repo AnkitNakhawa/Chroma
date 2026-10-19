@@ -1,6 +1,8 @@
 #include "chroma/media/encode.hpp"
 
 #include <algorithm>
+#include <atomic>
+#include <random>
 #include <chrono>
 #include <cmath>
 #include <cstdint>
@@ -131,23 +133,33 @@ struct ScaleDeleter {
   void operator()(SwsContext* value) const noexcept { sws_freeContext(value); }
 };
 
+// Reserve a private sibling directory exclusively, then atomically publish its
+// file. Failure/cancellation never truncates an existing destination.
 class OutputFileGuard {
  public:
-  explicit OutputFileGuard(std::filesystem::path path) : path_(std::move(path)) {}
-  ~OutputFileGuard() {
-    if (active_) {
-      std::error_code error;
-      std::filesystem::remove(path_, error);
+  explicit OutputFileGuard(std::filesystem::path path) : path_(std::move(path)) {
+    static std::atomic<std::uint64_t> sequence{0};
+    std::random_device random;
+    for (int attempt = 0; attempt < 100; ++attempt) {
+      directory_ = path_.parent_path() / (".chroma-render-" + std::to_string(random()) +
+                    "-" + std::to_string(sequence.fetch_add(1)));
+      if (std::filesystem::create_directory(directory_)) return;
     }
+    throw std::runtime_error("unable to reserve temporary output directory");
   }
-
-  void activate() noexcept { active_ = true; }
-  void commit() noexcept { active_ = false; }
-
+  ~OutputFileGuard() {
+    std::error_code error;
+    std::filesystem::remove_all(directory_, error);
+  }
+  std::filesystem::path temporary() const { return directory_ / "video"; }
+  void commit() { std::filesystem::rename(temporary(), path_); }
  private:
-  std::filesystem::path path_;
-  bool active_ = false;
+  std::filesystem::path path_, directory_;
 };
+
+void check_cancelled(const VideoRenderControl& control) {
+  if (control.cancelled && control.cancelled()) throw RenderCancelled();
+}
 
 using FormatPointer = std::unique_ptr<AVFormatContext, FormatDeleter>;
 using CodecPointer = std::unique_ptr<AVCodecContext, CodecDeleter>;
@@ -239,8 +251,9 @@ class AudioOutput {
     status = av_frame_get_buffer(frame_.get(), 0);
     if (status < 0) throw std::runtime_error("unable to allocate audio frame: " + ffmpeg_error(status));
   }
-  void through(std::int64_t boundary, bool final) {
+  void through(std::int64_t boundary, bool final, const VideoRenderControl& control) {
     while (mixer_.position() < boundary) {
+      check_cancelled(control);
       const auto remaining = mixer_.sample_count() - mixer_.position();
       const auto count = static_cast<int>(std::min<std::int64_t>(codec_->frame_size, remaining));
       if (!final && count > boundary - mixer_.position()) break;
@@ -261,8 +274,9 @@ class AudioOutput {
       nanoseconds_ += elapsed_nanoseconds(start, Clock::now());
     }
   }
-  void finish() {
-    through(mixer_.sample_count(), true);
+  void finish(const VideoRenderControl& control) {
+    through(mixer_.sample_count(), true, control);
+    check_cancelled(control);
     const auto start = Clock::now();
     submit_frame(codec_.get(), format_, stream_, packet_.get(), nullptr, mixer_.sample_count());
     stream_->duration = av_rescale_q(mixer_.sample_count(), codec_->time_base, stream_->time_base);
@@ -284,9 +298,20 @@ class AudioOutput {
 }  // namespace
 
 VideoRenderResult render_video_cpu(const Composition& composition,
-                                   const std::filesystem::path& output_path, CpuCacheConfig cache_config, CpuExecutionMode execution_mode) {
+                                   const std::filesystem::path& output_path, CpuCacheConfig cache_config, CpuExecutionMode execution_mode, const VideoRenderControl& control) {
 #if CHROMA_HAS_FFMPEG
   const auto total_start = Clock::now();
+  const auto total_frames = composition.range().length();
+  const auto total_audio_samples = composition.audio_tracks().empty() ? 0 :
+      audio_sample_at(composition.frame_rate(), composition.range().end()) -
+      audio_sample_at(composition.frame_rate(), composition.range().start());
+  auto report = [&](VideoRenderPhase phase, std::int64_t frames, std::int64_t samples) {
+    check_cancelled(control);
+    const VideoRenderProgress progress{phase, frames, total_frames, samples, total_audio_samples,
+                                      elapsed_nanoseconds(total_start, Clock::now())};
+    if (control.progress && control.progress(progress)) throw RenderCancelled();
+    check_cancelled(control);
+  };
   if (output_path.empty()) {
     throw std::invalid_argument("video output path must not be empty");
   }
@@ -312,6 +337,7 @@ VideoRenderResult render_video_cpu(const Composition& composition,
     throw std::invalid_argument("OpenH264 output requires canvas dimensions of at least 16 pixels");
   }
 
+  report(VideoRenderPhase::preparing, 0, 0);
   AVFormatContext* raw_format = nullptr;
   const auto output_string = output_path.string();
   OutputFileGuard output_guard(output_path);
@@ -375,11 +401,11 @@ VideoRenderResult render_video_cpu(const Composition& composition,
   }
 
   if (!(format->oformat->flags & AVFMT_NOFILE)) {
-    status = avio_open(&format->pb, output_string.c_str(), AVIO_FLAG_WRITE);
+    check_cancelled(control);
+    status = avio_open(&format->pb, output_guard.temporary().string().c_str(), AVIO_FLAG_WRITE);
     if (status < 0) {
       throw std::runtime_error("unable to open video output: " + ffmpeg_error(status));
     }
-    output_guard.activate();
   }
   status = avformat_write_header(format.get(), nullptr);
   if (status < 0) {
@@ -421,6 +447,7 @@ VideoRenderResult render_video_cpu(const Composition& composition,
   CpuRenderContext render_context(cache_config);
   for (auto index = composition.range().start().value();
        index < composition.range().end().value(); ++index) {
+    check_cancelled(control);
     const auto compile_start = Clock::now();
     const auto plan = compile_frame(composition, FrameIndex(index));
     const auto compile_end = Clock::now();
@@ -437,6 +464,7 @@ VideoRenderResult render_video_cpu(const Composition& composition,
     composition_nanoseconds += std::max<std::int64_t>(
         0, frame_execute_nanoseconds - frame_decode_nanoseconds);
 
+    check_cancelled(control);
     const auto encode_start = Clock::now();
     for (std::size_t pixel_index = 0; pixel_index < surface.size(); ++pixel_index) {
       const auto& pixel = surface.pixels()[pixel_index];
@@ -478,20 +506,37 @@ VideoRenderResult render_video_cpu(const Composition& composition,
     if (audio) {
       const auto boundary = audio_sample_at(composition.frame_rate(), FrameIndex(index + 1)) -
                             audio_sample_at(composition.frame_rate(), composition.range().start());
-      audio->through(boundary, false);
+      audio->through(boundary, false, control);
     }
+    report(VideoRenderPhase::rendering, encoded, audio ? audio->samples() : 0);
   }
 
+  report(VideoRenderPhase::finalizing, encoded, audio ? audio->samples() : 0);
   const auto audio_before_finalize = audio ? audio->nanoseconds() : 0;
   const auto finalize_start = Clock::now();
   submit_frame(codec.get(), format.get(), stream, packet.get(), nullptr);
   stream->duration = av_rescale_q(encoded, codec->time_base, stream->time_base);
-  if (audio) audio->finish();
+  if (audio) audio->finish(control);
+  check_cancelled(control);
   status = av_write_trailer(format.get());
   if (status < 0) {
     throw std::runtime_error("unable to finalize video output: " + ffmpeg_error(status));
   }
+  if (format->pb) {
+    status = avio_closep(&format->pb);
+    if (status < 0) throw std::runtime_error("unable to close video output: " + ffmpeg_error(status));
+  }
+  check_cancelled(control);
   output_guard.commit();
+  // Publication is the point of no return. Completion is notification only:
+  // cancellation/observer exceptions cannot turn a committed file into failure.
+  if (control.progress) {
+    try {
+      control.progress({VideoRenderPhase::completed, encoded, total_frames,
+                        audio ? audio->samples() : 0, total_audio_samples,
+                        elapsed_nanoseconds(total_start, Clock::now())});
+    } catch (...) {}
+  }
   const auto total_end = Clock::now();
   encode_nanoseconds += elapsed_nanoseconds(finalize_start, total_end);
   // Audio work inside finalization is reported separately from video encoding.
@@ -517,6 +562,7 @@ VideoRenderResult render_video_cpu(const Composition& composition,
   static_cast<void>(output_path);
   static_cast<void>(cache_config);
   static_cast<void>(execution_mode);
+  static_cast<void>(control);
   throw std::runtime_error("Chroma was built without FFmpeg media support");
 #endif
 }

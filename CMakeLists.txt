@@ -249,6 +249,11 @@ if(CHROMA_BUILD_TESTS)
   target_link_libraries(chroma_cache_tests PRIVATE chroma::core)
   add_test(NAME chroma_cache_tests COMMAND chroma_cache_tests)
 
+  add_executable(chroma_render_control_tests tests/render_control_tests.cpp)
+  target_link_libraries(chroma_render_control_tests PRIVATE chroma::core)
+  add_test(NAME chroma_render_control_tests COMMAND chroma_render_control_tests ${CMAKE_CURRENT_BINARY_DIR}/render-control-test)
+  set_tests_properties(chroma_render_control_tests PROPERTIES TIMEOUT 60)
+
   add_executable(chroma_audio_tests tests/audio_tests.cpp)
   target_link_libraries(chroma_audio_tests PRIVATE chroma::core)
   add_test(NAME chroma_audio_tests COMMAND chroma_audio_tests)
