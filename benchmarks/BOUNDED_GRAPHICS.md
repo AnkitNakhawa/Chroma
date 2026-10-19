@@ -13,8 +13,9 @@ python3 benchmarks/bounded_graphics.py --chroma build-release/chroma \
 
 The C++ verifier compares every float RGBA byte in every frame, using independent
 persistent contexts/decoders for bounded and full-frame graphics. It is deliberately
-not an automatic CTest: the full 1080p corpus requires separately downloaded stock
-assets and takes substantially longer than offline CI coverage. It fails without
+not itself an automatic CTest: the original full 1080p corpus requires separately
+downloaded stock assets. [CI quality gates](../docs/quality-gates.md) reuse this
+verifier on a generated full-timeline proxy, fractional-rate and full-HD corpus. It fails without
 writing a successful report on any mismatch. The comparison does not encode;
 its elapsed time is validation time, not benchmark evidence.
 

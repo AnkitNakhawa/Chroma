@@ -224,3 +224,9 @@ remain separate milestones rather than unimplemented promises of the v1 ABI.
 1. [complete] Add canvas-coordinate shape/text regions and supported transform/crop/opacity execution, retaining conservative full-frame fallbacks and the original path as an oracle.
 2. [complete] Prove bitwise pixel equivalence on focused edge cases and all 540 unchanged showcase frames; expose same-binary graphics selection and runtime work counters.
 3. [complete] Measure three alternating full-encode pairs after separate warm-ups: 26.32 s bounded versus 88.88 s full-frame (3.38× throughput, 70.4% less wall time). Original and optimized MP4s are byte-identical. Peak RSS did not improve; GPU/competitor comparisons remain pending.
+
+### Continuous quality checkpoint
+
+1. [complete] Add offline all-frame native comparisons against the full CPU reference for the 540-frame proxy showcase, 36 fractional-rate frames and 12 full-HD frames.
+2. [complete] Add decoded video/audio equality, independent lossy fidelity limits, exact format/count/duration/timestamp checks and real degraded/muted/truncated/shifted-output negative controls.
+3. [complete] Require quality prerequisites and nonempty tests in dedicated Linux/macOS CI jobs, retain diagnostic artifacts, and document scope/thresholds. Original stock-footage 1080p/540-frame benchmarking remains separately reproducible.

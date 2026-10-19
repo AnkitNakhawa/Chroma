@@ -2,6 +2,7 @@
 import argparse
 import json
 import hashlib
+import platform
 from pathlib import Path
 import traceback
 
@@ -26,6 +27,11 @@ def main():
         (args.output / 'report.json').write_text(json.dumps(report, indent=2) + '\n')
     save()
     try:
+        report['environment'] = dict(platform=platform.platform(),
+            ffmpeg=run([args.ffmpeg, '-version']).decode().splitlines()[0],
+            chroma=run([args.chroma, '--version']).decode().strip(),
+            font_sha256=hashlib.sha256(Path(args.font).read_bytes()).hexdigest())
+        save()
         for name, composition, snapshots in fixtures(args.output, args.ffmpeg, args.font):
             case = dict(name=name, composition_sha256=hashlib.sha256(composition.read_bytes()).hexdigest(), stage='native')
             report['cases'].append(case)
@@ -33,8 +39,11 @@ def main():
             native = args.output / f'{name}-native.json'
             run([args.verifier, composition, native, '--reference-mode', 'reference'])
             data = json.loads(native.read_text())
-            if data['reference_mode'] != 'reference' or data['frames'] != json.loads(composition.read_text())['canvas']['duration_frames']:
-                raise AssertionError('incomplete native reference comparison')
+            canvas = json.loads(composition.read_text())['canvas']
+            if (data['reference_mode'] != 'reference' or data['frames'] != canvas['duration_frames'] or
+                    data['pixels_compared'] != canvas['width'] * canvas['height'] * canvas['duration_frames'] or
+                    data['bounded']['bounded_operations'] == 0 or data['full_frame']['bounded_operations'] != 0):
+                raise AssertionError('incomplete native reference comparison or inactive optimization')
             case['native'] = data
             case['stage'] = 'encoded'
             save()

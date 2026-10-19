@@ -46,6 +46,7 @@ def audio_metadata(info, document):
     canvas = document['canvas']
     count = canvas['duration_frames'] * canvas['frame_rate']['denominator'] * 48000 // canvas['frame_rate']['numerator']
     check((stream['codec_name'], int(stream['sample_rate']), stream['channels']) == ('aac', 48000, 2), 'audio format changed')
+    check(abs(float(stream['start_time'])) <= 1 / 48000 + 1e-6, 'audio start time changed')
     check(abs(float(stream['duration']) - count / 48000) <= 1 / 48000 + 1e-6, 'audio duration changed')
     return count
 
@@ -174,6 +175,10 @@ def negative_controls(args):
     run([args.ffmpeg, '-v', 'error', '-y', '-i', clean, '-map', '0:v:0', '-frames:v', str(document['canvas']['duration_frames'] - 1),
          '-c:v', 'copy', '-an', short])
     rejected('truncated_video', lambda: video_metadata(probe(args.ffprobe, short), document))
+    shifted = args.output / 'fractional' / 'shifted.m4a'
+    run([args.ffmpeg, '-v', 'error', '-y', '-copyts', '-itsoffset', '0.25', '-i', clean,
+         '-map', '0:a:0', '-c:a', 'copy', shifted])
+    rejected('shifted_audio', lambda: audio_metadata(probe(args.ffprobe, shifted), document))
     # Both-mode equality must itself reject a divergence, independent of fidelity limits.
     rejected('renderer_video_mismatch', lambda: check(
         video_digest(args.ffmpeg, clean, document['canvas']['duration_frames']) == video_digest(args.ffmpeg, degraded, document['canvas']['duration_frames']),

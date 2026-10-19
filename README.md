@@ -246,3 +246,12 @@ result; peak process memory did not improve. See [raw evidence and methodology](
 Use `--graphics-mode bounded|full-frame` on `frame`, `render`, or `benchmark` for
 a same-binary comparison; the default is `bounded`. Both modes retain identical
 media fusion and cache settings.
+
+### Continuous quality gates
+
+Linux and macOS CI compare native float pixels with the CPU reference, decoded
+video/audio between render modes, and encoded fidelity against native frames and
+source WAVs. The offline corpus covers the full 18-second showcase timeline at
+proxy resolution, fractional timing, and full-HD rendering. Deliberately degraded,
+muted and truncated outputs must fail; missing dependencies cannot silently skip
+the dedicated jobs. See [thresholds, local commands and CI artifacts](docs/quality-gates.md).

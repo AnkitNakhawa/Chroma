@@ -8,6 +8,7 @@ project(
 )
 
 option(CHROMA_BUILD_TESTS "Build Chroma tests" ON)
+option(CHROMA_REQUIRE_QUALITY_TESTS "Fail configuration unless the media quality gate is available" OFF)
 option(CHROMA_ENABLE_FFMPEG "Enable FFmpeg media support when development libraries are available" ON)
 option(CHROMA_ENABLE_TEXT "Enable HarfBuzz/FreeType text support when available" ON)
 
@@ -568,3 +569,11 @@ write_basic_package_version_file(${CMAKE_CURRENT_BINARY_DIR}/ChromaConfigVersion
 install(FILES ${CMAKE_CURRENT_BINARY_DIR}/ChromaConfig.cmake
               ${CMAKE_CURRENT_BINARY_DIR}/ChromaConfigVersion.cmake
         DESTINATION ${CHROMA_PACKAGE_DIR} COMPONENT CAPI)
+
+# CI requests this explicitly: missing optional dependencies must not silently
+# turn a promised quality gate into a green job with zero tests.
+if(CHROMA_REQUIRE_QUALITY_TESTS)
+  if(NOT TEST chroma_quality_gate)
+    message(FATAL_ERROR "Quality gate unavailable: enable tests and provide FFmpeg/ffprobe, Python, HarfBuzz/FreeType and a test font")
+  endif()
+endif()
