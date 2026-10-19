@@ -226,3 +226,10 @@ A C-only application can use `find_package(Chroma CONFIG REQUIRED)` and link
 `chroma::c`. See [the ABI, ownership, and installation contract](docs/c-api.md) and
 [the C99 example](examples/c-api-render.c). Async jobs and cancellation callbacks
 are not part of this initial interface.
+
+### 1080p showcase
+
+[Motion studies](examples/showcase/README.md) is a reproducible 18-second editorial
+film combining coastal footage, animated typography/cards, transitions, and an
+original electronic score. The example includes asset preparation, attribution,
+offline tests, and a full-resolution cache A/B benchmark runner.

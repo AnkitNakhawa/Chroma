@@ -286,6 +286,10 @@ if(CHROMA_BUILD_TESTS)
   if(CHROMA_HAS_FFMPEG AND CHROMA_FFMPEG_EXECUTABLE)
     find_package(Python3 COMPONENTS Interpreter REQUIRED)
     find_program(CHROMA_FFPROBE_EXECUTABLE ffprobe REQUIRED)
+    add_test(NAME chroma_showcase_tests
+      COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/showcase_tests.py
+              $<TARGET_FILE:chroma_cli>)
+    set_tests_properties(chroma_showcase_tests PROPERTIES TIMEOUT 120)
     add_test(NAME chroma_c_api_integration
       COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/c_api_integration.py
               $<TARGET_FILE:chroma_c_example> ${CHROMA_FFMPEG_EXECUTABLE} ${CHROMA_FFPROBE_EXECUTABLE})
