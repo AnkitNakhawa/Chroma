@@ -299,16 +299,6 @@ VideoRenderResult render_video_cpu(const Composition& composition,
     throw std::invalid_argument("frame rate exceeds FFmpeg encoder limits");
   }
 
-  AVFormatContext* raw_format = nullptr;
-  const auto output_string = output_path.string();
-  OutputFileGuard output_guard(output_path);
-  auto status =
-      avformat_alloc_output_context2(&raw_format, nullptr, nullptr, output_string.c_str());
-  if (status < 0 || raw_format == nullptr) {
-    throw std::runtime_error("unable to select output container for '" + output_string + "'");
-  }
-  FormatPointer format(raw_format);
-
   const AVCodec* encoder = avcodec_find_encoder_by_name("libx264");
   if (encoder == nullptr) {
     encoder = avcodec_find_encoder(AV_CODEC_ID_H264);
@@ -321,6 +311,16 @@ VideoRenderResult render_video_cpu(const Composition& composition,
       (composition.width() < 16 || composition.height() < 16)) {
     throw std::invalid_argument("OpenH264 output requires canvas dimensions of at least 16 pixels");
   }
+
+  AVFormatContext* raw_format = nullptr;
+  const auto output_string = output_path.string();
+  OutputFileGuard output_guard(output_path);
+  auto status =
+      avformat_alloc_output_context2(&raw_format, nullptr, nullptr, output_string.c_str());
+  if (status < 0 || raw_format == nullptr) {
+    throw std::runtime_error("unable to select output container for '" + output_string + "'");
+  }
+  FormatPointer format(raw_format);
 
   auto* stream = avformat_new_stream(format.get(), nullptr);
   if (stream == nullptr) {

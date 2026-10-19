@@ -77,7 +77,9 @@ def relocate(root):
     names = {p.name for p in libs.iterdir() if p.is_file()}
     for path in binaries(root):
         if platform.system() == 'Darwin':
-            subprocess.run(['codesign', '--remove-signature', str(path)], capture_output=True, check=False)
+            # Keep the existing signature allocation while editing: removing it
+            # first can leave a __LINKEDIT hole rejected by Xcode 16 tools.
+            # install_name_tool invalidates the signature; re-sign below.
             changes = []
             if path.suffix == '.dylib':
                 changes += ['-id', '@loader_path/' + path.name]

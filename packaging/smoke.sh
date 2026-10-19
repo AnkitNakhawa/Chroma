@@ -20,6 +20,11 @@ if clean "$package/bin/chroma" render "$fixture/tiny.json" --output "$result/tin
 fi
 grep -q 'at least 16 pixels' "$result/tiny-error.txt"
 test ! -e "$result/tiny.mp4"
+printf 'keep-existing-output\n' > "$result/tiny.mp4"
+if clean "$package/bin/chroma" render "$fixture/tiny.json" --output "$result/tiny.mp4" 2> "$result/tiny-error.txt"; then
+  exit 1
+fi
+grep -qx 'keep-existing-output' "$result/tiny.mp4"
 probe="$package/libexec/chroma/ffprobe"
 ffmpeg="$package/libexec/chroma/ffmpeg"
 for mode in cli c-api; do
