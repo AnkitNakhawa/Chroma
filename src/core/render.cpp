@@ -606,6 +606,139 @@ bool composite_fused_source(const Surface& source, Surface& destination,
   return true;
 }
 
+// A region retains canvas-space coordinates: cropping storage must never change
+// transform arithmetic, antialias sample locations, or clipping between passes.
+struct PixelBounds {
+  std::int32_t left{0}, top{0}, right{0}, bottom{0};
+  bool empty() const noexcept { return left >= right || top >= bottom; }
+};
+
+PixelBounds clipped_bounds(double left, double top, double right, double bottom,
+                            std::int32_t width, std::int32_t height) {
+  return {static_cast<std::int32_t>(std::clamp(std::floor(left), 0.0, double(width))),
+          static_cast<std::int32_t>(std::clamp(std::floor(top), 0.0, double(height))),
+          static_cast<std::int32_t>(std::clamp(std::ceil(right), 0.0, double(width))),
+          static_cast<std::int32_t>(std::clamp(std::ceil(bottom), 0.0, double(height)))};
+}
+
+struct RegionSurface {
+  PixelBounds bounds;
+  std::optional<Surface> surface;
+  explicit RegionSurface(PixelBounds region) : bounds(region) {
+    if (!region.empty()) surface.emplace(region.right - region.left, region.bottom - region.top);
+  }
+  Pixel read(std::int64_t x, std::int64_t y) const noexcept {
+    if (!surface || x < bounds.left || x >= bounds.right || y < bounds.top || y >= bounds.bottom)
+      return {};
+    return surface->pixels()[static_cast<std::size_t>(y - bounds.top) * surface->width() +
+                             static_cast<std::size_t>(x - bounds.left)];
+  }
+};
+
+Pixel sample_region(const RegionSurface& region, double x, double y,
+                    std::int32_t canvas_width, std::int32_t canvas_height) noexcept {
+  if (!std::isfinite(x) || !std::isfinite(y) || x <= -1.0 || y <= -1.0 ||
+      x >= canvas_width || y >= canvas_height) return {};
+  const auto x0 = static_cast<std::int64_t>(std::floor(x));
+  const auto y0 = static_cast<std::int64_t>(std::floor(y));
+  const auto fx = static_cast<float>(x - static_cast<double>(x0));
+  const auto fy = static_cast<float>(y - static_cast<double>(y0));
+  const auto a = region.read(x0, y0), b = region.read(x0 + 1, y0);
+  const auto c = region.read(x0, y0 + 1), d = region.read(x0 + 1, y0 + 1);
+  const auto interpolate = [fx, fy](float a, float b, float c, float d) noexcept {
+    const auto top = a + (b - a) * fx;
+    const auto bottom = c + (d - c) * fx;
+    return top + (bottom - top) * fy;
+  };
+  return {interpolate(a.red, b.red, c.red, d.red),
+          interpolate(a.green, b.green, c.green, d.green),
+          interpolate(a.blue, b.blue, c.blue, d.blue),
+          interpolate(a.alpha, b.alpha, c.alpha, d.alpha)};
+}
+
+bool region_program_supported(const EffectProgram& program) {
+  return std::all_of(program.effects().begin(), program.effects().end(), [](const Effect& effect) {
+    return std::holds_alternative<Transform2DEffect>(effect) ||
+           std::holds_alternative<CropEffect>(effect) ||
+           std::holds_alternative<OpacityEffect>(effect);
+  });
+}
+
+PixelBounds transformed_bounds(PixelBounds source, const Transform2DEffect& t,
+                                std::int32_t width, std::int32_t height) {
+  const auto determinant = t.m00 * t.m11 - t.m01 * t.m10;
+  const auto magnitude = std::max({std::abs(t.m00), std::abs(t.m01), std::abs(t.m10), std::abs(t.m11)});
+  // Avoid relying on tight geometric bounds for ill-conditioned or extreme
+  // arithmetic. The full-canvas traversal still samples the bounded source.
+  if (!std::isfinite(determinant) || !std::isfinite(magnitude * magnitude) ||
+      magnitude * magnitude > std::abs(determinant) * 1e6 ||
+      magnitude > 1e6 || std::abs(t.m02) > 1e9 || std::abs(t.m12) > 1e9)
+    return {0, 0, width, height};
+  double left = std::numeric_limits<double>::infinity(), top = left;
+  double right = -left, bottom = right;
+  for (const auto x : {double(source.left) - 0.5, double(source.right) + 0.5}) {
+    for (const auto y : {double(source.top) - 0.5, double(source.bottom) + 0.5}) {
+      const auto px = t.m00 * x + t.m01 * y + t.m02;
+      const auto py = t.m10 * x + t.m11 * y + t.m12;
+      if (!std::isfinite(px) || !std::isfinite(py) || std::abs(px) > 1e9 || std::abs(py) > 1e9)
+        return {0, 0, width, height};
+      left = std::min(left, px); right = std::max(right, px);
+      top = std::min(top, py); bottom = std::max(bottom, py);
+    }
+  }
+  // Include bilinear support plus conservative rounding padding.
+  return clipped_bounds(left - 2, top - 2, right + 2, bottom + 2, width, height);
+}
+
+void composite_region(RegionSurface region, const EffectProgram& program,
+                      BlendMode blend_mode, Surface& destination, CpuGraphicsStats& stats) {
+  ++stats.bounded_operations;
+  if (region.surface) stats.source_pixels += region.surface->size();
+  for (const auto& effect : program.effects()) {
+    if (!region.surface) break;
+    if (const auto* transform = std::get_if<Transform2DEffect>(&effect)) {
+      const auto determinant = transform->m00 * transform->m11 - transform->m01 * transform->m10;
+      if (std::abs(determinant) <= 1e-12) { region = RegionSurface({}); break; }
+      const auto inverse00 = transform->m11 / determinant;
+      const auto inverse01 = -transform->m01 / determinant;
+      const auto inverse10 = -transform->m10 / determinant;
+      const auto inverse11 = transform->m00 / determinant;
+      RegionSurface output(transformed_bounds(region.bounds, *transform, destination.width(), destination.height()));
+      if (output.surface) {
+        stats.transform_pixels += output.surface->size();
+        for (auto y = output.bounds.top; y < output.bounds.bottom; ++y) {
+          for (auto x = output.bounds.left; x < output.bounds.right; ++x) {
+            const auto translated_x = (static_cast<double>(x) + 0.5) - transform->m02;
+            const auto translated_y = (static_cast<double>(y) + 0.5) - transform->m12;
+            const auto source_x = inverse00 * translated_x + inverse01 * translated_y - 0.5;
+            const auto source_y = inverse10 * translated_x + inverse11 * translated_y - 0.5;
+            output.surface->pixel(x - output.bounds.left, y - output.bounds.top) =
+                sample_region(region, source_x, source_y, destination.width(), destination.height());
+          }
+        }
+      }
+      region = std::move(output);
+    } else if (const auto* opacity = std::get_if<OpacityEffect>(&effect)) {
+      apply_opacity(*region.surface, *opacity);
+    } else if (const auto* crop = std::get_if<CropEffect>(&effect)) {
+      const auto right = static_cast<std::int64_t>(crop->x) + crop->width;
+      const auto bottom = static_cast<std::int64_t>(crop->y) + crop->height;
+      for (auto y = region.bounds.top; y < region.bounds.bottom; ++y)
+        for (auto x = region.bounds.left; x < region.bounds.right; ++x)
+          if (x < crop->x || x >= right || y < crop->y || y >= bottom)
+            region.surface->pixel(x - region.bounds.left, y - region.bounds.top) = {};
+    }
+  }
+  if (!region.surface) return;
+  stats.composite_pixels += region.surface->size();
+  for (auto y = region.bounds.top; y < region.bounds.bottom; ++y) {
+    for (auto x = region.bounds.left; x < region.bounds.right; ++x) {
+      auto& output = destination.pixel(x, y);
+      output = composite(region.read(x, y), output, blend_mode);
+    }
+  }
+}
+
 bool shape_contains(const ShapeGeometry& geometry, double sample_x, double sample_y,
                     double inset) noexcept {
   const auto left = geometry.x + inset;
@@ -641,7 +774,7 @@ bool shape_contains(const ShapeGeometry& geometry, double sample_x, double sampl
 
 Surface render_shape(const ShapeGeometry& geometry, const Color& fill,
                      const std::optional<ShapeStroke>& stroke, std::int32_t width,
-                     std::int32_t height) {
+                     std::int32_t height, std::int32_t origin_x = 0, std::int32_t origin_y = 0) {
   constexpr int samples_per_axis = 4;
   constexpr float sample_weight = 1.0F / 16.0F;
   const auto fill_pixel = premultiply(fill);
@@ -652,10 +785,10 @@ Surface render_shape(const ShapeGeometry& geometry, const Color& fill,
       Pixel pixel{};
       for (int sample_y = 0; sample_y < samples_per_axis; ++sample_y) {
         for (int sample_x = 0; sample_x < samples_per_axis; ++sample_x) {
-          const auto position_x = static_cast<double>(x) +
+          const auto position_x = static_cast<double>(x + origin_x) +
                                   (static_cast<double>(sample_x) + 0.5) /
                                       static_cast<double>(samples_per_axis);
-          const auto position_y = static_cast<double>(y) +
+          const auto position_y = static_cast<double>(y + origin_y) +
                                   (static_cast<double>(sample_y) + 0.5) /
                                       static_cast<double>(samples_per_axis);
           if (!shape_contains(geometry, position_x, position_y, 0.0)) {
@@ -763,6 +896,21 @@ Surface CpuRenderContext::execute(const ExecutionPlan& plan, CpuExecutionMode mo
       continue;
     }
     if (const auto* shape = std::get_if<CompositeShapeOperation>(&operation)) {
+      if (mode == CpuExecutionMode::fused && region_program_supported(shape->effects)) {
+        RegionSurface region(clipped_bounds(shape->geometry.x, shape->geometry.y,
+            shape->geometry.x + shape->geometry.width, shape->geometry.y + shape->geometry.height,
+            result.width(), result.height()));
+        if (region.surface)
+          *region.surface = render_shape(shape->geometry, shape->fill, shape->stroke,
+              region.surface->width(), region.surface->height(), region.bounds.left, region.bounds.top);
+        composite_region(std::move(region), shape->effects, shape->blend_mode, result, last_execution_stats_.graphics);
+        continue;
+      }
+      ++last_execution_stats_.graphics.full_frame_operations;
+      last_execution_stats_.graphics.source_pixels += result.size();
+      last_execution_stats_.graphics.composite_pixels += result.size();
+      for (const auto& effect : shape->effects.effects())
+        if (std::holds_alternative<Transform2DEffect>(effect)) last_execution_stats_.graphics.transform_pixels += result.size();
       auto source_surface = render_shape(shape->geometry, shape->fill, shape->stroke,
                                          result.width(), result.height());
       source_surface = apply_effect_program_cpu(std::move(source_surface), shape->effects);
@@ -823,7 +971,7 @@ Surface CpuRenderContext::execute(const ExecutionPlan& plan, CpuExecutionMode mo
       blend_mode = image.blend_mode;
     }
 
-    if (mode == CpuExecutionMode::fused &&
+    if (mode != CpuExecutionMode::reference &&
         composite_fused_source(source_surface, result, placement, *effects, blend_mode)) {
       ++last_execution_stats_.fused_operations;
       last_execution_stats_.full_frame_intermediates_avoided +=

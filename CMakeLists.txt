@@ -246,6 +246,10 @@ if(CHROMA_BUILD_TESTS)
   target_link_libraries(chroma_composition_tests PRIVATE chroma::core)
   add_test(NAME chroma_composition_tests COMMAND chroma_composition_tests)
 
+  add_executable(chroma_region_tests tests/region_tests.cpp)
+  target_link_libraries(chroma_region_tests PRIVATE chroma::core)
+  add_test(NAME chroma_region_tests COMMAND chroma_region_tests)
+
   add_executable(chroma_render_tests tests/render_tests.cpp)
   target_link_libraries(chroma_render_tests PRIVATE chroma::core)
 

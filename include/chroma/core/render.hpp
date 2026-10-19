@@ -45,9 +45,30 @@ class Surface {
 enum class CpuExecutionMode {
   fused,
   reference,
+  // Preserve video/image fusion, but use the original full-canvas graphics path.
+  unbounded_graphics,
+};
+
+struct CpuGraphicsStats {
+  std::uint64_t bounded_operations{0};
+  std::uint64_t full_frame_operations{0};
+  std::uint64_t source_pixels{0};
+  std::uint64_t transform_pixels{0};
+  std::uint64_t composite_pixels{0};
+
+  CpuGraphicsStats& operator+=(const CpuGraphicsStats& other) noexcept {
+    bounded_operations += other.bounded_operations;
+    full_frame_operations += other.full_frame_operations;
+    source_pixels += other.source_pixels;
+    transform_pixels += other.transform_pixels;
+    composite_pixels += other.composite_pixels;
+    return *this;
+  }
+  friend bool operator==(const CpuGraphicsStats&, const CpuGraphicsStats&) = default;
 };
 
 struct CpuExecutionStats {
+  CpuGraphicsStats graphics;
   std::size_t fused_operations{0};
   std::size_t reference_operations{0};
   std::size_t full_frame_intermediates_avoided{0};
