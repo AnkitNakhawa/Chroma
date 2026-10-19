@@ -70,6 +70,7 @@ add_library(chroma_core STATIC
   src/core/composition.cpp
   src/core/effect.cpp
   src/core/execution_plan.cpp
+  src/core/preflight.cpp
   src/core/prepared_resource.cpp
   src/core/rational.cpp
   src/core/render.cpp
@@ -201,6 +202,10 @@ endif()
 if(CHROMA_BUILD_TESTS)
   include(CTest)
   enable_testing()
+
+  add_executable(chroma_preflight_tests tests/preflight_tests.cpp)
+  target_link_libraries(chroma_preflight_tests PRIVATE chroma::core)
+  add_test(NAME chroma_preflight_tests COMMAND chroma_preflight_tests)
 
   add_test(NAME chroma_cli_validates_animated_transforms
     COMMAND chroma_cli validate ${CMAKE_CURRENT_SOURCE_DIR}/examples/animated-transforms.json)

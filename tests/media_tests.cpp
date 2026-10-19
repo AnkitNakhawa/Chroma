@@ -295,6 +295,9 @@ int main(int argc, char** argv) {
   hardware_capabilities_are_machine_readable();
   render_profiles_are_machine_readable();
   if (chroma::media_available() && argc == 2) {
+    CHECK(chroma::inspect_media_input(argv[1], chroma::InputMediaKind::video).duration.has_value());
+    CHECK_THROWS_AS(chroma::inspect_media_input(argv[1], chroma::InputMediaKind::video,
+        [] { throw std::runtime_error("checkpoint cancellation"); }), std::runtime_error);
     fixture_can_be_probed_and_decoded(argv[1]);
     successful_render_reports_conversion_telemetry(argv[1]);
     failed_renders_remove_partial_outputs(argv[1]);

@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <filesystem>
+#include <functional>
 #include <optional>
 #include <string>
 
@@ -19,6 +20,22 @@ struct MediaInfo {
   std::string codec;
   std::string pixel_format;
 };
+
+enum class InputMediaKind { video, image, audio };
+
+struct InputMediaInfo {
+  std::optional<Rational> duration;
+  // Exact sample-count comparison is safe for 48 kHz PCM in WAVE. Other
+  // audio durations are estimates and must not produce false hard failures.
+  bool exact_audio_duration{false};
+  bool hdr{false};
+};
+
+// Open the selected stream and decoder, and validate its conversion support.
+// Inspect headers and the first decoded frame/block, not the entire source.
+[[nodiscard]] InputMediaInfo inspect_media_input(const std::filesystem::path& path,
+                                                 InputMediaKind kind,
+                                                 const std::function<void()>& checkpoint = {});
 
 enum class MediaLogLevel {
   quiet,
