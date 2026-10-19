@@ -325,6 +325,10 @@ if(CHROMA_BUILD_TESTS)
   endif()
   find_package(Python3 COMPONENTS Interpreter QUIET)
   if(Python3_FOUND)
+    add_test(NAME chroma_python_wrapper_tests
+      COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/python_wrapper_tests.py
+        --library $<TARGET_FILE:chroma_c>)
+    set_tests_properties(chroma_python_wrapper_tests PROPERTIES TIMEOUT 90)
     add_test(NAME chroma_release_packaging_tests
       COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/release_packaging_tests.py)
     add_test(NAME chroma_showcase_tests
