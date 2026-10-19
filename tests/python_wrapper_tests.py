@@ -50,6 +50,39 @@ class WrapperTests(unittest.TestCase):
             engine.parse_composition(source)
         self.assertEqual(caught.exception.diagnostics[0]['path'], '/layers/0/layout/width')
 
+    def test_preflight_reports_inputs_without_touching_engine_cache(self):
+        engine = self.engine()
+        self.assertTrue(engine.capabilities & Capabilities.PREFLIGHT)
+        with engine.parse_composition(document()) as scene:
+            self.assertTrue(scene.preflight(for_video=False)['ready'])
+            self.assertEqual(engine.preflight(scene, for_video=False), scene.preflight(for_video=False))
+            with self.assertRaises(TypeError): scene.preflight(for_video=1)
+            scene.close()
+            with self.assertRaises(RuntimeError): scene.preflight()
+        source = document()
+        source['assets'] = [dict(id='image',type='image',path='/chroma/missing/image.png')]
+        source['layers'] = [dict(id='late',type='image',asset='image',start_frame=5,end_frame=6)]
+        with engine.parse_composition(source) as scene:
+            before = engine.cache_usage
+            report = engine.preflight(scene)
+            self.assertFalse(report['ready'])
+            self.assertEqual(report['assets_checked'], 1)
+            self.assertEqual(report['diagnostics'][-1]['code'], 'asset.missing')
+            self.assertEqual(report['diagnostics'][-1]['asset_id'], 'image')
+            self.assertEqual(engine.cache_usage, before)
+            if engine.capabilities & Capabilities.FFMPEG:
+                with tempfile.TemporaryDirectory() as root:
+                    output = Path(root)/'video.mp4'; output.write_bytes(b'original')
+                    events = []
+                    with self.assertRaises(ChromaError) as caught:
+                        engine.render(scene, output, progress=events.append)
+                    self.assertEqual(caught.exception.status, Status.RENDER)
+                    self.assertIn('asset.missing', str(caught.exception))
+                    self.assertEqual([event.phase for event in events], [RenderPhase.PREPARING])
+                    self.assertEqual(output.read_bytes(), b'original')
+                    self.assertFalse(list(Path(root).glob('.chroma-render-*')))
+        with self.assertRaises(TypeError): engine.preflight(object())
+
     def test_real_abi_layouts(self):
         self.assertEqual([ctypes.sizeof(c) for c in (_native.EngineOptions, _native.CompositionInfo,
             _native.FrameInfo, _native.NativeProgress, _native.RenderOptions)], [24, 48, 32, 48, 32])

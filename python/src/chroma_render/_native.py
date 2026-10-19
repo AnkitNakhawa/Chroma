@@ -76,6 +76,9 @@ class NativeLibrary:
             self._bind('frame_data', C.POINTER(C.c_float), Handle)
             self._bind('frame_destroy', None, Handle)
             self._bind('engine_render_video', I32, Handle, Handle, C.c_char_p, C.POINTER(Handle))
+            self.has_preflight = bool(self.api.chroma_capabilities() & 16)
+            if self.has_preflight:
+                self._bind('composition_preflight', I32, Handle, U32, C.POINTER(Handle))
             self.has_render_control = bool(self.api.chroma_capabilities() & 8)
             if self.has_render_control:
                 self._bind('cancel_token_create', I32, C.POINTER(Handle))

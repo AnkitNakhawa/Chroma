@@ -16,6 +16,7 @@
 #include "chroma/core/composition.hpp"
 #include "chroma/core/execution_plan.hpp"
 #include "chroma/core/render.hpp"
+#include "chroma/core/preflight.hpp"
 #include "chroma/media/decode.hpp"
 #include "chroma/media/encode.hpp"
 #include "chroma/media/hardware.hpp"
@@ -195,6 +196,7 @@ void print_usage(std::ostream& output) {
          << "  chroma --version\n"
          << "  chroma hardware\n"
          << "  chroma validate <composition.json> [--json]\n"
+         << "  chroma preflight <composition.json> [--json] [--inputs-only]\n"
          << "  chroma inspect <composition.json>\n"
          << "  chroma probe <media-file>\n"
          << "  chroma decode <media-file> --frame <index> --output <frame.ppm>\n"
@@ -258,6 +260,53 @@ int main(int argc, char** argv) {
                      chroma::query_hardware_pipeline_capabilities())
               << '\n';
     return 0;
+  }
+
+  if (argc >= 3 && std::string_view(argv[1]) == "preflight") {
+    bool json = false, inputs_only = false;
+    for (int index=3; index<argc; ++index) {
+      const std::string_view flag(argv[index]);
+      if (flag == "--json" && !json) json = true;
+      else if (flag == "--inputs-only" && !inputs_only) inputs_only = true;
+      else { print_usage(std::cerr); return usage_error; }
+    }
+    chroma::PreflightReport report;
+    int status = 0;
+    try {
+      RenderSignals signals;
+      const auto source = read_file(argv[2]);
+      if (!source) {
+        report.diagnostics.push_back({"error", "composition.unreadable", "/", "cannot read composition file: " + std::string(argv[2]), {}, {}});
+        status = input_error;
+      } else {
+        const auto parsed = chroma::parse_composition(*source, std::filesystem::path(argv[2]).parent_path());
+        if (!parsed.composition) {
+          for (const auto& item : parsed.diagnostics)
+            report.diagnostics.push_back({"error", item.code, item.path, item.message, {}, {}});
+          status = invalid_composition;
+        } else {
+          report = chroma::preflight_inputs(*parsed.composition, {.for_video=!inputs_only,
+            .cancelled=[] { return render_signal.load(std::memory_order_relaxed) != 0; }});
+          if (!report.ready()) status = input_error;
+        }
+      }
+    } catch (const chroma::RenderCancelled&) {
+      report.diagnostics.push_back({"error", "preflight.cancelled", "/", "preflight cancelled", {}, {}});
+      status = render_signal.load(std::memory_order_relaxed) == SIGTERM ? 143 : 130;
+    } catch (const std::exception& error) {
+      report.diagnostics.push_back({"error", "preflight.failed", "/", error.what(), {}, {}});
+      status = input_error;
+    }
+    if (json) std::cout << chroma::preflight_report_json(report) << '\n';
+    else {
+      for (const auto& item : report.diagnostics) {
+        std::cout << item.severity << " [" << item.code << "] " << item.path;
+        if (!item.asset_id.empty()) std::cout << " (asset '" << item.asset_id << "')";
+        std::cout << ": " << item.message << '\n';
+      }
+      std::cout << (report.ready() ? "preflight passed" : "preflight failed") << '\n';
+    }
+    return status;
   }
 
   if (argc >= 3 && std::string_view(argv[1]) == "validate") {

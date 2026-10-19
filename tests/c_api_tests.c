@@ -22,6 +22,7 @@ int main(int argc, char** argv) {
   CHECK(chroma_abi_version() == 1);
   CHECK(strlen(chroma_version_string()) > 0);
   CHECK((chroma_capabilities() & CHROMA_CAP_CPU_RENDER) != 0);
+  CHECK((chroma_capabilities() & CHROMA_CAP_PREFLIGHT) != 0);
   CHECK(chroma_engine_create(NULL, NULL) == CHROMA_ERROR_INVALID_ARGUMENT);
   CHECK(strlen(chroma_last_error()) > 0);
   options.abi_version = 999;
@@ -98,6 +99,22 @@ int main(int argc, char** argv) {
     CHECK(chroma_frame_data(independent)[0] == 1.0f);
     chroma_frame_destroy(independent);
     chroma_composition_destroy(owned);
+  }
+  {
+    chroma_string* report = NULL;
+    CHECK(chroma_composition_preflight(composition, 0, &report) == CHROMA_OK);
+    CHECK(report && strstr(chroma_string_data(report), "\"ready\": true"));
+    chroma_string_destroy(report);
+    report = (chroma_string*)1;
+    CHECK(chroma_composition_preflight(NULL, 0, &report) == CHROMA_ERROR_INVALID_ARGUMENT);
+    CHECK(report == NULL);
+    CHECK(chroma_composition_preflight(composition, 2, &report) == CHROMA_ERROR_INVALID_ARGUMENT);
+    CHECK(report == NULL);
+    CHECK(chroma_composition_preflight(composition, 0, NULL) == CHROMA_ERROR_INVALID_ARGUMENT);
+    CHECK(chroma_composition_preflight(composition, CHROMA_PREFLIGHT_VIDEO_OUTPUT, &report) == CHROMA_OK);
+    CHECK(chroma_last_error()[0] == '\0');
+    CHECK(report != NULL);
+    chroma_string_destroy(report);
   }
   CHECK(chroma_engine_render_frame(engine, composition, 60, &invalid_frame) == CHROMA_ERROR_OUT_OF_RANGE);
   CHECK(invalid_frame == NULL);

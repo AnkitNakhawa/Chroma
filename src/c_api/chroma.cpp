@@ -17,6 +17,7 @@
 #include "chroma/core/composition.hpp"
 #include "chroma/core/execution_plan.hpp"
 #include "chroma/core/render.hpp"
+#include "chroma/core/preflight.hpp"
 #include "chroma/media/media.hpp"
 #include "chroma/media/encode.hpp"
 #include "chroma/text/text.hpp"
@@ -95,7 +96,7 @@ extern "C" {
 uint32_t CHROMA_CALL chroma_abi_version(void) noexcept { return CHROMA_ABI_VERSION; }
 const char* CHROMA_CALL chroma_version_string(void) noexcept { return CHROMA_VERSION; }
 uint64_t CHROMA_CALL chroma_capabilities(void) noexcept {
-  return CHROMA_CAP_CPU_RENDER | CHROMA_CAP_RENDER_CONTROL | (chroma::media_available() ? CHROMA_CAP_FFMPEG : UINT64_C(0)) |
+  return CHROMA_CAP_CPU_RENDER | CHROMA_CAP_RENDER_CONTROL | CHROMA_CAP_PREFLIGHT | (chroma::media_available() ? CHROMA_CAP_FFMPEG : UINT64_C(0)) |
          (chroma::text_support_available() ? CHROMA_CAP_TEXT : UINT64_C(0));
 }
 const char* CHROMA_CALL chroma_last_error(void) noexcept { return error_message; }
@@ -190,6 +191,17 @@ chroma_status CHROMA_CALL chroma_composition_get_info(const chroma_composition* 
     *out_info = {sizeof(chroma_composition_info), value.width(), value.height(), value.schema_version(),
                 value.frame_rate().value().numerator(), value.frame_rate().value().denominator(),
                 value.range().start().value(), value.range().length()};
+    return CHROMA_OK;
+  });
+}
+chroma_status CHROMA_CALL chroma_composition_preflight(const chroma_composition* composition,
+    uint32_t flags, chroma_string** out_report) noexcept {
+  if (out_report) *out_report = nullptr;
+  return boundary([&]() -> chroma_status {
+    if (!composition || !out_report || (flags & ~CHROMA_PREFLIGHT_VIDEO_OUTPUT))
+      return fail(CHROMA_ERROR_INVALID_ARGUMENT, "composition, report and valid preflight flags are required");
+    *out_report = new chroma_string{chroma::preflight_report_json(chroma::preflight_inputs(
+        composition->value, {.for_video=(flags & CHROMA_PREFLIGHT_VIDEO_OUTPUT) != 0}))};
     return CHROMA_OK;
   });
 }

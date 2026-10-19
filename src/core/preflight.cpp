@@ -8,7 +8,6 @@
 #include <utility>
 
 #include "chroma/media/audio.hpp"
-#include "chroma/media/decode.hpp"
 #include "chroma/media/encode.hpp"
 #include "chroma/media/media.hpp"
 #include "chroma/text/text.hpp"
@@ -90,6 +89,9 @@ PreflightReport preflight_inputs(const Composition& composition, const Preflight
     const auto problem = [&](std::string code, std::string message, bool warning = false) {
       add(std::move(code), "/assets", std::move(message), item.id, item.path.string(), warning || unused);
     };
+    if (item.path.native().find('\0') != std::filesystem::path::string_type::npos) {
+      problem("asset.invalid_path", "asset paths must not contain NUL bytes"); return;
+    }
     std::error_code error;
     const auto status = std::filesystem::status(item.path, error);
     if ((!error || error == std::errc::no_such_file_or_directory) && !std::filesystem::exists(status)) {

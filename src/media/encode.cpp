@@ -14,6 +14,7 @@
 #include <vector>
 
 #include "chroma/core/render.hpp"
+#include "chroma/core/preflight.hpp"
 #include "chroma/media/audio.hpp"
 
 #include <nlohmann/json.hpp>
@@ -338,6 +339,8 @@ VideoRenderResult render_video_cpu(const Composition& composition,
   }
 
   report(VideoRenderPhase::preparing, 0, 0);
+  auto inputs = preflight_inputs(composition, {.for_video=true, .cancelled=control.cancelled});
+  if (!inputs.ready()) throw PreflightError(std::move(inputs));
   AVFormatContext* raw_format = nullptr;
   const auto output_string = output_path.string();
   OutputFileGuard output_guard(output_path);

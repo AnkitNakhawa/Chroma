@@ -41,6 +41,7 @@ typedef int32_t chroma_status;
 #define CHROMA_CAP_FFMPEG UINT64_C(2)
 #define CHROMA_CAP_TEXT UINT64_C(4)
 #define CHROMA_CAP_RENDER_CONTROL UINT64_C(8)
+#define CHROMA_CAP_PREFLIGHT UINT64_C(16)
 
 typedef struct chroma_engine chroma_engine;
 typedef struct chroma_composition chroma_composition;
@@ -106,6 +107,13 @@ CHROMA_API chroma_status CHROMA_CALL chroma_composition_load_file(const char* pa
 CHROMA_API void CHROMA_CALL chroma_composition_destroy(chroma_composition* composition) CHROMA_NOEXCEPT;
 CHROMA_API chroma_status CHROMA_CALL chroma_composition_get_info(const chroma_composition* composition,
     chroma_composition_info* out_info, uint64_t out_size) CHROMA_NOEXCEPT;
+/* Input inspection returns CHROMA_OK with an owned report even when ready=false.
+ * Flags=0 checks inputs/timelines; VIDEO_OUTPUT also checks H.264/AAC prerequisites.
+ * No output is written. Unknown flags are rejected. */
+#define CHROMA_PREFLIGHT_VIDEO_OUTPUT UINT32_C(1)
+CHROMA_API chroma_status CHROMA_CALL chroma_composition_preflight(const chroma_composition* composition,
+    uint32_t flags, chroma_string** out_report) CHROMA_NOEXCEPT;
+
 CHROMA_API chroma_status CHROMA_CALL chroma_composition_inspect_plan(const chroma_composition* composition,
     int64_t frame, uint32_t optimized, chroma_string** out_json) CHROMA_NOEXCEPT;
 

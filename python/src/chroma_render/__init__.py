@@ -38,6 +38,7 @@ class Capabilities(IntFlag):
     FFMPEG = 2
     TEXT = 4
     RENDER_CONTROL = 8
+    PREFLIGHT = 16
 
 
 class ChromaError(RuntimeError):
@@ -225,6 +226,17 @@ class Composition(_Handle):
             _check(self._native, self._native.api.chroma_composition_get_info(handle, C.byref(info), C.sizeof(info)))
             return CompositionInfo(*(getattr(info, name) for name, _ in N.CompositionInfo._fields_[1:]))
 
+    def preflight(self, *, for_video=True):
+        """Inspect real inputs; returns a report with ready and diagnostics."""
+        if not isinstance(for_video, bool):
+            raise TypeError('for_video must be bool')
+        if not self._native.has_preflight:
+            raise LibraryLoadError('This library lacks input preflight support')
+        with self._borrow() as handle:
+            result = N.Handle()
+            _check(self._native, self._native.api.chroma_composition_preflight(handle, int(for_video), C.byref(result)))
+            return _owned_json(self._native, result)
+
     def inspect_plan(self, frame=0, *, optimized=False):
         _integer(frame, 'frame', 2**63 - 1)
         if not isinstance(optimized, bool):
@@ -311,6 +323,11 @@ class Engine(_Handle):
                 return Frame(info.width, info.height, C.string_at(pixels, info.data_bytes), info.pixel_format)
             finally:
                 self._native.api.chroma_frame_destroy(handle)
+
+    def preflight(self, composition, *, for_video=True):
+        _matching(self._native, composition, Composition)
+        with self._borrow(exclusive=True):
+            return composition.preflight(for_video=for_video)
 
     def cancellation_token(self):
         with self._borrow(exclusive=True):
