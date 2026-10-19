@@ -88,6 +88,12 @@ add_library(chroma_c SHARED src/c_api/chroma.cpp)
 add_library(chroma::c ALIAS chroma_c)
 set_target_properties(chroma_c PROPERTIES OUTPUT_NAME chroma EXPORT_NAME c
   VERSION 1.0.0 SOVERSION 1 CXX_VISIBILITY_PRESET hidden VISIBILITY_INLINES_HIDDEN ON)
+set_target_properties(chroma_c PROPERTIES INSTALL_RPATH_USE_LINK_PATH TRUE)
+if(APPLE)
+  set_property(TARGET chroma_c APPEND PROPERTY INSTALL_RPATH "@loader_path")
+elseif(UNIX)
+  set_property(TARGET chroma_c APPEND PROPERTY INSTALL_RPATH "$ORIGIN")
+endif()
 target_compile_features(chroma_c PRIVATE cxx_std_20)
 target_compile_definitions(chroma_c PRIVATE CHROMA_C_BUILD CHROMA_VERSION="${PROJECT_VERSION}")
 target_include_directories(chroma_c PUBLIC
@@ -191,6 +197,31 @@ if(CHROMA_BUILD_TESTS)
 
   add_test(NAME chroma_cli_validates_audio_example
     COMMAND chroma_cli validate ${CMAKE_CURRENT_SOURCE_DIR}/examples/audio.json)
+
+  find_package(Threads REQUIRED)
+  add_executable(chroma_c_api_thread_tests tests/c_api_thread_tests.cpp)
+  target_compile_features(chroma_c_api_thread_tests PRIVATE cxx_std_20)
+  target_link_libraries(chroma_c_api_thread_tests PRIVATE chroma::c Threads::Threads)
+  add_test(NAME chroma_c_api_thread_tests COMMAND chroma_c_api_thread_tests)
+
+  add_executable(chroma_c_api_v1_tests tests/abi/v1_consumer.c)
+  target_compile_features(chroma_c_api_v1_tests PRIVATE c_std_99)
+  set_target_properties(chroma_c_api_v1_tests PROPERTIES LINKER_LANGUAGE C)
+  target_link_libraries(chroma_c_api_v1_tests PRIVATE chroma::c)
+  add_test(NAME chroma_c_api_v1_tests COMMAND chroma_c_api_v1_tests)
+  if(UNIX)
+    add_test(NAME chroma_c_api_symbols
+      COMMAND ${CMAKE_COMMAND} -DCHROMA_LIBRARY=$<TARGET_FILE:chroma_c>
+        -DCHROMA_NM=${CMAKE_NM} -DCHROMA_SYSTEM=${CMAKE_SYSTEM_NAME}
+        -DCHROMA_SOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR} -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/check_c_abi.cmake)
+  endif()
+  add_test(NAME chroma_c_api_install_consumer
+    COMMAND ${CMAKE_COMMAND} -DCHROMA_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}
+      -DCHROMA_SOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR} -DCHROMA_CONFIG=$<CONFIG>
+      -DCHROMA_C_COMPILER=${CMAKE_C_COMPILER} -DCHROMA_SYSROOT=${CMAKE_OSX_SYSROOT}
+      "-DCHROMA_LINK_FLAGS=${CMAKE_EXE_LINKER_FLAGS}" "-DCHROMA_C_FLAGS=${CMAKE_C_FLAGS}"
+      -DCHROMA_EXE_SUFFIX=${CMAKE_EXECUTABLE_SUFFIX} -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/install_consumer.cmake)
+  set_tests_properties(chroma_c_api_install_consumer PROPERTIES TIMEOUT 120)
 
   add_executable(chroma_c_api_tests tests/c_api_tests.c)
   target_compile_features(chroma_c_api_tests PRIVATE c_std_99)
@@ -484,3 +515,21 @@ if(CHROMA_BUILD_TESTS)
     PASS_REGULAR_EXPRESSION "rewrite_count[^0-9]*1"
   )
 endif()
+
+include(GNUInstallDirs)
+include(CMakePackageConfigHelpers)
+set(CHROMA_PACKAGE_DIR ${CMAKE_INSTALL_LIBDIR}/cmake/Chroma)
+install(TARGETS chroma_c EXPORT ChromaTargets
+  LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR} COMPONENT CAPI
+  RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT CAPI
+  ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR} COMPONENT CAPI)
+install(FILES include/chroma/chroma.h DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/chroma COMPONENT CAPI)
+install(FILES examples/c-api-render.c DESTINATION ${CMAKE_INSTALL_DATADIR}/chroma/examples COMPONENT CAPI)
+install(EXPORT ChromaTargets NAMESPACE chroma:: DESTINATION ${CHROMA_PACKAGE_DIR} COMPONENT CAPI)
+configure_package_config_file(cmake/ChromaConfig.cmake.in ${CMAKE_CURRENT_BINARY_DIR}/ChromaConfig.cmake
+  INSTALL_DESTINATION ${CHROMA_PACKAGE_DIR})
+write_basic_package_version_file(${CMAKE_CURRENT_BINARY_DIR}/ChromaConfigVersion.cmake
+  VERSION ${PROJECT_VERSION} COMPATIBILITY SameMajorVersion)
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/ChromaConfig.cmake
+              ${CMAKE_CURRENT_BINARY_DIR}/ChromaConfigVersion.cmake
+        DESTINATION ${CHROMA_PACKAGE_DIR} COMPONENT CAPI)

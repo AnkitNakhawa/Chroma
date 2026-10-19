@@ -210,3 +210,19 @@ C++ callers can pass `CpuCacheConfig` to `CpuRenderContext` or as the third
 argument to `render_video_cpu`. Contexts also expose `set_cache_budgets`,
 `clear_prepared_caches`, and `cache_usage`. See [retention and accounting
 semantics](docs/architecture.md#bounded-prepared-resource-retention) for details.
+
+### Stable C interface
+
+ABI v1 is available through `<chroma/chroma.h>` and the shared `chroma::c` target.
+It exposes validation/diagnostics, metadata and plan inspection, owned float-RGBA
+frames, synchronous H.264/AAC MP4 rendering, capability queries, and cache controls.
+
+```sh
+cmake --install build --prefix /your/prefix --component CAPI
+./build/chroma_c_example composition.json result.mp4
+```
+
+A C-only application can use `find_package(Chroma CONFIG REQUIRED)` and link
+`chroma::c`. See [the ABI, ownership, and installation contract](docs/c-api.md) and
+[the C99 example](examples/c-api-render.c). Async jobs and cancellation callbacks
+are not part of this initial interface.

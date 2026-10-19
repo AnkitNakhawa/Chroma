@@ -243,7 +243,14 @@ Benchmark output retains aggregate `execute` and `encode` timings while decompos
 
 ### C API
 
-The stable ABI should expose opaque handles for engine, composition, validation result, and render job. Callers supply configuration, cancellation, progress, and diagnostic callbacks. C++ and dependency-specific types do not cross the ABI.
+ABI v1 is implemented in `<chroma/chroma.h>`: opaque engine, immutable composition,
+owned frame, and owned string handles; fixed-width status codes; thread-local
+errors; versioned/sized configuration; metadata and plan inspection; CPU frames;
+synchronous MP4 jobs; and cache controls. C++ and dependency-specific types do not
+cross the ABI. The shared library and relocatable CMake package are usable by a
+C-only project. See [the C API contract](c-api.md) for ownership, binary stability,
+threading, pixel format, installation, and tests. Asynchronous job handles,
+cancellation, progress callbacks, and language bindings remain later interfaces.
 
 ### Language bindings
 

@@ -114,7 +114,12 @@ chroma_status CHROMA_CALL chroma_engine_set_cache_budgets(chroma_engine* engine,
   return boundary([&]() -> chroma_status {
     if (!engine) return fail(CHROMA_ERROR_INVALID_ARGUMENT, "engine is required");
     const chroma::CpuCacheConfig config{image_bytes, text_bytes};
-    engine->context.set_cache_budgets(config);
+    try { engine->context.set_cache_budgets(config); }
+    catch (...) {
+      const auto usage = engine->context.cache_usage();
+      engine->config = {usage.images.budget_bytes, usage.text.budget_bytes};
+      throw;
+    }
     engine->config = config;
     return CHROMA_OK;
   });

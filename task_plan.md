@@ -143,7 +143,7 @@ Each item is a separate test-and-commit gate.
 2. [complete] Introduce a dependency-neutral resident-frame descriptor and ownership contract without leaking FFmpeg or CUDA types across Chroma's core/public boundary.
 3. [complete] Implement and benchmark the first safe CPU conversion reduction, retaining the current path as a correctness oracle and avoiding premature color-management claims.
 4. [complete] Specify and scaffold the Linux/NVIDIA hardware-frame path, including runtime CUDA/device/decoder/NVENC readiness checks and explicit unimplemented status. Actual kernels remain gated on a capable Linux/NVIDIA environment and CPU-reference comparison.
-5. [in_progress] Resume the user-visible MVP sequence: keyframes/easing and masks/blur/transitions are implemented; audio is now implemented; bounded image/text caches are now implemented; stable C API, packaging, and published comparison corpus remain.
+5. [in_progress] Resume the user-visible MVP sequence: keyframes/easing and masks/blur/transitions are implemented; audio is now implemented; bounded image/text caches are now implemented; ABI-v1 synchronous C API and CMake installation are now implemented; broader distribution packaging and published comparison corpus remain.
 
 ### Dependency policy for these slices
 
@@ -203,3 +203,12 @@ Each item is a separate test-and-commit gate.
 
 These are job-scoped prepared-source caches. Persistent content-addressed storage
 and effect-output caching remain separate future milestones.
+
+### Stable C API checkpoint
+
+1. [complete] Define fixed-width, versioned/sized ABI types and opaque ownership, validation/diagnostics, metadata, plans, capability queries, cache controls, and exception-safe error boundaries.
+2. [complete] Add owned CPU frames, UTF-8 file loading, synchronous MP4 rendering, C99 usage examples, and encoded-media integration tests.
+3. [complete] Export only declared C symbols; install a relocatable CMake package; freeze a v1 header/symbol/layout consumer; verify thread-local errors and C-only installation in media-enabled and core-only builds.
+
+Async job scheduling, cancellation/progress callbacks, and thin language bindings
+remain separate milestones rather than unimplemented promises of the v1 ABI.
