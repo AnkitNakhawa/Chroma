@@ -9,6 +9,20 @@ clean() {
   env -i PATH=/usr/bin:/bin HOME="$result" LC_ALL=C "$@"
 }
 clean "$package/bin/chroma" validate "$fixture/smoke.json"
+clean "$package/bin/chroma" preflight "$fixture/smoke.json" --json > "$result/preflight.json"
+grep -q '"ready": true' "$result/preflight.json"
+status=0
+clean "$package/bin/chroma" preflight "$fixture/missing-preflight.json" --json > "$result/preflight-missing.json" || status=$?
+test "$status" -eq 4
+grep -q 'asset.missing' "$result/preflight-missing.json"
+printf 'original\n' > "$result/preflight-failure.mp4"
+status=0
+clean "$package/bin/chroma" render "$fixture/missing-preflight.json" --output "$result/preflight-failure.mp4" --progress json > "$result/preflight-progress.ndjson" 2> "$result/preflight-error.txt" || status=$?
+test "$status" -eq 4
+grep -qx original "$result/preflight-failure.mp4"
+grep -q 'asset.missing' "$result/preflight-error.txt"
+test "$(wc -l < "$result/preflight-progress.ndjson" | tr -d ' ')" -eq 1
+
 clean "$package/bin/chroma" render "$fixture/smoke.json" --output "$result/cli.mp4" --progress json > "$result/progress.ndjson"
 grep -q '"phase":"completed","frames_encoded":36' "$result/progress.ndjson"
 clean "$package/libexec/chroma/chroma_c_example" "$fixture/smoke.json" "$result/c-api.mp4" --progress

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Generate self-contained runtime tests before entering a clean machine/container."""
 import argparse
+import copy
 import hashlib
 import io
 import tarfile
@@ -39,6 +40,9 @@ for layer in doc['layers']:
     if layer['type'] == 'text':
         layer['layout'] = dict(width=100, wrap='word', align='center', line_spacing=1.4, max_lines=2, overflow='ellipsis')
 (a.output / 'smoke.json').write_text(json.dumps(doc, indent=2) + '\n')
+missing = copy.deepcopy(doc)
+missing['assets'][0]['path'] = 'missing-preflight.asset'
+(a.output / 'missing-preflight.json').write_text(json.dumps(missing, indent=2) + '\n')
 tiny = dict(schema_version=1, canvas=dict(width=8, height=4,
             frame_rate=dict(numerator=30, denominator=1), duration_frames=1), layers=[])
 (a.output / 'tiny.json').write_text(json.dumps(tiny) + '\n')

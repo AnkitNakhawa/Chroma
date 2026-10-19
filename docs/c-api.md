@@ -191,3 +191,13 @@ allocation errors remain possible after a completed media file.
 
 See [CLI usage and signal behavior](render-control.md). Async job handles,
 accelerator planes and language bindings remain outside this synchronous API.
+
+### Input preflight
+
+`CHROMA_CAP_PREFLIGHT` advertises the additive ABI-v1
+`chroma_composition_preflight(composition, flags, &report)` entry point. It returns
+owned JSON with readiness and structured diagnostics. Flags=0 checks inputs and
+source timelines; `CHROMA_PREFLIGHT_VIDEO_OUTPUT` adds output prerequisites.
+`CHROMA_OK` means inspection succeeded, including reports with `ready: false`.
+Video rendering also preflights automatically; failures keep
+`CHROMA_ERROR_RENDER` and preserve output. See [preflight semantics](preflight.md).

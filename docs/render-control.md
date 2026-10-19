@@ -56,3 +56,11 @@ the same phases and counters through `chroma_engine_render_video_with_options`.
 Callbacks can request cancellation by returning nonzero; atomic cancellation
 tokens also accept requests from other threads. Legacy function signatures and
 ABI-v1 layout/symbol tests are unchanged.
+
+### Preparing inputs
+
+Full-video rendering now runs [input preflight](preflight.md) after the initial
+`preparing` notification and before creating temporary output. Failed preflight
+emits no rendering/completion events and preserves an existing destination.
+Cancellation is checked between asset/packet inspections. Probe time is included
+in setup time; the existing frame/audio progress counters remain unchanged.

@@ -97,3 +97,7 @@ then set `CHROMA_LIBRARY_PATH` to the SDK's `lib/libchroma.so` (Linux) or
 See `share/chroma/docs/python.md`. Python 3.10+ is required.
 Release CI installs the wheel into a fresh venv with no network or Python
 dependencies and compares decoded Python/CLI video and audio output.
+
+Release smoke checks run explicit input preflight, exercise early missing-input
+failures without output replacement, and call the new C preflight entry point
+through the installed Python wheel. See `share/chroma/docs/preflight.md`.

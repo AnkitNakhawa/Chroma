@@ -9,7 +9,7 @@ import tempfile
 import threading
 
 import chroma_render
-from chroma_render import Engine, RenderPhase, RenderCancelledError
+from chroma_render import Engine, RenderPhase, RenderCancelledError, ChromaError, Status
 
 package, fixture = (Path(p).resolve() for p in sys.argv[1:3])
 assert Path(chroma_render.__file__).is_relative_to(Path(sys.prefix)), chroma_render.__file__
@@ -21,6 +21,22 @@ with tempfile.TemporaryDirectory(prefix='chroma python smoke ') as root:
     subprocess.run([package / 'bin/chroma', 'render', fixture / 'smoke.json', '--output', cli], check=True)
     events = []
     with Engine() as engine, engine.load_composition(fixture / 'smoke.json') as scene:
+        before = engine.cache_usage
+        report = engine.preflight(scene)
+        assert report['ready'] and report['assets_checked'] > 0
+        assert engine.cache_usage == before
+        bad = json.loads((fixture / 'missing-preflight.json').read_text())
+        with engine.parse_composition(bad, base_directory=fixture) as invalid:
+            report = invalid.preflight()
+            assert not report['ready'] and any(d['code'] == 'asset.missing' for d in report['diagnostics'])
+            failed = root / 'preflight-failure.mp4'
+            failed.write_bytes(b'original')
+            try:
+                engine.render(invalid, failed)
+                raise AssertionError('missing input did not stop rendering')
+            except ChromaError as error:
+                assert error.status == Status.RENDER and 'asset.missing' in str(error)
+            assert failed.read_bytes() == b'original' and not list(root.glob('.chroma-render-*'))
         frame = engine.render_frame(scene)
         profile = engine.render(scene, python, progress=events.append)
         assert profile['frames_encoded'] == 36

@@ -236,3 +236,9 @@ remain separate milestones rather than unimplemented promises of the v1 ABI.
 1. [complete] Implement opt-in shaped multiline text with word/cluster wrapping, physical alignment, line spacing, explicit lines, clipping and ellipsis. Preserve the legacy no-layout pixel path.
 2. [complete] Carry layout through JSON validation, immutable layers, typed plans, prepared-cache identity/accounting and CLI/C/Python. Verify semantic glyph oracles, cache isolation, malformed inputs, bounded/full-frame equality, core-only builds and sanitizers.
 3. [complete] Extend encoded quality and relocated release fixtures with layout, document limits/coordinates/overflow semantics, and provide an animated 1080p example.
+
+### Input preflight checkpoint
+
+1. [complete] Inspect assets, requested font sizes, first decoded media blocks, CPU conversion compatibility, HDR tags, known durations and exact source/sample ranges; aggregate errors and warnings with asset and timeline locations.
+2. [complete] Add explicit CLI/C/Python reports and automatic preflight before video output, preserve cancellation/atomic publication and ABI-v1 compatibility, and test real missing/corrupt/wrong-stream inputs, boundary/overflow cases, JSON diagnostics and backend-disabled builds.
+3. [complete] Document severity, metadata limits, supported SDR inputs and setup cost; include preflight in relocated CLI/Python release smoke checks.

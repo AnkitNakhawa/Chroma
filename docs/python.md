@@ -150,3 +150,12 @@ to exclude the interpreter's unrelated shutdown allocations. You can disable
 only the ctypes CTest with `-DCHROMA_TEST_PYTHON_WRAPPER=OFF` when running native
 sanitizer tests, then run the Python integration script with the proper host
 and runtime preload. Ordinary builds register the test with Python 3.10+.
+
+## Input preflight
+
+Call `scene.preflight()` or `engine.preflight(scene)` to inspect real assets and
+source ranges before launching a job. These return a dictionary with `ready`,
+`diagnostics` and `assets_checked`; errors in the report do not raise Python
+exceptions. Pass `for_video=False` to omit output-encoder constraints. Full-video
+rendering performs preflight automatically and raises `ChromaError` with
+`Status.RENDER` on failure. See [preflight checks and limits](preflight.md).

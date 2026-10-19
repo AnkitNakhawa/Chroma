@@ -290,3 +290,12 @@ ellipsis. Existing text keeps its original positioning and pixels. See the
 [layout contract](docs/composition-format.md#text-layout) and the animated
 [1080p example](examples/text-layout.json). The same composition works through
 the CLI, C API, and Python.
+
+### Input preflight
+
+Run `chroma preflight scene.json --json` to collect missing/unreadable assets,
+invalid fonts, incompatible media, source-trim/timeline errors and output
+prerequisite problems before rendering. Full-video rendering runs preflight
+automatically before creating output. Python exposes `scene.preflight()` and
+the C API provides `chroma_composition_preflight`. See the
+[report format, severity policy and limits](docs/preflight.md).
