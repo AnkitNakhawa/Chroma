@@ -44,6 +44,9 @@ def main():
         cmake_flags += [f'-DCMAKE_OSX_SYSROOT={sdk}', '-DCMAKE_OSX_DEPLOYMENT_TARGET=14.0']
         cflags += f' -isysroot {sdk} -mmacosx-version-min=14.0'
         ldflags += f' -isysroot {sdk} -mmacosx-version-min=14.0'
+    recipe = hashlib.sha256(Path(__file__).read_bytes() + json.dumps(lock, sort_keys=True).encode() +
+                            json.dumps([platform.system(), platform.machine(), cmake_flags, cflags, ldflags,
+                                        {k: env.get(k) for k in ('CC', 'CXX', 'CFLAGS', 'CXXFLAGS', 'LDFLAGS')}]).encode()).hexdigest()
     for name in ('zlib', 'openh264', 'ffmpeg', 'freetype', 'harfbuzz', 'json'):
         spec = lock[name]
         archive = sources / spec['archive']
@@ -55,8 +58,9 @@ def main():
             raise RuntimeError(f'{archive}: SHA-256 mismatch')
         source = work / 'src' / name
         stamp = work / f'{name}.stamp'
-        # Changes to flags/scripts invalidate all stamps: use a fresh --work directory.
         if stamp.exists():
+            if stamp.read_text().strip() != recipe:
+                raise RuntimeError('Build recipe changed; use a fresh --work directory')
             continue
         shutil.rmtree(source, ignore_errors=True)
         source.mkdir(parents=True)
@@ -102,7 +106,7 @@ def main():
             run(['cmake', '-S', source, '-B', build, *cmake_flags, *options], env=env)
             run(['cmake', '--build', build, '--parallel', a.jobs], env=env)
             run(['cmake', '--install', build], env=env)
-        stamp.write_text(spec['sha256'] + '\n')
+        stamp.write_text(recipe + '\n')
     print(prefix)
 
 

@@ -58,9 +58,14 @@ class DependencyAuditTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, 'missing or escaped'):
             self.mac(['@loader_path/../lib/libavcodec.63.dylib'])
 
+    def test_linux_relative_symlink_escape(self):
+        (self.root / 'lib/escape.so').symlink_to(self.cli.parent.parent.parent / 'outside.so')
+        with self.assertRaisesRegex(RuntimeError, 'symlink escapes'):
+            self.linux(['escape.so'])
+
     def test_mac_relative_symlink_escape(self):
         (self.root / 'lib/escape.dylib').symlink_to('/usr/lib/libSystem.B.dylib')
-        with self.assertRaisesRegex(RuntimeError, 'missing or escaped'):
+        with self.assertRaisesRegex(RuntimeError, 'symlink escapes'):
             self.mac(['@loader_path/../lib/escape.dylib'])
 
     def test_mac_only_apple_system_dependencies_allowed(self):

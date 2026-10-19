@@ -35,11 +35,14 @@ jobs:
         run: |
           docker run --rm -v "$PWD:/src" -w /src ubuntu:22.04 /bin/bash -euc '
             apt-get update
-            DEBIAN_FRONTEND=noninteractive apt-get install -y build-essential curl ca-certificates pkg-config patchelf python3 python3-pip fonts-dejavu-core
+            DEBIAN_FRONTEND=noninteractive apt-get install -y build-essential git curl ca-certificates pkg-config patchelf python3 python3-pip fonts-dejavu-core
+            git config --global --add safe.directory /src
             python3 -m pip install cmake==3.31.6
             # Python 3.12 is used for safe archive extraction in the dependency builder.
             python3 -m pip install uv==0.10.12
             uv python install 3.12
+            uv run --python 3.12 --no-project python packaging/build-dependencies.py --work artifacts/release --jobs 2
+            # A second invocation verifies identical builds resume without rebuilding.
             uv run --python 3.12 --no-project python packaging/build-dependencies.py --work artifacts/release --jobs 2
             export PATH="$PWD/artifacts/release/prefix/bin:$PATH"
             export PKG_CONFIG_LIBDIR="$PWD/artifacts/release/prefix/lib/pkgconfig"
@@ -56,6 +59,8 @@ jobs:
           MACOSX_DEPLOYMENT_TARGET: '14.0'
         run: |
           export SDKROOT="$(xcrun --show-sdk-path)"
+          python3 packaging/build-dependencies.py --work artifacts/release --jobs 3
+          # A second invocation verifies identical builds resume without rebuilding.
           python3 packaging/build-dependencies.py --work artifacts/release --jobs 3
           export PATH="$PWD/artifacts/release/prefix/bin:$PATH"
           export PKG_CONFIG_LIBDIR="$PWD/artifacts/release/prefix/lib/pkgconfig"

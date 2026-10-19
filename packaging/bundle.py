@@ -38,6 +38,9 @@ def deps(path):
 
 def audit(root):
     evidence = {}
+    for link in (root / 'lib').glob('*'):
+        if link.is_symlink() and (not link.resolve().is_relative_to(root.resolve()) or not link.is_file()):
+            raise RuntimeError(f'Library symlink escapes package or is broken: {link.name}')
     for path in binaries(root):
         relative = str(path.relative_to(root))
         links = deps(path)

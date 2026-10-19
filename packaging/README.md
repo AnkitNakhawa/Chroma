@@ -74,8 +74,8 @@ Put the controlled prefix's `bin` directory first on PATH before configuring to 
 quality checks with the exact bundled FFmpeg. Provide a system test font (e.g.
 fonts-dejavu-core on Ubuntu). On macOS set `SDKROOT` and
 `MACOSX_DEPLOYMENT_TARGET=14.0` for both dependency and Chroma builds.
-Use a fresh work directory after changing the lock or build flags; stamps only allow
-resuming an interrupted identical build. Downloads are SHA-256 verified before use.
+Use a fresh work directory after changing the lock or build flags; recipe fingerprints
+reject stale prefixes and allow resuming an interrupted identical build. Downloads are SHA-256 verified before use.
 To rebuild offline from the source companion, extract `sources/chroma.tar`, copy the
 upstream archives to `artifacts/release/sources/`, then run the same commands.
 
