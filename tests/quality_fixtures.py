@@ -109,6 +109,12 @@ def fixtures(root, ffmpeg, font):
             dict(id='mask', type='shape', shape='ellipse', bounds=[240, 110, 50, 40], fill=[.15, .6, .4, .8],
                  start_frame=0, end_frame=frames, effects=[dict(type='gaussian_blur', radius=.7)])],
             audio_tracks=[dict(id='tone', asset='sound', start_frame=0, end_frame=frames, gain=.7)])
+        if name == 'fractional':
+            run([ffmpeg, '-v', 'error', '-y', '-i', assets / f'{name}.mkv',
+                 '-frames:v', '1', '-vf', 'scale=24:16', assets / 'image.png'])
+            simple['assets'].append(dict(id='image', type='image', path='assets/image.png'))
+            simple['layers'].append(dict(id='image', type='image', asset='image', fit='none', position=[.85, .2],
+                start_frame=0, end_frame=frames, effects=[dict(type='translation', value=[.25, -.5]), dict(type='opacity', value=.8)]))
         documents.append((name, scale_scene(simple, ratio), [0, frames // 2, frames - 1]))
     result = []
     for name, document, snapshots in documents:

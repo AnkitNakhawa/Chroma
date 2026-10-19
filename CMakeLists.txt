@@ -315,9 +315,9 @@ if(CHROMA_BUILD_TESTS)
       add_test(NAME chroma_quality_gate
         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/quality_gate.py
           --chroma $<TARGET_FILE:chroma_cli> --verifier $<TARGET_FILE:chroma_graphics_equivalence>
-          --ffmpeg ${CHROMA_FFMPEG_EXECUTABLE} --font ${CHROMA_TEST_FONT}
+          --ffmpeg ${CHROMA_FFMPEG_EXECUTABLE} --ffprobe ${CHROMA_FFPROBE_EXECUTABLE} --font ${CHROMA_TEST_FONT}
           --output ${CMAKE_CURRENT_BINARY_DIR}/quality)
-      set_tests_properties(chroma_quality_gate PROPERTIES TIMEOUT 300 LABELS quality)
+      set_tests_properties(chroma_quality_gate PROPERTIES TIMEOUT 600 LABELS quality)
     endif()
 
 
