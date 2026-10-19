@@ -128,6 +128,84 @@ Text layers reference a `font` asset. `position` is the canvas-space text baseli
 }
 ```
 
+
+### Text layout
+
+Existing text layers keep their original single-run shaping and baseline positioning
+when `layout` is absent. Add `"layout": {}` to opt into multiline layout, including
+explicit LF/CRLF line breaks and tab normalization (four spaces per tab).
+`position: [x, y]` still means the first-line baseline. Each following baseline is
+`font_size * line_spacing` pixels below the previous one, rounded to whole glyph pixels.
+
+```json
+{
+  "id": "description", "type": "text", "font": "body",
+  "text": "A longer description that wraps and ends gracefully when space runs out.",
+  "font_size": 32, "position": [48, 100], "color": [1, 1, 1, 1],
+  "start_frame": 0, "end_frame": 90,
+  "layout": {
+    "width": 420, "height": 150,
+    "wrap": "word", "align": "left", "line_spacing": 1.4,
+    "max_lines": 3, "overflow": "ellipsis"
+  }
+}
+```
+
+| Field | Default | Meaning |
+|---|---|---|
+| `width` | Unbounded | Positive box width in pixels, at most 65536; required for center/right alignment and ellipsis |
+| `height` | Unbounded | Positive box height in pixels, at most 65536 |
+| `wrap` | `word` | `word` automatically wraps when width is given; `none` keeps only explicit line breaks |
+| `align` | `left` | Physical `left`, `center`, or `right` alignment within width, measured using shaped advances |
+| `line_spacing` | `1.2` | Positive baseline-distance multiplier of font size, at most 100; values below 1 allow overlapping lines |
+| `max_lines` | Unbounded | Integer 1–16384; caps emitted lines in every overflow mode |
+| `overflow` | `visible` | `visible`, `clip`, or `ellipsis` as described below |
+
+The box's left edge is `position.x`. Its top is `position.y` minus the selected
+font's scaled ascender; height extends down from that top. Alignment uses logical
+line advance, so ink overhangs can extend beyond the box in visible mode. Center
+and right shifts are rounded to whole pixels. Alignment is physical, independent
+of the paragraph's script direction.
+
+Wrapping measures HarfBuzz-shaped text, prefers ASCII space/tab word boundaries,
+and reshapes each resulting line. Trailing break spaces and leading spaces after
+automatic breaks are removed; spaces not used as break delimiters are preserved. Long
+words fall back to shaped grapheme-cluster boundaries, preserving combining
+characters and ligatures. A single cluster can exceed a narrow width. Empty and
+trailing explicit lines count toward line limits. Full Unicode line-breaking,
+hyphenation, mixed-direction Unicode bidi layout, justification, vertical alignment,
+and font fallback are outside this version. Existing single-direction HarfBuzz
+shaping (including Arabic) remains available; direction/script are kept consistent
+within each paragraph.
+
+- `visible` emits wrapped lines without clipping to width/height. Height is ignored;
+  an explicit `max_lines` still discards later lines without an ellipsis.
+- `clip` intersects glyph coverage with the specified width/height before effects.
+  Partially visible lines at the bottom are clipped, and later lines are discarded.
+  With only `max_lines`, it drops later lines without imposing a height rectangle.
+- `ellipsis` replaces the logical end of the last retained line with U+2026 when
+  lines are omitted by height/max_lines. With `wrap: "none"`, each over-wide line
+  is shortened independently. It removes whole shaped clusters and reshapes until
+  the prefix plus ellipsis fits. If the ellipsis itself is too wide, the line is
+  empty. Height normally retains lines whose font metrics fit fully, with one
+  clipped line allowed for a box shorter than the font. Ink is clipped to width/height.
+
+Clipping occurs in the text source coordinate system. Subsequent transforms move
+that clipped source; blur can spread its coverage beyond the original layout box.
+Use a crop effect after blur when you also need a fixed final effect boundary.
+Width/height clipping uses whole coverage pixels contained inside the box.
+
+All layout fields participate in prepared-text cache identity. Color, position,
+and animation remain independent of text preparation, preserving reuse across
+layers. Invalid types, ranges, enum strings, dependencies, and unknown layout
+fields produce diagnostics at `/layers/N/layout/FIELD`. Direct C++ compositions
+and execution plans enforce the same constraints. CLI, C API, and Python use
+this same JSON contract, with no C ABI changes.
+
+See [the animated 1080p layout example](../examples/text-layout.json); supply
+`examples/fonts/Inter-Regular.ttf` or change the font asset to your own font.
+
+
 ## Basic effects and blending
 
 Solid, image, shape, text, and video layers may declare an ordered `effects` array and an optional `blend_mode`:

@@ -190,6 +190,16 @@ void text_layout_shapes_lines_without_changing_legacy_pixels(const std::filesyst
   const auto blank = chroma::prepare_text(font, "   ", 24, layout);
   CHECK(blank.lines.size() == 1);
   CHECK(chroma::prepare_text(font, "\n", 24, layout).lines.size() == 2);
+  layout.width = 300;
+  const auto tabs = chroma::prepare_text(font, "A\tB", 24, layout);
+  const auto spaces = chroma::prepare_text(font, "A    B", 24, layout);
+  CHECK(tabs.lines[0].advance == spaces.lines[0].advance);
+  const auto arabic = chroma::prepare_text(font, "مرحبا", 24);
+  const auto mixed_paragraphs = chroma::prepare_text(font, "Hello\nمرحبا", 24, layout);
+  CHECK(mixed_paragraphs.glyphs.size() == hello.glyphs.size() + arabic.glyphs.size());
+  for (std::size_t i=0; i<arabic.glyphs.size(); ++i)
+    CHECK(same_glyph(arabic.glyphs[i], mixed_paragraphs.glyphs[i+hello.glyphs.size()], 0, 36));
+
 }
 
 void overflow_clips_or_ellipsizes_and_validates(const std::filesystem::path& font) {
@@ -227,6 +237,13 @@ void overflow_clips_or_ellipsizes_and_validates(const std::filesystem::path& fon
   layout.width = 100;
   layout.line_spacing = 0;
   CHECK_THROWS_AS(chroma::prepare_text(font, "Hello", 24, layout), std::invalid_argument);
+  layout.line_spacing = std::numeric_limits<double>::denorm_min();
+  layout.height = 100;
+  layout.max_lines.reset();
+  layout.overflow = chroma::TextOverflow::clip;
+  CHECK(chroma::prepare_text(font, "A\nB", 24, layout).lines.size() == 2);
+  layout.overflow = chroma::TextOverflow::ellipsis;
+  CHECK(chroma::prepare_text(font, "A\nB", 24, layout).lines.size() == 2);
   layout.line_spacing = 1.2;
   layout.max_lines = 0;
   CHECK_THROWS_AS(chroma::prepare_text(font, "Hello", 24, layout), std::invalid_argument);

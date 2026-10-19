@@ -230,3 +230,9 @@ remain separate milestones rather than unimplemented promises of the v1 ABI.
 1. [complete] Add offline all-frame native comparisons against the full CPU reference for the 540-frame proxy showcase, 36 fractional-rate frames and 12 full-HD frames.
 2. [complete] Add decoded video/audio equality, independent lossy fidelity limits, exact format/count/duration/timestamp checks and real degraded/muted/truncated/shifted-output negative controls.
 3. [complete] Require quality prerequisites and nonempty tests in dedicated Linux/macOS CI jobs, retain diagnostic artifacts, and document scope/thresholds. Original stock-footage 1080p/540-frame benchmarking remains separately reproducible.
+
+### Text layout checkpoint
+
+1. [complete] Implement opt-in shaped multiline text with word/cluster wrapping, physical alignment, line spacing, explicit lines, clipping and ellipsis. Preserve the legacy no-layout pixel path.
+2. [complete] Carry layout through JSON validation, immutable layers, typed plans, prepared-cache identity/accounting and CLI/C/Python. Verify semantic glyph oracles, cache isolation, malformed inputs, bounded/full-frame equality, core-only builds and sanitizers.
+3. [complete] Extend encoded quality and relocated release fixtures with layout, document limits/coordinates/overflow semantics, and provide an animated 1080p example.

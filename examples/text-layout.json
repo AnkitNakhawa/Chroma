@@ -1,0 +1,982 @@
+{
+  "schema_version": 1,
+  "canvas": {
+    "width": 1920,
+    "height": 1080,
+    "frame_rate": {
+      "numerator": 30,
+      "denominator": 1
+    },
+    "duration_frames": 180
+  },
+  "assets": [
+    {
+      "id": "body",
+      "type": "font",
+      "path": "fonts/Inter-Regular.ttf"
+    }
+  ],
+  "layers": [
+    {
+      "id": "background",
+      "type": "solid",
+      "start_frame": 0,
+      "end_frame": 180,
+      "color": [
+        0.018,
+        0.027,
+        0.045,
+        1
+      ]
+    },
+    {
+      "id": "eyebrow",
+      "type": "text",
+      "start_frame": 0,
+      "end_frame": 180,
+      "font": "body",
+      "text": "CHROMA  /  NATIVE TYPOGRAPHY",
+      "font_size": 24,
+      "position": [
+        80,
+        86
+      ],
+      "color": [
+        0.35,
+        0.77,
+        0.71,
+        1
+      ]
+    },
+    {
+      "id": "headline",
+      "type": "text",
+      "start_frame": 0,
+      "end_frame": 180,
+      "font": "body",
+      "text": "A little structure. A lot of expression.",
+      "font_size": 72,
+      "position": [
+        80,
+        190
+      ],
+      "color": [
+        0.93,
+        0.96,
+        1,
+        1
+      ]
+    },
+    {
+      "id": "subtitle",
+      "type": "text",
+      "start_frame": 0,
+      "end_frame": 180,
+      "font": "body",
+      "text": "Wrapping, alignment, line spacing, and overflow — rendered in the same native pipeline.",
+      "font_size": 28,
+      "position": [
+        80,
+        254
+      ],
+      "color": [
+        0.48,
+        0.58,
+        0.69,
+        1
+      ]
+    },
+    {
+      "id": "card-0",
+      "type": "shape",
+      "start_frame": 0,
+      "end_frame": 180,
+      "shape": "rounded_rectangle",
+      "bounds": [
+        80,
+        330,
+        560,
+        570
+      ],
+      "corner_radius": 24,
+      "fill": [
+        0.034,
+        0.052,
+        0.077,
+        1
+      ],
+      "stroke": {
+        "color": [
+          0.085,
+          0.125,
+          0.165,
+          1
+        ],
+        "width": 1
+      },
+      "effects": [
+        {
+          "type": "translation",
+          "keyframes": [
+            {
+              "frame": 0,
+              "value": [
+                0,
+                24
+              ],
+              "easing": "ease_out"
+            },
+            {
+              "frame": 24,
+              "value": [
+                0,
+                0
+              ]
+            }
+          ]
+        },
+        {
+          "type": "opacity",
+          "keyframes": [
+            {
+              "frame": 0,
+              "value": 0
+            },
+            {
+              "frame": 18,
+              "value": 1
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "label-0",
+      "type": "text",
+      "start_frame": 0,
+      "end_frame": 180,
+      "font": "body",
+      "text": "01  /  ROOM TO BREATHE",
+      "font_size": 20,
+      "position": [
+        116,
+        390
+      ],
+      "color": [
+        0.35,
+        0.77,
+        0.71,
+        1
+      ],
+      "effects": [
+        {
+          "type": "translation",
+          "keyframes": [
+            {
+              "frame": 0,
+              "value": [
+                0,
+                24
+              ],
+              "easing": "ease_out"
+            },
+            {
+              "frame": 24,
+              "value": [
+                0,
+                0
+              ]
+            }
+          ]
+        },
+        {
+          "type": "opacity",
+          "keyframes": [
+            {
+              "frame": 0,
+              "value": 0
+            },
+            {
+              "frame": 18,
+              "value": 1
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "title-0",
+      "type": "text",
+      "start_frame": 0,
+      "end_frame": 180,
+      "font": "body",
+      "text": "Left aligned",
+      "font_size": 40,
+      "position": [
+        116,
+        468
+      ],
+      "color": [
+        0.9,
+        0.94,
+        0.98,
+        1
+      ],
+      "layout": {
+        "width": 488,
+        "align": "left"
+      },
+      "effects": [
+        {
+          "type": "translation",
+          "keyframes": [
+            {
+              "frame": 0,
+              "value": [
+                0,
+                24
+              ],
+              "easing": "ease_out"
+            },
+            {
+              "frame": 24,
+              "value": [
+                0,
+                0
+              ]
+            }
+          ]
+        },
+        {
+          "type": "opacity",
+          "keyframes": [
+            {
+              "frame": 0,
+              "value": 0
+            },
+            {
+              "frame": 18,
+              "value": 1
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "body-0",
+      "type": "text",
+      "start_frame": 0,
+      "end_frame": 180,
+      "font": "body",
+      "text": "Give every story room to breathe with native text wrapping.",
+      "font_size": 36,
+      "position": [
+        116,
+        550
+      ],
+      "color": [
+        0.6,
+        0.7,
+        0.79,
+        1
+      ],
+      "layout": {
+        "width": 488,
+        "align": "left",
+        "line_spacing": 1.5,
+        "overflow": "visible"
+      },
+      "effects": [
+        {
+          "type": "translation",
+          "keyframes": [
+            {
+              "frame": 0,
+              "value": [
+                0,
+                24
+              ],
+              "easing": "ease_out"
+            },
+            {
+              "frame": 24,
+              "value": [
+                0,
+                0
+              ]
+            }
+          ]
+        },
+        {
+          "type": "opacity",
+          "keyframes": [
+            {
+              "frame": 0,
+              "value": 0
+            },
+            {
+              "frame": 18,
+              "value": 1
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "note-0",
+      "type": "text",
+      "start_frame": 0,
+      "end_frame": 180,
+      "font": "body",
+      "text": "WORD WRAP  /  1.5× LINE SPACING",
+      "font_size": 17,
+      "position": [
+        116,
+        853
+      ],
+      "color": [
+        0.35,
+        0.47,
+        0.57,
+        1
+      ],
+      "effects": [
+        {
+          "type": "translation",
+          "keyframes": [
+            {
+              "frame": 0,
+              "value": [
+                0,
+                24
+              ],
+              "easing": "ease_out"
+            },
+            {
+              "frame": 24,
+              "value": [
+                0,
+                0
+              ]
+            }
+          ]
+        },
+        {
+          "type": "opacity",
+          "keyframes": [
+            {
+              "frame": 0,
+              "value": 0
+            },
+            {
+              "frame": 18,
+              "value": 1
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "card-1",
+      "type": "shape",
+      "start_frame": 0,
+      "end_frame": 180,
+      "shape": "rounded_rectangle",
+      "bounds": [
+        680,
+        330,
+        560,
+        570
+      ],
+      "corner_radius": 24,
+      "fill": [
+        0.034,
+        0.052,
+        0.077,
+        1
+      ],
+      "stroke": {
+        "color": [
+          0.085,
+          0.125,
+          0.165,
+          1
+        ],
+        "width": 1
+      },
+      "effects": [
+        {
+          "type": "translation",
+          "keyframes": [
+            {
+              "frame": 0,
+              "value": [
+                0,
+                24
+              ],
+              "easing": "ease_out"
+            },
+            {
+              "frame": 24,
+              "value": [
+                0,
+                0
+              ]
+            }
+          ]
+        },
+        {
+          "type": "opacity",
+          "keyframes": [
+            {
+              "frame": 0,
+              "value": 0
+            },
+            {
+              "frame": 18,
+              "value": 1
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "label-1",
+      "type": "text",
+      "start_frame": 0,
+      "end_frame": 180,
+      "font": "body",
+      "text": "02  /  STAY IN BOUNDS",
+      "font_size": 20,
+      "position": [
+        716,
+        390
+      ],
+      "color": [
+        0.35,
+        0.77,
+        0.71,
+        1
+      ],
+      "effects": [
+        {
+          "type": "translation",
+          "keyframes": [
+            {
+              "frame": 0,
+              "value": [
+                0,
+                24
+              ],
+              "easing": "ease_out"
+            },
+            {
+              "frame": 24,
+              "value": [
+                0,
+                0
+              ]
+            }
+          ]
+        },
+        {
+          "type": "opacity",
+          "keyframes": [
+            {
+              "frame": 0,
+              "value": 0
+            },
+            {
+              "frame": 18,
+              "value": 1
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "title-1",
+      "type": "text",
+      "start_frame": 0,
+      "end_frame": 180,
+      "font": "body",
+      "text": "Center aligned",
+      "font_size": 40,
+      "position": [
+        716,
+        468
+      ],
+      "color": [
+        0.9,
+        0.94,
+        0.98,
+        1
+      ],
+      "layout": {
+        "width": 488,
+        "align": "center"
+      },
+      "effects": [
+        {
+          "type": "translation",
+          "keyframes": [
+            {
+              "frame": 0,
+              "value": [
+                0,
+                24
+              ],
+              "easing": "ease_out"
+            },
+            {
+              "frame": 24,
+              "value": [
+                0,
+                0
+              ]
+            }
+          ]
+        },
+        {
+          "type": "opacity",
+          "keyframes": [
+            {
+              "frame": 0,
+              "value": 0
+            },
+            {
+              "frame": 18,
+              "value": 1
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "body-1",
+      "type": "text",
+      "start_frame": 0,
+      "end_frame": 180,
+      "font": "body",
+      "text": "Text can keep going, while the visible content stays inside a fixed box. Extra lines are clipped to the height you choose.",
+      "font_size": 36,
+      "position": [
+        716,
+        550
+      ],
+      "color": [
+        0.6,
+        0.7,
+        0.79,
+        1
+      ],
+      "layout": {
+        "width": 488,
+        "align": "center",
+        "line_spacing": 1.5,
+        "overflow": "clip",
+        "height": 100
+      },
+      "effects": [
+        {
+          "type": "translation",
+          "keyframes": [
+            {
+              "frame": 0,
+              "value": [
+                0,
+                24
+              ],
+              "easing": "ease_out"
+            },
+            {
+              "frame": 24,
+              "value": [
+                0,
+                0
+              ]
+            }
+          ]
+        },
+        {
+          "type": "opacity",
+          "keyframes": [
+            {
+              "frame": 0,
+              "value": 0
+            },
+            {
+              "frame": 18,
+              "value": 1
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "note-1",
+      "type": "text",
+      "start_frame": 0,
+      "end_frame": 180,
+      "font": "body",
+      "text": "FIXED HEIGHT  /  CLIPPED CONTENT",
+      "font_size": 17,
+      "position": [
+        716,
+        853
+      ],
+      "color": [
+        0.35,
+        0.47,
+        0.57,
+        1
+      ],
+      "effects": [
+        {
+          "type": "translation",
+          "keyframes": [
+            {
+              "frame": 0,
+              "value": [
+                0,
+                24
+              ],
+              "easing": "ease_out"
+            },
+            {
+              "frame": 24,
+              "value": [
+                0,
+                0
+              ]
+            }
+          ]
+        },
+        {
+          "type": "opacity",
+          "keyframes": [
+            {
+              "frame": 0,
+              "value": 0
+            },
+            {
+              "frame": 18,
+              "value": 1
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "card-2",
+      "type": "shape",
+      "start_frame": 0,
+      "end_frame": 180,
+      "shape": "rounded_rectangle",
+      "bounds": [
+        1280,
+        330,
+        560,
+        570
+      ],
+      "corner_radius": 24,
+      "fill": [
+        0.034,
+        0.052,
+        0.077,
+        1
+      ],
+      "stroke": {
+        "color": [
+          0.085,
+          0.125,
+          0.165,
+          1
+        ],
+        "width": 1
+      },
+      "effects": [
+        {
+          "type": "translation",
+          "keyframes": [
+            {
+              "frame": 0,
+              "value": [
+                0,
+                24
+              ],
+              "easing": "ease_out"
+            },
+            {
+              "frame": 24,
+              "value": [
+                0,
+                0
+              ]
+            }
+          ]
+        },
+        {
+          "type": "opacity",
+          "keyframes": [
+            {
+              "frame": 0,
+              "value": 0
+            },
+            {
+              "frame": 18,
+              "value": 1
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "label-2",
+      "type": "text",
+      "start_frame": 0,
+      "end_frame": 180,
+      "font": "body",
+      "text": "03  /  A GRACEFUL FINISH",
+      "font_size": 20,
+      "position": [
+        1316,
+        390
+      ],
+      "color": [
+        0.35,
+        0.77,
+        0.71,
+        1
+      ],
+      "effects": [
+        {
+          "type": "translation",
+          "keyframes": [
+            {
+              "frame": 0,
+              "value": [
+                0,
+                24
+              ],
+              "easing": "ease_out"
+            },
+            {
+              "frame": 24,
+              "value": [
+                0,
+                0
+              ]
+            }
+          ]
+        },
+        {
+          "type": "opacity",
+          "keyframes": [
+            {
+              "frame": 0,
+              "value": 0
+            },
+            {
+              "frame": 18,
+              "value": 1
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "title-2",
+      "type": "text",
+      "start_frame": 0,
+      "end_frame": 180,
+      "font": "body",
+      "text": "Right aligned",
+      "font_size": 40,
+      "position": [
+        1316,
+        468
+      ],
+      "color": [
+        0.9,
+        0.94,
+        0.98,
+        1
+      ],
+      "layout": {
+        "width": 488,
+        "align": "right"
+      },
+      "effects": [
+        {
+          "type": "translation",
+          "keyframes": [
+            {
+              "frame": 0,
+              "value": [
+                0,
+                24
+              ],
+              "easing": "ease_out"
+            },
+            {
+              "frame": 24,
+              "value": [
+                0,
+                0
+              ]
+            }
+          ]
+        },
+        {
+          "type": "opacity",
+          "keyframes": [
+            {
+              "frame": 0,
+              "value": 0
+            },
+            {
+              "frame": 18,
+              "value": 1
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "body-2",
+      "type": "text",
+      "start_frame": 0,
+      "end_frame": 180,
+      "font": "body",
+      "text": "Long headlines and descriptions now stay inside the space you give them, with predictable alignment and graceful overflow.",
+      "font_size": 36,
+      "position": [
+        1316,
+        550
+      ],
+      "color": [
+        0.6,
+        0.7,
+        0.79,
+        1
+      ],
+      "layout": {
+        "width": 488,
+        "align": "right",
+        "line_spacing": 1.5,
+        "overflow": "ellipsis",
+        "height": 190,
+        "max_lines": 3
+      },
+      "effects": [
+        {
+          "type": "translation",
+          "keyframes": [
+            {
+              "frame": 0,
+              "value": [
+                0,
+                24
+              ],
+              "easing": "ease_out"
+            },
+            {
+              "frame": 24,
+              "value": [
+                0,
+                0
+              ]
+            }
+          ]
+        },
+        {
+          "type": "opacity",
+          "keyframes": [
+            {
+              "frame": 0,
+              "value": 0
+            },
+            {
+              "frame": 18,
+              "value": 1
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "note-2",
+      "type": "text",
+      "start_frame": 0,
+      "end_frame": 180,
+      "font": "body",
+      "text": "THREE LINES  /  TRAILING ELLIPSIS",
+      "font_size": 17,
+      "position": [
+        1316,
+        853
+      ],
+      "color": [
+        0.35,
+        0.47,
+        0.57,
+        1
+      ],
+      "effects": [
+        {
+          "type": "translation",
+          "keyframes": [
+            {
+              "frame": 0,
+              "value": [
+                0,
+                24
+              ],
+              "easing": "ease_out"
+            },
+            {
+              "frame": 24,
+              "value": [
+                0,
+                0
+              ]
+            }
+          ]
+        },
+        {
+          "type": "opacity",
+          "keyframes": [
+            {
+              "frame": 0,
+              "value": 0
+            },
+            {
+              "frame": 18,
+              "value": 1
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "footer",
+      "type": "text",
+      "start_frame": 0,
+      "end_frame": 180,
+      "font": "body",
+      "text": "ONE COMPOSITION FORMAT. CLI · C · PYTHON.",
+      "font_size": 20,
+      "position": [
+        80,
+        998
+      ],
+      "color": [
+        0.35,
+        0.47,
+        0.57,
+        1
+      ]
+    }
+  ]
+}

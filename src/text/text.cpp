@@ -89,71 +89,71 @@ PreparedText prepare_text(const std::filesystem::path& font_path, std::string_vi
     else hb_buffer_guess_segment_properties(buffer.get());
     hb_shape(font.get(), buffer.get(), nullptr, 0);
     if (!hb_buffer_allocation_successful(buffer.get())) throw std::bad_alloc();
-  unsigned int glyph_count = 0;
-  const auto* infos = hb_buffer_get_glyph_infos(buffer.get(), &glyph_count);
-  const auto* positions = hb_buffer_get_glyph_positions(buffer.get(), &glyph_count);
-  Shaped shaped;
-  auto& prepared = shaped.prepared;
-  if (raster) prepared.glyphs.reserve(glyph_count);
-  shaped.boundaries = {0, value.size()};
-  std::int64_t pen_x = 0;
-  std::int64_t pen_y = 0;
-  for (unsigned int index = 0; index < glyph_count; ++index) {
-    shaped.boundaries.push_back(infos[index].cluster);
-    if (raster) {
-    if (FT_Load_Glyph(face.get(), infos[index].codepoint, FT_LOAD_DEFAULT) != 0 ||
-        FT_Render_Glyph(face->glyph, FT_RENDER_MODE_NORMAL) != 0) {
-      throw std::runtime_error("unable to rasterize shaped glyph");
-    }
-    const auto& bitmap = face->glyph->bitmap;
-    const auto width = static_cast<std::int32_t>(bitmap.width);
-    const auto height = static_cast<std::int32_t>(bitmap.rows);
-    const auto glyph_x = (pen_x + positions[index].x_offset) / 64 +
-                         face->glyph->bitmap_left;
-    const auto glyph_y = -(pen_y + positions[index].y_offset) / 64 -
-                         face->glyph->bitmap_top;
-    if (glyph_x < std::numeric_limits<std::int32_t>::min() ||
-        glyph_x > std::numeric_limits<std::int32_t>::max() ||
-        glyph_y < std::numeric_limits<std::int32_t>::min() ||
-        glyph_y > std::numeric_limits<std::int32_t>::max()) {
-      throw std::overflow_error("shaped glyph position exceeds the supported range");
-    }
-    PreparedGlyph glyph{
-        .x = static_cast<std::int32_t>(glyph_x),
-        .y = static_cast<std::int32_t>(glyph_y),
-        .width = width,
-        .height = height,
-        .coverage = {}};
-    glyph.coverage.resize(static_cast<std::size_t>(width) * static_cast<std::size_t>(height));
-    for (std::int32_t row = 0; row < height; ++row) {
-      const auto source_row = bitmap.pitch >= 0 ? row : height - 1 - row;
-      const auto* source = bitmap.buffer +
-                           static_cast<std::ptrdiff_t>(source_row) *
-                               static_cast<std::ptrdiff_t>(std::abs(bitmap.pitch));
-      for (std::int32_t column = 0; column < width; ++column) {
-        std::uint8_t coverage = 0;
-        if (bitmap.pixel_mode == FT_PIXEL_MODE_GRAY) {
-          coverage = source[column];
-        } else if (bitmap.pixel_mode == FT_PIXEL_MODE_MONO) {
-          coverage = (source[column / 8] & (0x80U >> (column % 8))) != 0 ? 255U : 0U;
-        } else if (bitmap.pixel_mode == FT_PIXEL_MODE_BGRA) {
-          coverage = source[static_cast<std::size_t>(column) * 4U + 3U];
-        } else {
-          throw std::runtime_error("font produced an unsupported glyph bitmap format");
+    unsigned int glyph_count = 0;
+    const auto* infos = hb_buffer_get_glyph_infos(buffer.get(), &glyph_count);
+    const auto* positions = hb_buffer_get_glyph_positions(buffer.get(), &glyph_count);
+    Shaped shaped;
+    auto& prepared = shaped.prepared;
+    if (raster) prepared.glyphs.reserve(glyph_count);
+    shaped.boundaries = {0, value.size()};
+    std::int64_t pen_x = 0;
+    std::int64_t pen_y = 0;
+    for (unsigned int index = 0; index < glyph_count; ++index) {
+      shaped.boundaries.push_back(infos[index].cluster);
+      if (raster) {
+        if (FT_Load_Glyph(face.get(), infos[index].codepoint, FT_LOAD_DEFAULT) != 0 ||
+            FT_Render_Glyph(face->glyph, FT_RENDER_MODE_NORMAL) != 0) {
+          throw std::runtime_error("unable to rasterize shaped glyph");
         }
-        glyph.coverage[static_cast<std::size_t>(row) * static_cast<std::size_t>(width) +
-                       static_cast<std::size_t>(column)] = coverage;
+        const auto& bitmap = face->glyph->bitmap;
+        const auto width = static_cast<std::int32_t>(bitmap.width);
+        const auto height = static_cast<std::int32_t>(bitmap.rows);
+        const auto glyph_x = (pen_x + positions[index].x_offset) / 64 +
+                             face->glyph->bitmap_left;
+        const auto glyph_y = -(pen_y + positions[index].y_offset) / 64 -
+                             face->glyph->bitmap_top;
+        if (glyph_x < std::numeric_limits<std::int32_t>::min() ||
+            glyph_x > std::numeric_limits<std::int32_t>::max() ||
+            glyph_y < std::numeric_limits<std::int32_t>::min() ||
+            glyph_y > std::numeric_limits<std::int32_t>::max()) {
+          throw std::overflow_error("shaped glyph position exceeds the supported range");
+        }
+        PreparedGlyph glyph{
+            .x = static_cast<std::int32_t>(glyph_x),
+            .y = static_cast<std::int32_t>(glyph_y),
+            .width = width,
+            .height = height,
+            .coverage = {}};
+        glyph.coverage.resize(static_cast<std::size_t>(width) * static_cast<std::size_t>(height));
+        for (std::int32_t row = 0; row < height; ++row) {
+          const auto source_row = bitmap.pitch >= 0 ? row : height - 1 - row;
+          const auto* source = bitmap.buffer +
+                               static_cast<std::ptrdiff_t>(source_row) *
+                                   static_cast<std::ptrdiff_t>(std::abs(bitmap.pitch));
+          for (std::int32_t column = 0; column < width; ++column) {
+            std::uint8_t coverage = 0;
+            if (bitmap.pixel_mode == FT_PIXEL_MODE_GRAY) {
+              coverage = source[column];
+            } else if (bitmap.pixel_mode == FT_PIXEL_MODE_MONO) {
+              coverage = (source[column / 8] & (0x80U >> (column % 8))) != 0 ? 255U : 0U;
+            } else if (bitmap.pixel_mode == FT_PIXEL_MODE_BGRA) {
+              coverage = source[static_cast<std::size_t>(column) * 4U + 3U];
+            } else {
+              throw std::runtime_error("font produced an unsupported glyph bitmap format");
+            }
+            glyph.coverage[static_cast<std::size_t>(row) * static_cast<std::size_t>(width) +
+                           static_cast<std::size_t>(column)] = coverage;
+          }
+        }
+        prepared.glyphs.push_back(std::move(glyph));
       }
+      pen_x += positions[index].x_advance;
+      pen_y += positions[index].y_advance;
     }
-    prepared.glyphs.push_back(std::move(glyph));
-    }
-    pen_x += positions[index].x_advance;
-    pen_y += positions[index].y_advance;
-  }
-  shaped.advance = std::abs(static_cast<double>(pen_x) / 64.0);
-  std::sort(shaped.boundaries.begin(), shaped.boundaries.end());
-  shaped.boundaries.erase(std::unique(shaped.boundaries.begin(), shaped.boundaries.end()), shaped.boundaries.end());
-  return shaped;
+    shaped.advance = std::abs(static_cast<double>(pen_x) / 64.0);
+    std::sort(shaped.boundaries.begin(), shaped.boundaries.end());
+    shaped.boundaries.erase(std::unique(shaped.boundaries.begin(), shaped.boundaries.end()), shaped.boundaries.end());
+    return shaped;
   };
   if (!layout) return shape(text, true).prepared;  // Preserve legacy pixels exactly.
 
@@ -242,10 +242,14 @@ PreparedText prepare_text(const std::filesystem::path& font_path, std::string_vi
   if (layout->max_lines) limit = std::min(limit, static_cast<std::size_t>(*layout->max_lines));
   if (layout->overflow != TextOverflow::visible) {
     if (layout->height) {
-      const auto fitting = layout->overflow == TextOverflow::clip ?
-          static_cast<std::size_t>(std::ceil(*layout->height / spacing)) :
-          (*layout->height < ascent + descent ? 1U :
-          static_cast<std::size_t>(std::floor((*layout->height - ascent - descent) / spacing)) + 1);
+      const double fitting_count = spacing == 0 ? static_cast<double>(lines.size()) :
+          layout->overflow == TextOverflow::clip ? std::ceil(*layout->height / spacing) :
+          (*layout->height < ascent + descent ? 1.0 :
+           std::floor((*layout->height - ascent - descent) / spacing) + 1.0);
+      // Extremely small positive spacing can overflow the floating-point
+      // quotient. Clamp to the finite line count BEFORE converting to size_t.
+      const auto fitting = static_cast<std::size_t>(std::min(
+          static_cast<double>(lines.size()), fitting_count));
       limit = std::min(limit, fitting);
     }
   }

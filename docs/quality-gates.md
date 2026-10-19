@@ -14,6 +14,7 @@ running the existing focused renderer, media and API tests separately.
 | Showcase proxy | 540 | 320×180, 30 fps | Complete 18-second showcase geometry, animation, scene transitions and original score |
 | Fractional | 36 | 160×90, 30000/1001 fps | Moving video, image, shaped text, rounded/stroked card, blur fallback and stereo tone |
 | Full HD | 12 | 1920×1080, 30 fps | Full-resolution sampling, text/shape regions, effects and encode |
+| Text layout | 36 | 320×180, 30000/1001 fps | Word wrapping, alignment, line spacing, clipping/ellipsis, animated positions and stereo tone |
 
 Footage and the small image are generated locally; fonts come from installed
 system/dependency packages. CI never downloads stock footage, font assets or
@@ -25,7 +26,7 @@ CI does not claim to run that entire original media set on every push.
 ## Mandatory checks
 
 - **Native pixels:** compare every byte of every float RGBA frame with the complete
-  CPU reference, including media fusion differences: 56,505,600 pixels per job.
+  CPU reference, including media fusion differences: 58,579,200 pixels per job.
   Frame and pixel totals and active bounded/reference dispatch are checked.
 - **Encoded equality:** decode every frame of both bounded and full-frame MP4s;
   frame checksums and decoded stereo PCM must match exactly within that build.
@@ -73,3 +74,10 @@ or failure, retained for seven days. Quality is a correctness gate; it intention
 has no wall-time/fps assertion, so runner load cannot masquerade as a quality
 regression. For the original full showcase check and controlled performance runs,
 see [bounded graphics verification](../benchmarks/BOUNDED_GRAPHICS.md).
+
+Focused text tests also compare laid-out glyphs with independently prepared single
+lines, verify explicit/empty lines, combining clusters, long words, alignment shifts,
+clipping and ellipsis, reject malformed layout options, and test cache isolation
+for every field. Bounded-region tests compare layouts across transforms, blend
+modes, off-canvas positions and effect fallbacks with exact native pixels.
+Release smoke fixtures include layout text and compare decoded CLI/C/Python output.

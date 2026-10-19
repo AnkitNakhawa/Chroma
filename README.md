@@ -281,3 +281,12 @@ Use the dependency-free `chroma_render` wrapper for frame/MP4 rendering, progres
 callbacks, cancellation, and cache controls. Install the wheel included in each
 release archive, or run `python3 -m pip install ./python` from source. See the
 [Python guide](docs/python.md) and [example](examples/python-render.py).
+
+### Text layout
+
+Text layers accept an optional `layout` object for width-based word wrapping,
+left/center/right alignment, line spacing, height/line limits, clipping, and
+ellipsis. Existing text keeps its original positioning and pixels. See the
+[layout contract](docs/composition-format.md#text-layout) and the animated
+[1080p example](examples/text-layout.json). The same composition works through
+the CLI, C API, and Python.

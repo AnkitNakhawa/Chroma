@@ -326,7 +326,7 @@ disables retention. A resource larger than its cache budget is prepared and used
 without entering the cache or evicting useful entries. Preparation errors count
 as misses and load failures, and do not evict existing entries.
 
-The conservative byte charge includes retained image pixel vector capacity; text glyph vector and
+The conservative byte charge includes retained image pixel vector capacity; text glyph/line metadata vector and
 coverage capacities; resource and entry objects; key capacity; and list links.
 Hash buckets/nodes, shared-pointer control blocks, allocator overhead, temporary
 decode/shaping storage, frame surfaces, video decoders, and resources held by an
@@ -391,3 +391,19 @@ are work diagnostics, not total memory usage or literal byte-transfer counters.
 Physical planner full-canvas cost estimates remain conservative and do not model
 runtime region extents. Use the measured `graphics` counters for this optimization;
 see the [unchanged-showcase benchmark](benchmarks/2026-10-18-bounded-graphics.md).
+
+### Multiline text preparation
+
+Optional text layout remains a prepared-source operation. HarfBuzz measures
+cluster-safe candidate lines, and FreeType supplies font metrics and coverage.
+Line breaking uses exponential prefix search for narrow boxes, followed by
+word-boundary selection and final line reshaping. Layout reuses one font/face
+per preparation. Alignment/baseline shifts and source clipping are resolved into
+prepared glyph coordinates/coverage before existing effect and compositing passes.
+
+The prepared-resource key includes width, height, wrapping, alignment, spacing,
+line limit and overflow policy. Retention charges line-metadata vector capacity
+in addition to glyph metadata and coverage. Legacy text without layout retains
+the original shaping path and request key. The same prepared layout serves
+bounded and full-frame renderers; independent line/glyph tests validate layout
+semantics, while pixel-equivalence tests validate executor agreement.

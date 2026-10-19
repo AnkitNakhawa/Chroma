@@ -45,7 +45,9 @@ with Engine() as engine:
 `parse_composition` accepts JSON text, UTF-8 bytes, or a dictionary; pass
 `base_directory=` for relative asset paths. `load_composition` resolves assets
 relative to the composition file. `scene.inspect_plan(frame, optimized=True)`
-returns a Python dictionary. `render` returns the native profile dictionary.
+returns a Python dictionary. `render` returns the native profile dictionary. Text layers accept the same
+[layout object](composition-format.md#text-layout) for wrapping, alignment, line
+spacing, clipping, and ellipsis; no Python-specific layout API is needed.
 
 Progress callbacks run synchronously on the rendering thread. Each argument is
 an immutable, independently owned `RenderProgress` snapshot with `phase`,

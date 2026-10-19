@@ -510,6 +510,8 @@ if(CHROMA_BUILD_TESTS)
     COMMAND chroma_cli validate ${CMAKE_CURRENT_SOURCE_DIR}/examples/shapes.json
   )
 
+  add_test(NAME chroma_cli_validates_text_layout_example
+    COMMAND chroma_cli validate ${CMAKE_CURRENT_SOURCE_DIR}/examples/text-layout.json)
   add_test(
     NAME chroma_cli_validates_text_example
     COMMAND chroma_cli validate ${CMAKE_CURRENT_SOURCE_DIR}/examples/text.json
@@ -602,9 +604,9 @@ set(CHROMA_PACKAGE_DIR ${CMAKE_INSTALL_LIBDIR}/cmake/Chroma)
 install(TARGETS chroma_cli RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT CLI)
 install(TARGETS chroma_c_example RUNTIME DESTINATION ${CMAKE_INSTALL_LIBEXECDIR}/chroma COMPONENT Examples)
 install(FILES LICENSE README.md DESTINATION ${CMAKE_INSTALL_DATADIR}/chroma COMPONENT Documentation)
-install(FILES docs/c-api.md docs/render-control.md docs/python.md
+install(FILES docs/c-api.md docs/render-control.md docs/python.md docs/composition-format.md
   DESTINATION ${CMAKE_INSTALL_DATADIR}/chroma/docs COMPONENT Documentation)
-install(FILES examples/solid.json examples/animated-transforms.json
+install(FILES examples/solid.json examples/animated-transforms.json examples/text-layout.json
   DESTINATION ${CMAKE_INSTALL_DATADIR}/chroma/examples COMPONENT Examples)
 install(TARGETS chroma_c EXPORT ChromaTargets
   LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR} COMPONENT CAPI
