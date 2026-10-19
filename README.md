@@ -255,3 +255,10 @@ source WAVs. The offline corpus covers the full 18-second showcase timeline at
 proxy resolution, fractional timing, and full-HD rendering. Deliberately degraded,
 muted and truncated outputs must fail; missing dependencies cannot silently skip
 the dedicated jobs. See [thresholds, local commands and CI artifacts](docs/quality-gates.md).
+
+### Portable releases
+
+Linux and macOS release packaging includes the CLI, C SDK and a controlled shared
+media/text runtime. See [installation, supported systems, dependency licenses and
+release testing](packaging/README.md). Main builds upload tested snapshot archives;
+version tags publish only after build, quality and clean-runtime jobs pass.

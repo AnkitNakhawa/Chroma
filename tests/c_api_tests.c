@@ -7,7 +7,7 @@
 
 static int failures = 0;
 #define CHECK(value) do { if (!(value)) { fprintf(stderr, "line %d: %s (%s)\n", __LINE__, #value, chroma_last_error()); ++failures; } } while (0)
-static const char source[] = "{\"schema_version\":1,\"canvas\":{\"width\":8,\"height\":4,\"frame_rate\":{\"numerator\":30000,\"denominator\":1001},\"duration_frames\":60},\"layers\":[{\"id\":\"red\",\"type\":\"solid\",\"start_frame\":0,\"end_frame\":60,\"color\":[1,0,0,1]}]}";
+static const char source[] = "{\"schema_version\":1,\"canvas\":{\"width\":16,\"height\":16,\"frame_rate\":{\"numerator\":30000,\"denominator\":1001},\"duration_frames\":60},\"layers\":[{\"id\":\"red\",\"type\":\"solid\",\"start_frame\":0,\"end_frame\":60,\"color\":[1,0,0,1]}]}";
 
 int main(int argc, char** argv) {
   chroma_engine* engine = NULL;
@@ -61,7 +61,7 @@ int main(int argc, char** argv) {
     CHECK(chroma_composition_get_info(composition, &future.known, sizeof(future)) == CHROMA_OK);
     CHECK(future.tail == UINT64_C(123));
   }
-  CHECK(info.width == 8 && info.height == 4 && info.duration_frames == 60);
+  CHECK(info.width == 16 && info.height == 16 && info.duration_frames == 60);
   CHECK(info.frame_rate_numerator == 30000 && info.frame_rate_denominator == 1001);
   CHECK(chroma_composition_get_info(composition, &info, sizeof(info) - 1) == CHROMA_ERROR_INVALID_ARGUMENT);
   CHECK(chroma_composition_inspect_plan(composition, 0, 0, &text) == CHROMA_OK);
@@ -74,15 +74,15 @@ int main(int argc, char** argv) {
   CHECK(chroma_composition_inspect_plan(composition, 0, 2, &text) == CHROMA_ERROR_INVALID_ARGUMENT);
   CHECK(chroma_engine_render_frame(engine, composition, 0, &frame) == CHROMA_OK);
   CHECK(chroma_frame_get_info(frame, &frame_info, sizeof(frame_info)) == CHROMA_OK);
-  CHECK(frame_info.width == 8 && frame_info.height == 4);
+  CHECK(frame_info.width == 16 && frame_info.height == 16);
   CHECK(frame_info.pixel_format == CHROMA_PIXEL_RGBA_F32_LINEAR_PREMULTIPLIED);
-  CHECK(frame_info.row_stride_bytes == 8 * 4 * sizeof(float));
-  CHECK(frame_info.data_bytes == 8 * 4 * 4 * sizeof(float));
+  CHECK(frame_info.row_stride_bytes == 16 * 4 * sizeof(float));
+  CHECK(frame_info.data_bytes == 16 * 16 * 4 * sizeof(float));
   {
     unsigned index;
     const float* pixels = chroma_frame_data(frame);
     CHECK(pixels != NULL);
-    for (index = 0; index < 32; ++index) {
+    for (index = 0; index < 256; ++index) {
       CHECK(pixels[index * 4] == 1.0f && pixels[index * 4 + 1] == 0.0f);
       CHECK(pixels[index * 4 + 2] == 0.0f && pixels[index * 4 + 3] == 1.0f);
     }
@@ -122,8 +122,8 @@ int main(int argc, char** argv) {
     }
     if ((chroma_capabilities() & CHROMA_CAP_FFMPEG) != 0) {
       CHECK(chroma_engine_render_video(engine, composition, argv[1], &profile) == CHROMA_OK);
-      CHECK(strstr(chroma_string_data(profile), "\"frames_encoded\": 60") != NULL);
-      CHECK(strstr(chroma_string_data(profile), "\"cache\"") != NULL);
+      CHECK(profile && strstr(chroma_string_data(profile), "\"frames_encoded\": 60") != NULL);
+      CHECK(profile && strstr(chroma_string_data(profile), "\"cache\"") != NULL);
       remove(argv[1]);
     } else {
       CHECK(chroma_engine_render_video(engine, composition, argv[1], &profile) == CHROMA_ERROR_UNAVAILABLE);

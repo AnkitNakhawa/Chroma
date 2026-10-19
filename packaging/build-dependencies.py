@@ -34,7 +34,7 @@ def main():
     env['PKG_CONFIG_PATH'] = ''
     env.pop('PKG_CONFIG_SYSROOT_DIR', None)
     cmake_flags = ['-DCMAKE_BUILD_TYPE=Release', '-DBUILD_SHARED_LIBS=ON',
-                   f'-DCMAKE_INSTALL_PREFIX={prefix}', '-DCMAKE_INSTALL_LIBDIR=lib']
+                   f'-DCMAKE_INSTALL_PREFIX={prefix}', f'-DCMAKE_PREFIX_PATH={prefix}', '-DCMAKE_INSTALL_LIBDIR=lib']
     cflags = f'-I{prefix}/include'
     ldflags = f'-L{prefix}/lib -Wl,-rpath,{prefix}/lib'
     if platform.system() == 'Darwin':
@@ -85,7 +85,7 @@ def main():
             run([source / 'configure', f'--prefix={prefix}', '--enable-shared', '--disable-static',
                  '--enable-pic', '--disable-autodetect', '--disable-gpl', '--disable-nonfree',
                  '--enable-libopenh264', '--enable-zlib', '--disable-doc', '--disable-debug',
-                 '--disable-network', '--disable-avdevice', '--disable-x86asm',
+                 '--disable-network', '--disable-x86asm',
                  f'--extra-cflags={cflags}', f'--extra-ldflags={ldflags}'], build, env)
             run(['make', f'-j{a.jobs}'], build, env)
             run(['make', 'install'], build, env)
@@ -94,8 +94,8 @@ def main():
                 'zlib': ['-DZLIB_BUILD_TESTING=OFF'],
                 'freetype': [f'-DFT_DISABLE_{dep}=ON' for dep in ('ZLIB', 'BZIP2', 'PNG', 'HARFBUZZ', 'BROTLI')],
                 'harfbuzz': [f'-DHB_{option}=OFF' for option in (
-                    'HAVE_CORETEXT', 'HAVE_FREETYPE', 'HAVE_GLIB', 'HAVE_ICU', 'HAVE_CAIRO',
-                    'BUILD_UTILS', 'BUILD_SUBSET', 'BUILD_RASTER', 'BUILD_VECTOR', 'BUILD_GPU', 'BUILD_GPU_DEMO')],
+                    'HAVE_CORETEXT', 'HAVE_GLIB', 'HAVE_ICU', 'HAVE_CAIRO',
+                    'BUILD_UTILS', 'BUILD_SUBSET', 'BUILD_RASTER', 'BUILD_VECTOR', 'BUILD_GPU', 'BUILD_GPU_DEMO')] + ['-DHB_HAVE_FREETYPE=ON', f'-DFREETYPE_LIBRARY_RELEASE={prefix}/lib/' + ('libfreetype.dylib' if platform.system() == 'Darwin' else 'libfreetype.so'), f'-DFREETYPE_INCLUDE_DIR_freetype2={prefix}/include/freetype2', f'-DFREETYPE_INCLUDE_DIR_ft2build={prefix}/include/freetype2'],
                 'json': ['-DJSON_BuildTests=OFF'],
             }[name]
             build = work / 'build' / name

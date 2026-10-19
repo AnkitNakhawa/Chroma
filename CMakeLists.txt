@@ -231,6 +231,7 @@ if(CHROMA_BUILD_TESTS)
       -DCHROMA_SOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR} -DCHROMA_CONFIG=$<CONFIG>
       -DCHROMA_C_COMPILER=${CMAKE_C_COMPILER} -DCHROMA_SYSROOT=${CMAKE_OSX_SYSROOT}
       "-DCHROMA_LINK_FLAGS=${CMAKE_EXE_LINKER_FLAGS}" "-DCHROMA_C_FLAGS=${CMAKE_C_FLAGS}"
+      "-DCHROMA_TEST_RUNTIME_DIRS=${CHROMA_FFMPEG_LIBRARY_DIRS};${CHROMA_TEXT_LIBRARY_DIRS}"
       -DCHROMA_EXE_SUFFIX=${CMAKE_EXECUTABLE_SUFFIX} -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/install_consumer.cmake)
   set_tests_properties(chroma_c_api_install_consumer PROPERTIES TIMEOUT 120)
 
@@ -304,6 +305,8 @@ if(CHROMA_BUILD_TESTS)
   endif()
   find_package(Python3 COMPONENTS Interpreter QUIET)
   if(Python3_FOUND)
+    add_test(NAME chroma_release_packaging_tests
+      COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/release_packaging_tests.py)
     add_test(NAME chroma_showcase_tests
       COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/showcase_tests.py
               $<TARGET_FILE:chroma_cli>)

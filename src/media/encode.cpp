@@ -8,6 +8,7 @@
 #include <memory>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "chroma/core/render.hpp"
@@ -314,6 +315,11 @@ VideoRenderResult render_video_cpu(const Composition& composition,
   }
   if (encoder == nullptr) {
     throw std::runtime_error("this FFmpeg build does not provide an H.264 encoder");
+  }
+
+  if (std::string_view(encoder->name) == "libopenh264" &&
+      (composition.width() < 16 || composition.height() < 16)) {
+    throw std::invalid_argument("OpenH264 output requires canvas dimensions of at least 16 pixels");
   }
 
   auto* stream = avformat_new_stream(format.get(), nullptr);

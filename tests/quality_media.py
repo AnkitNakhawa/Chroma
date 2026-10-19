@@ -155,8 +155,8 @@ def negative_controls(args):
     document = json.loads(composition.read_text())
     clean = args.output / 'fractional' / 'bounded.mp4'
     degraded = args.output / 'fractional' / 'degraded.mp4'
-    run([args.ffmpeg, '-v', 'error', '-y', '-i', clean, '-vf', 'eq=brightness=0.2',
-         '-af', 'volume=0', '-c:v', 'libx264', '-crf', '40', '-c:a', 'aac', degraded])
+    run([args.ffmpeg, '-v', 'error', '-y', '-i', clean, '-vf', 'lutrgb=r=val+51:g=val+51:b=val+51',
+         '-af', 'volume=0', '-c:v', 'mpeg4', '-q:v', '20', '-c:a', 'aac', degraded])
     middle = document['canvas']['duration_frames'] // 2
     native = (args.output / 'fractional' / f'reference-{middle}.ppm').read_bytes()
     failures = {}

@@ -140,7 +140,7 @@ with tempfile.TemporaryDirectory(prefix="chroma-audio-integration-") as director
     run(ffmpeg, "-v", "error", "-i", root / "sound.wav", "-af", "asetpts=PTS+5/TB",
         "-c:a", "pcm_s16le", root / "offset.mka")
     run(ffmpeg, "-v", "error", "-f", "lavfi", "-i", "color=size=32x18:rate=30:duration=2",
-        "-i", root / "sound.wav", "-c:v", "libx264", "-c:a", "aac", "-b:a", "192k", root / "embedded.mp4")
+        "-i", root / "sound.wav", "-c:v", "mpeg4", "-c:a", "aac", "-b:a", "192k", root / "embedded.mp4")
     document["canvas"]["duration_frames"] = 60
     document["audio_tracks"] = [dict(id="trim", asset="sound", start_frame=15,
                                       end_frame=45, source_start_frame=30, gain=0.5)]
