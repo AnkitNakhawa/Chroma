@@ -39,6 +39,8 @@ def main():
             if not match: raise RuntimeError('Unable to parse peak RSS from time output')
             rss=int(match[1])*(1 if platform.system()=='Darwin' else 1024)
             data=json.loads(profile.read_text())['iterations'][0]
+            if data['frames_encoded'] != 540 or data['audio_samples_encoded'] != 864000:
+                raise RuntimeError('Benchmark did not render the complete showcase')
             samples.append(dict(variant=variant,run=index+1,wall_seconds=wall,peak_rss_bytes=rss,profile=data))
             report=dict(platform=platform.platform(),processor=platform.processor(),
                         composition_sha256=hashlib.sha256(args.composition.read_bytes()).hexdigest(),

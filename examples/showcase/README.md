@@ -56,3 +56,18 @@ prepared-resource caching, not the cumulative effect of all historical changes.
 Raw JSON is written after every completed sample so interrupted runs are usable.
 Stock downloads/preparation are excluded. Neither CUDA acceleration nor a
 performance advantage over FFmpeg/Remotion is implied.
+
+Verify the delivery independently with FFmpeg/ffprobe and the native renderer:
+
+```sh
+python3 examples/showcase/verify.py --chroma build-release/chroma \
+  --composition artifacts/showcase/composition.json \
+  --video artifacts/showcase/showcase.mp4 \
+  --output artifacts/showcase/verification.json
+```
+
+The verifier decodes all 540 video frames, checks every presentation timestamp,
+checks exact 18-second stream durations and decoded stereo sample count, measures
+audio level and the fade tail, compares four cache-enabled/disabled native scene
+frames byte-for-byte, and compares those frames with the lossy encoded output
+(mean absolute RGB error under 3/255). It records hashes and measured results.
