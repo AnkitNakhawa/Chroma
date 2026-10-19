@@ -624,8 +624,8 @@ PixelBounds clipped_bounds(double left, double top, double right, double bottom,
 struct RegionSurface {
   PixelBounds bounds;
   std::optional<Surface> surface;
-  explicit RegionSurface(PixelBounds region) : bounds(region) {
-    if (!region.empty()) surface.emplace(region.right - region.left, region.bottom - region.top);
+  explicit RegionSurface(PixelBounds region, bool allocate = true) : bounds(region) {
+    if (allocate && !region.empty()) surface.emplace(region.right - region.left, region.bottom - region.top);
   }
   Pixel read(std::int64_t x, std::int64_t y) const noexcept {
     if (!surface || x < bounds.left || x >= bounds.right || y < bounds.top || y >= bounds.bottom)
@@ -810,21 +810,42 @@ Surface render_shape(const ShapeGeometry& geometry, const Color& fill,
   return output;
 }
 
+PixelBounds text_bounds(const PreparedText& prepared, double baseline_x, double baseline_y,
+                         std::int32_t width, std::int32_t height) {
+  // Glyph offsets/dimensions are int32. Larger baselines cannot intersect any
+  // legal canvas, and must not be converted to an overflowing integer.
+  if (std::abs(baseline_x) > 1e12 || std::abs(baseline_y) > 1e12) return {};
+  const auto x = static_cast<std::int64_t>(std::floor(baseline_x));
+  const auto y = static_cast<std::int64_t>(std::floor(baseline_y));
+  std::int64_t left = width, top = height, right = 0, bottom = 0;
+  for (const auto& glyph : prepared.glyphs) {
+    if (glyph.width <= 0 || glyph.height <= 0) continue;
+    left = std::min(left, x + glyph.x); top = std::min(top, y + glyph.y);
+    right = std::max(right, x + glyph.x + glyph.width);
+    bottom = std::max(bottom, y + glyph.y + glyph.height);
+  }
+  return {static_cast<std::int32_t>(std::clamp(left, std::int64_t{0}, std::int64_t{width})),
+          static_cast<std::int32_t>(std::clamp(top, std::int64_t{0}, std::int64_t{height})),
+          static_cast<std::int32_t>(std::clamp(right, std::int64_t{0}, std::int64_t{width})),
+          static_cast<std::int32_t>(std::clamp(bottom, std::int64_t{0}, std::int64_t{height}))};
+}
+
 Surface render_prepared_text(const PreparedText& prepared, double baseline_x, double baseline_y,
-                             const Color& color, std::int32_t width, std::int32_t height) {
+                             const Color& color, std::int32_t width, std::int32_t height, std::int32_t region_left = 0, std::int32_t region_top = 0) {
   Surface output(width, height);
+  if (std::abs(baseline_x) > 1e12 || std::abs(baseline_y) > 1e12) return output;
   const auto paint = premultiply(color);
   const auto origin_x = static_cast<std::int64_t>(std::floor(baseline_x));
   const auto origin_y = static_cast<std::int64_t>(std::floor(baseline_y));
   for (const auto& glyph : prepared.glyphs) {
     for (std::int32_t y = 0; y < glyph.height; ++y) {
       const auto destination_y = origin_y + glyph.y + y;
-      if (destination_y < 0 || destination_y >= height) {
+      if (destination_y < region_top || destination_y >= std::int64_t{region_top} + height) {
         continue;
       }
       for (std::int32_t x = 0; x < glyph.width; ++x) {
         const auto destination_x = origin_x + glyph.x + x;
-        if (destination_x < 0 || destination_x >= width) {
+        if (destination_x < region_left || destination_x >= std::int64_t{region_left} + width) {
           continue;
         }
         const auto coverage = static_cast<float>(
@@ -836,8 +857,8 @@ Surface render_prepared_text(const PreparedText& prepared, double baseline_x, do
                                   .green = paint.green * coverage,
                                   .blue = paint.blue * coverage,
                                   .alpha = paint.alpha * coverage};
-        auto& destination = output.pixel(static_cast<std::int32_t>(destination_x),
-                                         static_cast<std::int32_t>(destination_y));
+        auto& destination = output.pixel(static_cast<std::int32_t>(destination_x - region_left),
+                                         static_cast<std::int32_t>(destination_y - region_top));
         destination = composite_over(source, destination);
       }
     }
@@ -899,10 +920,10 @@ Surface CpuRenderContext::execute(const ExecutionPlan& plan, CpuExecutionMode mo
       if (mode == CpuExecutionMode::fused && region_program_supported(shape->effects)) {
         RegionSurface region(clipped_bounds(shape->geometry.x, shape->geometry.y,
             shape->geometry.x + shape->geometry.width, shape->geometry.y + shape->geometry.height,
-            result.width(), result.height()));
-        if (region.surface)
-          *region.surface = render_shape(shape->geometry, shape->fill, shape->stroke,
-              region.surface->width(), region.surface->height(), region.bounds.left, region.bounds.top);
+            result.width(), result.height()), false);
+        if (!region.bounds.empty())
+          region.surface.emplace(render_shape(shape->geometry, shape->fill, shape->stroke,
+              region.bounds.right - region.bounds.left, region.bounds.bottom - region.bounds.top, region.bounds.left, region.bounds.top));
         composite_region(std::move(region), shape->effects, shape->blend_mode, result, last_execution_stats_.graphics);
         continue;
       }
@@ -931,6 +952,19 @@ Surface CpuRenderContext::execute(const ExecutionPlan& plan, CpuExecutionMode mo
               bytes = detail::add_cache_bytes(bytes, glyph.coverage.capacity());
             return bytes;
           });
+      if (mode == CpuExecutionMode::fused && region_program_supported(text->effects)) {
+        RegionSurface region(text_bounds(*prepared, text->x, text->y, result.width(), result.height()), false);
+        if (!region.bounds.empty())
+          region.surface.emplace(render_prepared_text(*prepared, text->x, text->y, text->color,
+              region.bounds.right - region.bounds.left, region.bounds.bottom - region.bounds.top, region.bounds.left, region.bounds.top));
+        composite_region(std::move(region), text->effects, text->blend_mode, result, last_execution_stats_.graphics);
+        continue;
+      }
+      ++last_execution_stats_.graphics.full_frame_operations;
+      last_execution_stats_.graphics.source_pixels += result.size();
+      last_execution_stats_.graphics.composite_pixels += result.size();
+      for (const auto& effect : text->effects.effects())
+        if (std::holds_alternative<Transform2DEffect>(effect)) last_execution_stats_.graphics.transform_pixels += result.size();
       auto source_surface = render_prepared_text(*prepared, text->x, text->y, text->color,
                                                  result.width(), result.height());
       source_surface = apply_effect_program_cpu(std::move(source_surface), text->effects);

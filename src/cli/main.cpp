@@ -40,12 +40,13 @@ std::optional<std::string> read_file(const char* path) {
 
 struct CacheOptions {
   chroma::CpuCacheConfig config;
+  chroma::CpuExecutionMode mode{chroma::CpuExecutionMode::fused};
   std::optional<std::filesystem::path> report;
 };
 
 std::optional<CacheOptions> parse_cache_options(int start, int argc, char** argv, bool allow_report) {
   CacheOptions options;
-  bool image_seen = false, text_seen = false, report_seen = false;
+  bool image_seen = false, text_seen = false, report_seen = false, graphics_seen = false;
   for (int index = start; index < argc; index += 2) {
     const std::string_view flag(argv[index]);
     if (index + 1 >= argc) {
@@ -56,6 +57,16 @@ std::optional<CacheOptions> parse_cache_options(int start, int argc, char** argv
     if (flag == "--cache-report" && allow_report && !report_seen && !value.empty()) {
       options.report = std::filesystem::path(value);
       report_seen = true;
+      continue;
+    }
+    if (flag == "--graphics-mode") {
+      if (graphics_seen || (value != "bounded" && value != "full-frame")) {
+        std::cerr << "graphics mode must be bounded or full-frame, without duplicates\n";
+        return std::nullopt;
+      }
+      graphics_seen = true;
+      options.mode = value == "bounded" ? chroma::CpuExecutionMode::fused
+                                       : chroma::CpuExecutionMode::unbounded_graphics;
       continue;
     }
     std::uint64_t bytes = 0;
@@ -108,6 +119,7 @@ void print_usage(std::ostream& output) {
          << "  chroma inspect-plan <composition.json> --frame <index>\n"
          << "  chroma inspect-optimized-plan <composition.json> --frame <index>\n"
          << "  chroma frame <composition.json> --frame <index> --output <frame.ppm>\n"
+         << "Append --graphics-mode bounded|full-frame to render, frame, or benchmark (default: bounded).\n"
          << "Append --image-cache-bytes <bytes> and --text-cache-bytes <bytes> to render, frame, or benchmark.\n"
          << "Append --cache-report <report.json> to render or frame. Zero bytes disables retention.\n";
 }
@@ -256,7 +268,7 @@ int main(int argc, char** argv) {
     }
     try {
       validate_cache_report_target(*cache_options, argv[4]);
-      const auto rendered = chroma::render_video_cpu(*result.composition, argv[4], cache_options->config);
+      const auto rendered = chroma::render_video_cpu(*result.composition, argv[4], cache_options->config, cache_options->mode);
       write_cache_report(*cache_options, rendered.cache);
       std::cout << "rendered " << rendered.frames_encoded << " frames to " << argv[4] << '\n';
       return 0;
@@ -303,7 +315,7 @@ int main(int argc, char** argv) {
             ("chroma-benchmark-" + std::to_string(unique) + "-" + std::to_string(index) +
              ".mp4");
         try {
-          iterations.push_back(chroma::render_video_cpu(*result.composition, temporary, cache_options->config));
+          iterations.push_back(chroma::render_video_cpu(*result.composition, temporary, cache_options->config, cache_options->mode));
         } catch (...) {
           std::error_code cleanup_error;
           std::filesystem::remove(temporary, cleanup_error);
@@ -385,7 +397,7 @@ int main(int argc, char** argv) {
     try {
       validate_cache_report_target(*cache_options, argv[6]);
       chroma::CpuRenderContext context(cache_options->config);
-      const auto surface = context.execute(chroma::compile_frame(*result.composition, *frame));
+      const auto surface = context.execute(chroma::compile_frame(*result.composition, *frame), cache_options->mode);
       std::ofstream output(argv[6], std::ios::binary);
       if (!output) {
         std::cerr << "unable to open output: " << argv[6] << '\n';

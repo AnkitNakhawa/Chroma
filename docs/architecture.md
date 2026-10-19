@@ -357,3 +357,33 @@ media output are rejected before rendering. Render-result snapshots are captured
 before context destruction; retained resources are released as the job ends.
 Snapshots are not summed across benchmark jobs because resident/peak values are
 per-context rather than additive process-memory measurements.
+
+### Bounded text and shape execution
+
+The CPU renderer stores eligible text/shape layers in clipped canvas-coordinate
+regions instead of canvas-sized transparent surfaces. Shape rasterization uses
+unchanged 4×4 coverage sample positions; text uses the same HarfBuzz/FreeType glyph
+preparations, baseline flooring, glyph order and source clipping. A region is
+never an independent local canvas: its integer origin remains explicit.
+
+Transform, crop and opacity programs execute on those regions, preserving each
+intermediate canvas clip and the reference program's effect order. Transform
+sampling computes the original canvas-space doubles and interpolation order;
+conservative destination bounds include bilinear support and rounding padding.
+Ill-conditioned/extreme arithmetic uses a full-canvas transform traversal over
+the bounded source. Singular transforms retain the reference transparency rule.
+Blur, masks, color matrices (which may create alpha outside source bounds), and
+other unsupported programs use the full-frame implementation.
+
+`CpuExecutionMode::unbounded_graphics` and CLI `--graphics-mode full-frame` select
+the original text/shape path while retaining video/image fusion. The default
+`bounded` mode enables the optimization; the existing complete `reference` mode
+still disables media fusion as well. C ABI callers receive the default path with
+unchanged pixel/ownership semantics and no ABI changes.
+
+Render profiles and each benchmark iteration include `graphics` counters:
+`bounded_operations`, `full_frame_operations`, `source_pixels`,
+`transform_pixels`, and `composite_pixels`. Pixel counters count destination
+slots rasterized/allocated, transformed and composited for text/shapes, including
+transparent padding inside their regions. They exclude media/solid layers and
+are work diagnostics, not total memory usage or literal byte-transfer counters.

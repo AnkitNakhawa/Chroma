@@ -54,6 +54,11 @@ double frames_per_second(std::int64_t frames, std::int64_t nanoseconds) {
 
 nlohmann::json profile_json(const VideoRenderResult& result) {
   return {{"frames_encoded", result.frames_encoded},
+          {"graphics", {{"bounded_operations", result.graphics.bounded_operations},
+                        {"full_frame_operations", result.graphics.full_frame_operations},
+                        {"source_pixels", result.graphics.source_pixels},
+                        {"transform_pixels", result.graphics.transform_pixels},
+                        {"composite_pixels", result.graphics.composite_pixels}}},
           {"cache", nlohmann::json::parse(cpu_cache_usage_json(result.cache))},
           {"audio_samples_encoded", result.audio_samples_encoded},
           {"frames_per_second",
@@ -278,7 +283,7 @@ class AudioOutput {
 }  // namespace
 
 VideoRenderResult render_video_cpu(const Composition& composition,
-                                   const std::filesystem::path& output_path, CpuCacheConfig cache_config) {
+                                   const std::filesystem::path& output_path, CpuCacheConfig cache_config, CpuExecutionMode execution_mode) {
 #if CHROMA_HAS_FFMPEG
   const auto total_start = Clock::now();
   if (output_path.empty()) {
@@ -406,19 +411,21 @@ VideoRenderResult render_video_cpu(const Composition& composition,
   std::int64_t composition_nanoseconds = 0;
   DecodeTelemetry decode_telemetry;
   EncodeTelemetry encode_telemetry;
+  CpuGraphicsStats graphics;
   CpuRenderContext render_context(cache_config);
   for (auto index = composition.range().start().value();
        index < composition.range().end().value(); ++index) {
     const auto compile_start = Clock::now();
     const auto plan = compile_frame(composition, FrameIndex(index));
     const auto compile_end = Clock::now();
-    const auto surface = render_context.execute(plan);
+    const auto surface = render_context.execute(plan, execution_mode);
     const auto execute_end = Clock::now();
     compile_nanoseconds += elapsed_nanoseconds(compile_start, compile_end);
     const auto frame_execute_nanoseconds = elapsed_nanoseconds(compile_end, execute_end);
     execute_nanoseconds += frame_execute_nanoseconds;
     const auto& execution_stats = render_context.last_execution_stats();
     decode_telemetry += execution_stats.decode;
+    graphics += execution_stats.graphics;
     const auto frame_decode_nanoseconds = execution_stats.decode.decode_nanoseconds +
                                           execution_stats.decode.conversion_nanoseconds;
     composition_nanoseconds += std::max<std::int64_t>(
@@ -497,11 +504,13 @@ VideoRenderResult render_video_cpu(const Composition& composition,
                            .encode = encode_telemetry,
                            .audio_samples_encoded = audio ? audio->samples() : 0,
                            .audio_nanoseconds = audio ? audio->nanoseconds() : 0,
-                           .cache = render_context.cache_usage()};
+                           .cache = render_context.cache_usage(),
+                           .graphics = graphics};
 #else
   static_cast<void>(composition);
   static_cast<void>(output_path);
   static_cast<void>(cache_config);
+  static_cast<void>(execution_mode);
   throw std::runtime_error("Chroma was built without FFmpeg media support");
 #endif
 }

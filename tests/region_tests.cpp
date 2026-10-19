@@ -62,5 +62,33 @@ void shapes() {
                                                       linear(random),linear(random),coord(random)},OpacityEffect{.63}})});
   }
 }
+void text(const std::filesystem::path& font) {
+  using namespace chroma;
+  CpuRenderContext fast, reference;
+  auto color = identity_color_matrix(); color.values[19] = .4;
+  const std::vector<EffectProgram> programs{
+      EffectProgram{}, EffectProgram({OpacityEffect{.37}}),
+      EffectProgram({Transform2DEffect{.9,-.2,8,.2,.9,-5}, OpacityEffect{.63}}),
+      EffectProgram({Transform2DEffect{-1,0,70,0,1,0}, CropEffect{3,-4,80,64}}),
+      EffectProgram({CropEffect{5,2,40,40}, Transform2DEffect{1,0,-40,0,1,0}, Transform2DEffect{1,0,40,0,1,0}}),
+      EffectProgram({GaussianBlurEffect{.8}}), EffectProgram({color})};
+  for (auto mode : {BlendMode::source_over, BlendMode::plus, BlendMode::multiply, BlendMode::screen})
+    for (const auto word : {"jÁffi", "A\xCC\x81", "مرحبا", "   "})
+      for (auto position : {std::pair{4.25,28.75}, std::pair{-10.25,-.75}, std::pair{88.5,56.2}, std::pair{1e100,0.}})
+        for (std::size_t i = 0; i < programs.size(); ++i) {
+          const ExecutionPlan plan(96,64,FrameIndex(0),{
+              ClearOperation{{.red=.12,.green=.43,.blue=.21,.alpha=.63}},
+              CompositeTextOperation{.source_id="text",.font_path=font,.text=word,.font_size=24,
+                  .x=position.first,.y=position.second,.color={.red=.8,.green=.2,.blue=.7,.alpha=.73},
+                  .effects=programs[i],.blend_mode=mode}});
+          const auto actual = fast.execute(plan);
+          const auto expected = reference.execute(plan, CpuExecutionMode::unbounded_graphics);
+          require(std::memcmp(actual.pixels().data(),expected.pixels().data(),actual.size()*sizeof(Pixel))==0,
+                  "bounded text must be bitwise equal to full-canvas reference");
+          require((fast.last_execution_stats().graphics.bounded_operations==1)==(i<5), "wrong text dispatch");
+        }
+  require(fast.cache_usage().text.hits>0, "text equivalence must exercise prepared-cache hits");
 }
-int main() { shapes(); return failures == 0 ? EXIT_SUCCESS : EXIT_FAILURE; }
+
+}
+int main(int argc, char** argv) { shapes(); if (argc>1) text(argv[1]); return failures == 0 ? EXIT_SUCCESS : EXIT_FAILURE; }

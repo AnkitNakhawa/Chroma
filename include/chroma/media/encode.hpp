@@ -7,6 +7,7 @@
 
 #include "chroma/core/composition.hpp"
 #include "chroma/core/cache.hpp"
+#include "chroma/core/render.hpp"
 #include "chroma/media/telemetry.hpp"
 
 namespace chroma {
@@ -24,11 +25,13 @@ struct VideoRenderResult {
   std::int64_t audio_samples_encoded{0};
   std::int64_t audio_nanoseconds{0};
   CpuCacheUsage cache{};
+  CpuGraphicsStats graphics{};
 };
 
 [[nodiscard]] VideoRenderResult render_video_cpu(const Composition& composition,
                                                  const std::filesystem::path& output_path,
-                                                 CpuCacheConfig cache_config = {});
+                                                 CpuCacheConfig cache_config = {},
+                                                 CpuExecutionMode execution_mode = CpuExecutionMode::fused);
 [[nodiscard]] std::string video_render_profile_json(const VideoRenderResult& result);
 [[nodiscard]] std::string video_benchmark_json(
     const std::vector<VideoRenderResult>& iterations);

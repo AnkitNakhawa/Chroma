@@ -246,9 +246,11 @@ if(CHROMA_BUILD_TESTS)
   target_link_libraries(chroma_composition_tests PRIVATE chroma::core)
   add_test(NAME chroma_composition_tests COMMAND chroma_composition_tests)
 
+  add_executable(chroma_graphics_equivalence benchmarks/graphics_equivalence.cpp)
+  target_link_libraries(chroma_graphics_equivalence PRIVATE chroma::core nlohmann_json::nlohmann_json)
+
   add_executable(chroma_region_tests tests/region_tests.cpp)
   target_link_libraries(chroma_region_tests PRIVATE chroma::core)
-  add_test(NAME chroma_region_tests COMMAND chroma_region_tests)
 
   add_executable(chroma_render_tests tests/render_tests.cpp)
   target_link_libraries(chroma_render_tests PRIVATE chroma::core)
@@ -284,8 +286,10 @@ if(CHROMA_BUILD_TESTS)
     PASS_REGULAR_EXPRESSION "\"pipeline_implemented\": false")
   if(CHROMA_TEST_FONT)
     add_test(NAME chroma_text_tests COMMAND chroma_text_tests ${CHROMA_TEST_FONT})
+    add_test(NAME chroma_region_tests COMMAND chroma_region_tests ${CHROMA_TEST_FONT})
   else()
     add_test(NAME chroma_text_tests COMMAND chroma_text_tests)
+    add_test(NAME chroma_region_tests COMMAND chroma_region_tests)
   endif()
   find_package(Python3 COMPONENTS Interpreter QUIET)
   if(Python3_FOUND)
@@ -297,6 +301,16 @@ if(CHROMA_BUILD_TESTS)
   if(CHROMA_HAS_FFMPEG AND CHROMA_FFMPEG_EXECUTABLE)
     find_package(Python3 COMPONENTS Interpreter REQUIRED)
     find_program(CHROMA_FFPROBE_EXECUTABLE ffprobe REQUIRED)
+    if(CHROMA_TEST_FONT)
+      add_test(NAME chroma_region_cli_tests
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/region_cli_tests.py
+                $<TARGET_FILE:chroma_cli> ${CHROMA_TEST_FONT})
+    else()
+      add_test(NAME chroma_region_cli_tests
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/region_cli_tests.py
+                $<TARGET_FILE:chroma_cli>)
+    endif()
+    set_tests_properties(chroma_region_cli_tests PROPERTIES TIMEOUT 120)
 
     add_test(NAME chroma_c_api_integration
       COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/c_api_integration.py
