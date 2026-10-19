@@ -1,7 +1,7 @@
 """Chroma video renderer's dependency-free Python binding to the stable C API."""
 from __future__ import annotations
 
-from contextlib import contextmanager
+from contextlib import contextmanager, ExitStack
 import ctypes as C
 from dataclasses import dataclass
 from enum import IntEnum, IntFlag
@@ -15,7 +15,8 @@ from ._native import LibraryLoadError
 
 __version__ = '0.1.0'
 __all__ = ['Engine', 'Composition', 'Frame', 'CompositionInfo', 'Capabilities', 'Status',
-           'ChromaError', 'InvalidCompositionError', 'LibraryLoadError']
+           'ChromaError', 'InvalidCompositionError', 'LibraryLoadError', 'CancellationToken',
+           'RenderCancelledError', 'RenderPhase', 'RenderProgress']
 
 
 class Status(IntEnum):
@@ -45,6 +46,10 @@ class ChromaError(RuntimeError):
         super().__init__(message)
 
 
+class RenderCancelledError(ChromaError):
+    """Rendering stopped before publishing the output."""
+
+
 class InvalidCompositionError(ChromaError):
     def __init__(self, message, diagnostics):
         self.diagnostics = diagnostics
@@ -57,7 +62,8 @@ def _message(library):
 
 def _check(library, status, message=None):
     if status:
-        raise ChromaError(status, message if message is not None else _message(library))
+        error = RenderCancelledError if status == Status.CANCELLED else ChromaError
+        raise error(status, message if message is not None else _message(library))
 
 
 def _integer(value, name, maximum, minimum=0):
@@ -170,6 +176,38 @@ class Frame:
         return self.width * 16
 
 
+class RenderPhase(IntEnum):
+    PREPARING = 0
+    RENDERING = 1
+    FINALIZING = 2
+    COMPLETED = 3
+
+
+@dataclass(frozen=True)
+class RenderProgress:
+    phase: RenderPhase
+    frames_encoded: int
+    total_frames: int
+    audio_samples_encoded: int
+    total_audio_samples: int
+    elapsed_nanoseconds: int
+
+
+class CancellationToken(_Handle):
+    """Thread-safe, latched cancellation request. Create a new token to reset."""
+    def __init__(self, *, library_path=None):
+        library = N.load_library(library_path)
+        if not library.has_render_control:
+            raise LibraryLoadError('This library lacks render control support')
+        handle = N.Handle()
+        _check(library, library.api.chroma_cancel_token_create(C.byref(handle)))
+        self._init_handle(library, handle, 'chroma_cancel_token_destroy')
+
+    def cancel(self):
+        with self._borrow() as handle:
+            self._native.api.chroma_cancel_token_request(handle)
+
+
 class Composition(_Handle):
     def __init__(self, *args, **kwargs):
         raise TypeError('Use Engine.parse_composition() or Engine.load_composition()')
@@ -274,12 +312,58 @@ class Engine(_Handle):
             finally:
                 self._native.api.chroma_frame_destroy(handle)
 
-    def render(self, composition, output_path):
+    def cancellation_token(self):
+        with self._borrow(exclusive=True):
+            return CancellationToken(library_path=self.library_path)
+
+    def render(self, composition, output_path, *, progress=None, cancel_token=None):
+        """Synchronously render; progress(snapshot) returns True to cancel."""
         _matching(self._native, composition, Composition)
+        if progress is not None and not callable(progress):
+            raise TypeError('progress must be callable or None')
+        if cancel_token is not None:
+            _matching(self._native, cancel_token, CancellationToken)
         path = _path(output_path)
-        with self._borrow(exclusive=True) as engine, composition._borrow() as scene:
+        if not self._native.has_render_control and (progress is not None or cancel_token is not None):
+            raise LibraryLoadError('This library lacks render control support')
+        callback_error = None
+
+        @N.Callback
+        def callback(pointer, unused):
+            nonlocal callback_error
+            try:
+                if callback_error is not None:
+                    return 1
+                native = pointer.contents
+                snapshot = RenderProgress(RenderPhase(native.phase), *(getattr(native, name)
+                    for name, _ in N.NativeProgress._fields_[2:]))
+                response = progress(snapshot) if progress is not None else None
+                if response is not None and not isinstance(response, bool):
+                    raise TypeError('progress callback must return bool or None')
+                return int(bool(response))
+            except BaseException as error:
+                # Never unwind Python exceptions through a C callback. Native
+                # cleanup runs first, then the original exception is re-raised.
+                callback_error = error
+                return 1
+
+        with ExitStack() as stack:
+            engine = stack.enter_context(self._borrow(exclusive=True))
+            scene = stack.enter_context(composition._borrow())
+            token = stack.enter_context(cancel_token._borrow()) if cancel_token is not None else None
             result = N.Handle()
-            _check(self._native, self._native.api.chroma_engine_render_video(engine, scene, path, C.byref(result)))
+            if self._native.has_render_control:
+                options = N.RenderOptions(C.sizeof(N.RenderOptions), 1, callback, None, token)
+                status = self._native.api.chroma_engine_render_video_with_options(
+                    engine, scene, path, C.byref(options), C.byref(result))
+            else:
+                status = self._native.api.chroma_engine_render_video(engine, scene, path, C.byref(result))
+            message = _message(self._native) if status else ''
+            if callback_error is not None:
+                if result:
+                    self._native.api.chroma_string_destroy(result)
+                raise callback_error
+            _check(self._native, status, message)
             return _owned_json(self._native, result)
 
     @property

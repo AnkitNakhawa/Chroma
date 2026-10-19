@@ -6,12 +6,14 @@ import json
 from pathlib import Path
 import sys
 import tempfile
+import threading
+from dataclasses import FrozenInstanceError
 import unittest
 import weakref
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'python/src'))
 from chroma_render import Engine, Composition, Capabilities, ChromaError, InvalidCompositionError, Status, LibraryLoadError
-from chroma_render import _native
+from chroma_render import _native, RenderPhase, RenderCancelledError
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--library', required=True)
@@ -122,6 +124,111 @@ class WrapperTests(unittest.TestCase):
                 with self.assertRaises(ChromaError) as caught: engine.render(scene, output)
                 self.assertEqual(caught.exception.status, Status.UNAVAILABLE)
                 self.assertFalse(output.exists())
+
+    def video_engine(self):
+        engine = self.engine()
+        if not engine.capabilities & Capabilities.FFMPEG:
+            self.skipTest('FFmpeg disabled')
+        return engine
+
+    def test_progress_snapshots_and_completed_return(self):
+        engine = self.video_engine()
+        events = []
+        with engine.parse_composition(document()) as scene, tempfile.TemporaryDirectory() as root:
+            def progress(event):
+                events.append(event)
+                self.assertEqual(threading.get_ident(), caller)
+                return event.phase == RenderPhase.COMPLETED
+            caller = threading.get_ident()
+            profile = engine.render(scene, Path(root) / 'video.mp4', progress=progress)
+            self.assertEqual(profile['frames_encoded'], 6)
+        self.assertEqual(events[0].phase, RenderPhase.PREPARING)
+        self.assertEqual(events[-1].phase, RenderPhase.COMPLETED)
+        self.assertIn(RenderPhase.FINALIZING, [e.phase for e in events])
+        self.assertEqual(events[-1].frames_encoded, 6)
+        self.assertEqual(events[-1].audio_samples_encoded, 0)
+        self.assertEqual([e.frames_encoded for e in events], sorted(e.frames_encoded for e in events))
+        self.assertEqual([e.elapsed_nanoseconds for e in events], sorted(e.elapsed_nanoseconds for e in events))
+        with self.assertRaises(FrozenInstanceError): events[0].total_frames = 0
+
+    def test_callback_cancellation_and_exceptions_preserve_destination(self):
+        engine = self.video_engine()
+        class CallbackFailure(Exception): pass
+        failure = CallbackFailure('original callback failure')
+        interrupt = KeyboardInterrupt('callback interrupt')
+        with engine.parse_composition(document()) as scene, tempfile.TemporaryDirectory() as root:
+            output = Path(root) / 'video.mp4'
+            def fails(event): raise failure
+            def interrupts(event): raise interrupt
+            for callback, expected in ((lambda event: event.frames_encoded >= 2, RenderCancelledError),
+                                       (fails, CallbackFailure), (interrupts, KeyboardInterrupt),
+                                       (lambda event: 'wrong return type', TypeError)):
+                output.write_bytes(b'original')
+                with self.assertRaises(expected) as caught:
+                    engine.render(scene, output, progress=callback)
+                if expected is CallbackFailure: self.assertIs(caught.exception, failure)
+                if expected is KeyboardInterrupt: self.assertIs(caught.exception, interrupt)
+                self.assertEqual(output.read_bytes(), b'original')
+                self.assertEqual(list(Path(root).glob('.chroma-render-*')), [])
+            engine.render(scene, output)  # Engine remains usable after failures.
+            self.assertNotEqual(output.read_bytes(), b'original')
+
+    def test_completed_exception_reports_already_published_output(self):
+        engine = self.video_engine()
+        with engine.parse_composition(document()) as scene, tempfile.TemporaryDirectory() as root:
+            output = Path(root) / 'video.mp4'
+            def progress(event):
+                if event.phase == RenderPhase.COMPLETED: raise ValueError('completed observer failed')
+            with self.assertRaisesRegex(ValueError, 'completed observer failed'):
+                engine.render(scene, output, progress=progress)
+            self.assertGreater(output.stat().st_size, 0)
+            self.assertEqual(list(Path(root).glob('.chroma-render-*')), [])
+
+    def test_thread_cancellation_and_pinned_lifetimes(self):
+        engine = self.video_engine()
+        entered, cancelled = threading.Event(), threading.Event()
+        errors = []
+        with engine.parse_composition(document()) as scene, engine.cancellation_token() as token, tempfile.TemporaryDirectory() as root:
+            output = Path(root) / 'video.mp4'
+            def worker():
+                try:
+                    if not entered.wait(5): raise AssertionError('callback not reached')
+                    for handle in (engine, scene, token):
+                        with self.assertRaises(RuntimeError): handle.close()
+                    with self.assertRaises(RuntimeError): engine.render_frame(scene)
+                    token.cancel()
+                except BaseException as error: errors.append(error)
+                finally: cancelled.set()
+            thread = threading.Thread(target=worker)
+            thread.start()
+            def progress(event):
+                entered.set()
+                if not cancelled.wait(5): raise AssertionError('GIL was not released')
+            try:
+                with self.assertRaises(RenderCancelledError):
+                    engine.render(scene, output, progress=progress, cancel_token=token)
+            finally:
+                entered.set(); thread.join(6)
+            self.assertFalse(thread.is_alive())
+            self.assertFalse(errors, errors)
+            self.assertFalse(output.exists())
+            # Cancellation is latched, and can be requested repeatedly.
+            token.cancel()
+            with self.assertRaises(RenderCancelledError): engine.render(scene, output, cancel_token=token)
+            engine.render(scene, output)
+
+    def test_callback_reentrancy_fails_safely(self):
+        engine = self.video_engine()
+        with engine.parse_composition(document()) as scene, tempfile.TemporaryDirectory() as root:
+            output = Path(root) / 'video.mp4'
+            with self.assertRaisesRegex(RuntimeError, 'busy'):
+                engine.render(scene, output, progress=lambda event: engine.clear_caches())
+            self.assertFalse(output.exists())
+            with self.assertRaises(TypeError): engine.render(scene, output, progress=3)
+            with self.assertRaises(TypeError): engine.render(scene, output, cancel_token=object())
+            with engine.cancellation_token() as token: pass
+            with self.assertRaises(RuntimeError): engine.render(scene, output, cancel_token=token)
+            with self.assertRaises(RuntimeError): token.cancel()
 
 
 if __name__ == '__main__':
