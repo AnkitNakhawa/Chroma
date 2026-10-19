@@ -7,6 +7,7 @@ project(
   LANGUAGES C CXX
 )
 
+option(CHROMA_RELOCATABLE_INSTALL "Use only package-relative runtime search paths" OFF)
 option(CHROMA_BUILD_TESTS "Build Chroma tests" ON)
 option(CHROMA_REQUIRE_QUALITY_TESTS "Fail configuration unless the media quality gate is available" OFF)
 option(CHROMA_ENABLE_FFMPEG "Enable FFmpeg media support when development libraries are available" ON)
@@ -89,7 +90,9 @@ add_library(chroma_c SHARED src/c_api/chroma.cpp)
 add_library(chroma::c ALIAS chroma_c)
 set_target_properties(chroma_c PROPERTIES OUTPUT_NAME chroma EXPORT_NAME c
   VERSION 1.0.0 SOVERSION 1 CXX_VISIBILITY_PRESET hidden VISIBILITY_INLINES_HIDDEN ON)
-set_target_properties(chroma_c PROPERTIES INSTALL_RPATH_USE_LINK_PATH TRUE)
+if(NOT CHROMA_RELOCATABLE_INSTALL)
+  set_target_properties(chroma_c PROPERTIES INSTALL_RPATH_USE_LINK_PATH TRUE)
+endif()
 if(APPLE)
   set_property(TARGET chroma_c APPEND PROPERTY INSTALL_RPATH "@loader_path")
 elseif(UNIX)
@@ -164,6 +167,13 @@ target_link_libraries(chroma_c_example PRIVATE chroma::c)
 add_executable(chroma_cli src/cli/main.cpp)
 set_target_properties(chroma_cli PROPERTIES OUTPUT_NAME chroma)
 target_link_libraries(chroma_cli PRIVATE chroma::core)
+if(APPLE)
+  set_target_properties(chroma_cli PROPERTIES INSTALL_RPATH "@loader_path/../lib")
+  set_target_properties(chroma_c_example PROPERTIES INSTALL_RPATH "@loader_path/../../lib")
+elseif(UNIX)
+  set_target_properties(chroma_cli PROPERTIES INSTALL_RPATH "$ORIGIN/../lib")
+  set_target_properties(chroma_c_example PROPERTIES INSTALL_RPATH "$ORIGIN/../../lib")
+endif()
 
 if(CHROMA_HAS_FFMPEG AND CHROMA_FFMPEG_EXECUTABLE)
   set(CHROMA_BENCHMARK_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/benchmarks)
@@ -555,6 +565,11 @@ endif()
 include(GNUInstallDirs)
 include(CMakePackageConfigHelpers)
 set(CHROMA_PACKAGE_DIR ${CMAKE_INSTALL_LIBDIR}/cmake/Chroma)
+install(TARGETS chroma_cli RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT CLI)
+install(TARGETS chroma_c_example RUNTIME DESTINATION ${CMAKE_INSTALL_LIBEXECDIR}/chroma COMPONENT Examples)
+install(FILES LICENSE README.md DESTINATION ${CMAKE_INSTALL_DATADIR}/chroma COMPONENT Documentation)
+install(FILES examples/solid.json examples/animated-transforms.json
+  DESTINATION ${CMAKE_INSTALL_DATADIR}/chroma/examples COMPONENT Examples)
 install(TARGETS chroma_c EXPORT ChromaTargets
   LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR} COMPONENT CAPI
   RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT CAPI
