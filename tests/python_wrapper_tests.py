@@ -11,13 +11,14 @@ from dataclasses import FrozenInstanceError
 import unittest
 import weakref
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'python/src'))
-from chroma_render import Engine, Composition, Capabilities, ChromaError, InvalidCompositionError, Status, LibraryLoadError
-from chroma_render import _native, RenderPhase, RenderCancelledError
-
 parser = argparse.ArgumentParser()
 parser.add_argument('--library', required=True)
+parser.add_argument('--installed', action='store_true')
 args, rest = parser.parse_known_args()
+if not args.installed:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'python/src'))
+from chroma_render import Engine, Composition, Capabilities, ChromaError, InvalidCompositionError, Status, LibraryLoadError
+from chroma_render import _native, RenderPhase, RenderCancelledError
 
 
 def document(frames=6, width=32, height=18):

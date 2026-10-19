@@ -67,7 +67,8 @@ cmake -S . -B build-package -DCMAKE_BUILD_TYPE=Release \
   -DCHROMA_REQUIRE_QUALITY_TESTS=ON
 cmake --build build-package --parallel 2
 ctest --test-dir build-package --output-on-failure
-python3 packaging/bundle.py --build build-package --work artifacts/release
+python3 -m pip wheel --no-deps ./python --wheel-dir artifacts/python-wheel
+python3 packaging/bundle.py --build build-package --work artifacts/release --python-wheel artifacts/python-wheel/*.whl
 ```
 
 Put the controlled prefix's `bin` directory first on PATH before configuring to run
@@ -85,3 +86,14 @@ an empty loader environment. Linux smoke tests run in unmodified Ubuntu containe
 macOS smoke tests run on a fresh runner without the build prefix. Consumer compilation
 is tested separately from runtime execution. Tag `v0.1.0` (matching CMake's version)
 to publish after every build and smoke job passes; main pushes create CI artifacts only.
+
+## Python wrapper
+
+Archives include `share/chroma/python/chroma_render/` and a pure Python wheel.
+Install the wheel offline with `python3 -m pip install --no-index --no-deps /path/to/chroma/share/chroma/python/*.whl`,
+then set `CHROMA_LIBRARY_PATH` to the SDK's `lib/libchroma.so` (Linux) or
+`lib/libchroma.dylib` (macOS). Alternatively set `PYTHONPATH` to the SDK's
+`share/chroma/python` directory for automatic SDK-relative library discovery.
+See `share/chroma/docs/python.md`. Python 3.10+ is required.
+Release CI installs the wheel into a fresh venv with no network or Python
+dependencies and compares decoded Python/CLI video and audio output.

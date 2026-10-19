@@ -40,3 +40,6 @@ tiny = dict(schema_version=1, canvas=dict(width=8, height=4,
             frame_rate=dict(numerator=30, denominator=1), duration_frames=1), layers=[])
 (a.output / 'tiny.json').write_text(json.dumps(tiny) + '\n')
 shutil.copy2(Path(__file__).with_name('smoke.sh'), a.output / 'smoke.sh')
+
+for name in ("python-smoke.py", "python-smoke.sh"):
+    shutil.copy2(Path(__file__).with_name(name), a.output / name)

@@ -50,7 +50,8 @@ jobs:
             cmake -S . -B build-package -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$PWD/artifacts/release/prefix" -DCMAKE_INSTALL_LIBDIR=lib -DCHROMA_RELOCATABLE_INSTALL=ON -DCHROMA_REQUIRE_QUALITY_TESTS=ON
             cmake --build build-package --parallel 2
             ctest --test-dir build-package --output-on-failure
-            uv run --python 3.12 --no-project python packaging/bundle.py --build build-package --work artifacts/release
+            uv run --python 3.12 --with build --no-project python -m build --wheel python --outdir artifacts/python-wheel
+            uv run --python 3.12 --no-project python packaging/bundle.py --build build-package --work artifacts/release --python-wheel artifacts/python-wheel/*.whl
             uv run --python 3.12 --no-project python packaging/prepare-smoke.py --output artifacts/smoke --ffmpeg "$PWD/artifacts/release/prefix/bin/ffmpeg"
           '
       - name: Build and test macOS package
@@ -68,7 +69,8 @@ jobs:
           cmake -S . -B build-package -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_SYSROOT="$SDKROOT" -DCMAKE_OSX_DEPLOYMENT_TARGET=14.0 -DCMAKE_PREFIX_PATH="$PWD/artifacts/release/prefix" -DCMAKE_INSTALL_LIBDIR=lib -DCHROMA_RELOCATABLE_INSTALL=ON -DCHROMA_REQUIRE_QUALITY_TESTS=ON
           cmake --build build-package --parallel 3
           ctest --test-dir build-package --output-on-failure
-          python3 packaging/bundle.py --build build-package --work artifacts/release
+          python3 -m pip wheel --no-deps ./python --wheel-dir artifacts/python-wheel
+          python3 packaging/bundle.py --build build-package --work artifacts/release --python-wheel artifacts/python-wheel/*.whl
           python3 packaging/prepare-smoke.py --output artifacts/smoke --ffmpeg "$PWD/artifacts/release/prefix/bin/ffmpeg"
       - name: Upload archives and runtime fixture
         uses: actions/upload-artifact@v7.0.2
@@ -133,6 +135,21 @@ jobs:
               /bin/sh /fixture/smoke.sh "/packages/$(ls /packages)" /fixture /tmp/results
             '
           done
+      - name: Install wheel offline and test Python runtime (Linux)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          docker run --rm -v "$PWD/relocated package:/packages:ro" -v "$PWD/downloaded/artifacts/smoke:/fixture:ro" python:3.12-slim-bookworm /bin/sh -ec '
+            /bin/sh /fixture/python-smoke.sh "/packages/$(ls /packages)" /fixture /usr/local/bin/python3
+          '
+      - uses: actions/setup-python@v6
+        if: runner.os == 'macOS'
+        with:
+          python-version: '3.12'
+      - name: Install wheel offline and test Python runtime (macOS)
+        if: runner.os == 'macOS'
+        shell: bash
+        run: /bin/sh downloaded/artifacts/smoke/python-smoke.sh "$PWD/relocated package/$(ls 'relocated package')" "$PWD/downloaded/artifacts/smoke" "$(command -v python3)"
       - name: Run on fresh macOS runner with empty loader environment
         if: runner.os == 'macOS'
         shell: bash

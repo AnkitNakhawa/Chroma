@@ -274,3 +274,10 @@ Ctrl+C and SIGTERM cancel cooperatively, preserving existing output and removing
 temporary media. JSON progress stays separate from FFmpeg diagnostics. The C API
 supports callbacks and cancellation tokens without breaking ABI v1.
 See [the progress, signal and output contract](docs/render-control.md).
+
+### Python API
+
+Use the dependency-free `chroma_render` wrapper for frame/MP4 rendering, progress
+callbacks, cancellation, and cache controls. Install the wheel included in each
+release archive, or run `python3 -m pip install ./python` from source. See the
+[Python guide](docs/python.md) and [example](examples/python-render.py).

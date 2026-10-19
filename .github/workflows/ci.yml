@@ -40,6 +40,28 @@ jobs:
       - name: Test
         run: ctest --test-dir build --output-on-failure -LE quality
 
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.10'
+      - name: Python minimum supported version
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = macOS ]; then library="$PWD/build/libchroma.dylib"; else library="$PWD/build/libchroma.so"; fi
+          python3 tests/python_wrapper_tests.py --library "$library"
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.14'
+      - name: Install and test wheel in isolated environment
+        shell: bash
+        run: |
+          python3 -m pip wheel --no-deps ./python --wheel-dir wheelhouse
+          python3 -m venv "$RUNNER_TEMP/python-wrapper"
+          "$RUNNER_TEMP/python-wrapper/bin/python" -m pip install --no-index --no-deps wheelhouse/*.whl
+          if [ "$RUNNER_OS" = macOS ]; then library="$PWD/build/libchroma.dylib"; else library="$PWD/build/libchroma.so"; fi
+          cd "$RUNNER_TEMP"
+          "$RUNNER_TEMP/python-wrapper/bin/python" "$GITHUB_WORKSPACE/tests/python_wrapper_tests.py" --installed --library "$library"
+
+
   quality:
     name: Quality (${{ matrix.os }})
     strategy:

@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "chroma-render"
+version = "0.1.0"
+description = "Python bindings for the Chroma video renderer's stable C API"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+authors = [{name = "Ankit Nakhawa"}]
+classifiers = ["Programming Language :: Python :: 3", "Operating System :: POSIX"]
+
+[project.urls]
+Repository = "https://github.com/AnkitNakhawa/Chroma"
+Documentation = "https://github.com/AnkitNakhawa/Chroma/blob/main/docs/python.md"
+
+[tool.setuptools.packages.find]
+where = ["src"]

@@ -118,12 +118,13 @@ def main():
     p.add_argument('--work', type=Path)
     p.add_argument('--output', type=Path, default=ROOT / 'dist')
     p.add_argument('--audit', type=Path)
+    p.add_argument('--python-wheel', type=Path, help='Pure Python wheel to include in the SDK')
     a = p.parse_args()
     if a.audit:
         print(json.dumps(audit(a.audit.resolve()), indent=2))
         return
-    if not a.build or not a.work:
-        p.error('--build and --work are required')
+    if not a.build or not a.work or not a.python_wheel:
+        p.error('--build, --work and --python-wheel are required')
     build, work, out = a.build.resolve(), a.work.resolve(), a.output.resolve()
     prefix = work / 'prefix'
     configuration = output([prefix / 'bin/ffmpeg', '-hide_banner', '-buildconf'])
@@ -144,6 +145,8 @@ def main():
         shutil.rmtree(stage)
     stage.mkdir(parents=True)
     run(['cmake', '--install', build, '--prefix', stage])
+    if a.python_wheel:
+        shutil.copy2(a.python_wheel, stage / 'share/chroma/python' / a.python_wheel.name)
     lib = stage / 'lib'
     for source in (prefix / 'lib').iterdir():
         if '.so' in source.name or source.suffix == '.dylib':

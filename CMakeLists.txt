@@ -325,10 +325,13 @@ if(CHROMA_BUILD_TESTS)
   endif()
   find_package(Python3 COMPONENTS Interpreter QUIET)
   if(Python3_FOUND)
-    add_test(NAME chroma_python_wrapper_tests
-      COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/python_wrapper_tests.py
-        --library $<TARGET_FILE:chroma_c>)
-    set_tests_properties(chroma_python_wrapper_tests PROPERTIES TIMEOUT 90)
+    option(CHROMA_TEST_PYTHON_WRAPPER "Run ctypes integration tests (requires a compatible Python host)" ON)
+    if(CHROMA_TEST_PYTHON_WRAPPER AND Python3_VERSION VERSION_GREATER_EQUAL "3.10")
+      add_test(NAME chroma_python_wrapper_tests
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/python_wrapper_tests.py
+          --library $<TARGET_FILE:chroma_c>)
+      set_tests_properties(chroma_python_wrapper_tests PROPERTIES TIMEOUT 90)
+    endif()
     add_test(NAME chroma_release_packaging_tests
       COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/release_packaging_tests.py)
     add_test(NAME chroma_showcase_tests
@@ -599,7 +602,7 @@ set(CHROMA_PACKAGE_DIR ${CMAKE_INSTALL_LIBDIR}/cmake/Chroma)
 install(TARGETS chroma_cli RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT CLI)
 install(TARGETS chroma_c_example RUNTIME DESTINATION ${CMAKE_INSTALL_LIBEXECDIR}/chroma COMPONENT Examples)
 install(FILES LICENSE README.md DESTINATION ${CMAKE_INSTALL_DATADIR}/chroma COMPONENT Documentation)
-install(FILES docs/c-api.md docs/render-control.md
+install(FILES docs/c-api.md docs/render-control.md docs/python.md
   DESTINATION ${CMAKE_INSTALL_DATADIR}/chroma/docs COMPONENT Documentation)
 install(FILES examples/solid.json examples/animated-transforms.json
   DESTINATION ${CMAKE_INSTALL_DATADIR}/chroma/examples COMPONENT Examples)
@@ -625,3 +628,7 @@ if(CHROMA_REQUIRE_QUALITY_TESTS)
     message(FATAL_ERROR "Quality gate unavailable: enable tests and provide FFmpeg/ffprobe, Python, HarfBuzz/FreeType and a test font")
   endif()
 endif()
+
+install(DIRECTORY python/src/chroma_render DESTINATION ${CMAKE_INSTALL_DATADIR}/chroma/python
+  COMPONENT Python FILES_MATCHING PATTERN "*.py" PATTERN "__pycache__" EXCLUDE)
+install(FILES examples/python-render.py DESTINATION ${CMAKE_INSTALL_DATADIR}/chroma/examples COMPONENT Python)
