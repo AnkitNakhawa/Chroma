@@ -311,6 +311,15 @@ if(CHROMA_BUILD_TESTS)
                 $<TARGET_FILE:chroma_cli>)
     endif()
     set_tests_properties(chroma_region_cli_tests PROPERTIES TIMEOUT 120)
+    if(CHROMA_TEST_FONT)
+      add_test(NAME chroma_quality_gate
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/quality_gate.py
+          --chroma $<TARGET_FILE:chroma_cli> --verifier $<TARGET_FILE:chroma_graphics_equivalence>
+          --ffmpeg ${CHROMA_FFMPEG_EXECUTABLE} --font ${CHROMA_TEST_FONT}
+          --output ${CMAKE_CURRENT_BINARY_DIR}/quality)
+      set_tests_properties(chroma_quality_gate PROPERTIES TIMEOUT 300 LABELS quality)
+    endif()
+
 
     add_test(NAME chroma_c_api_integration
       COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/c_api_integration.py
