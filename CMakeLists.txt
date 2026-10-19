@@ -4,7 +4,7 @@ project(
   chroma
   VERSION 0.1.0
   DESCRIPTION "Native render graph for agent-generated video"
-  LANGUAGES CXX
+  LANGUAGES C CXX
 )
 
 option(CHROMA_BUILD_TESTS "Build Chroma tests" ON)
@@ -63,7 +63,7 @@ if(CHROMA_HAS_FFMPEG)
   find_program(CHROMA_FFMPEG_EXECUTABLE ffmpeg)
 endif()
 
-add_library(chroma_core
+add_library(chroma_core STATIC
   src/core/cache.cpp
   src/core/composition.cpp
   src/core/effect.cpp
@@ -81,6 +81,49 @@ add_library(chroma_core
   src/text/text.cpp
 )
 add_library(chroma::core ALIAS chroma_core)
+set_target_properties(chroma_core PROPERTIES POSITION_INDEPENDENT_CODE ON
+  CXX_VISIBILITY_PRESET hidden VISIBILITY_INLINES_HIDDEN ON)
+
+add_library(chroma_c SHARED src/c_api/chroma.cpp)
+add_library(chroma::c ALIAS chroma_c)
+set_target_properties(chroma_c PROPERTIES OUTPUT_NAME chroma EXPORT_NAME c
+  VERSION 1.0.0 SOVERSION 1 CXX_VISIBILITY_PRESET hidden VISIBILITY_INLINES_HIDDEN ON)
+target_compile_features(chroma_c PRIVATE cxx_std_20)
+target_compile_definitions(chroma_c PRIVATE CHROMA_C_BUILD CHROMA_VERSION="${PROJECT_VERSION}")
+target_include_directories(chroma_c PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include> $<INSTALL_INTERFACE:include>)
+target_link_libraries(chroma_c PRIVATE chroma::core)
+# Export only the explicitly declared C ABI, including when C++ runtime templates
+# request default visibility. Regenerate this list when the public header changes.
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+  ${CMAKE_CURRENT_SOURCE_DIR}/include/chroma/chroma.h)
+file(STRINGS include/chroma/chroma.h CHROMA_API_DECLARATIONS REGEX "CHROMA_API.*CHROMA_CALL chroma_")
+set(CHROMA_API_SYMBOLS "")
+foreach(declaration IN LISTS CHROMA_API_DECLARATIONS)
+  string(REGEX MATCH "CHROMA_CALL (chroma_[a-z0-9_]+)" match "${declaration}")
+  list(APPEND CHROMA_API_SYMBOLS "${CMAKE_MATCH_1}")
+endforeach()
+if(APPLE)
+  set(CHROMA_EXPORT_FILE ${CMAKE_CURRENT_BINARY_DIR}/chroma.exports)
+  file(WRITE ${CHROMA_EXPORT_FILE} "")
+  foreach(symbol IN LISTS CHROMA_API_SYMBOLS)
+    file(APPEND ${CHROMA_EXPORT_FILE} "_${symbol}\n")
+  endforeach()
+  target_link_options(chroma_c PRIVATE "LINKER:-exported_symbols_list,${CHROMA_EXPORT_FILE}")
+elseif(UNIX)
+  set(CHROMA_EXPORT_FILE ${CMAKE_CURRENT_BINARY_DIR}/chroma.map)
+  file(WRITE ${CHROMA_EXPORT_FILE} "CHROMA_1 { global:\n")
+  foreach(symbol IN LISTS CHROMA_API_SYMBOLS)
+    file(APPEND ${CHROMA_EXPORT_FILE} "${symbol};\n")
+  endforeach()
+  file(APPEND ${CHROMA_EXPORT_FILE} "local: *; };\n")
+  target_link_options(chroma_c PRIVATE "LINKER:--version-script,${CHROMA_EXPORT_FILE}")
+endif()
+if(CHROMA_EXPORT_FILE)
+  set_property(TARGET chroma_c APPEND PROPERTY LINK_DEPENDS ${CHROMA_EXPORT_FILE})
+endif()
+
+
 
 target_compile_features(chroma_core PUBLIC cxx_std_20)
 target_include_directories(chroma_core
@@ -143,6 +186,12 @@ if(CHROMA_BUILD_TESTS)
 
   add_test(NAME chroma_cli_validates_audio_example
     COMMAND chroma_cli validate ${CMAKE_CURRENT_SOURCE_DIR}/examples/audio.json)
+
+  add_executable(chroma_c_api_tests tests/c_api_tests.c)
+  target_compile_features(chroma_c_api_tests PRIVATE c_std_99)
+  set_target_properties(chroma_c_api_tests PROPERTIES LINKER_LANGUAGE C)
+  target_link_libraries(chroma_c_api_tests PRIVATE chroma::c)
+  add_test(NAME chroma_c_api_tests COMMAND chroma_c_api_tests)
 
   add_executable(chroma_cache_tests tests/cache_tests.cpp)
   target_include_directories(chroma_cache_tests PRIVATE src/core)
