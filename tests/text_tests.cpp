@@ -1,4 +1,6 @@
 #include <algorithm>
+#include <cmath>
+#include <limits>
 #include <cstdlib>
 #include <chrono>
 #include <filesystem>
@@ -144,10 +146,98 @@ void text_cache_budgets_preserve_pixels_and_bound_retention(const std::filesyste
   std::filesystem::remove_all(directory);
 }
 
+bool same_glyph(const chroma::PreparedGlyph& a, const chroma::PreparedGlyph& b, int dx=0, int dy=0) {
+  return a.x + dx == b.x && a.y + dy == b.y && a.width == b.width &&
+         a.height == b.height && a.coverage == b.coverage;
+}
+
+void text_layout_shapes_lines_without_changing_legacy_pixels(const std::filesystem::path& font) {
+  chroma::TextLayout layout;
+  const auto hello = chroma::prepare_text(font, "Hello", 24);
+  const auto word = chroma::prepare_text(font, "Hello", 24, layout);
+  CHECK(word.lines.size() == 1);
+  CHECK(word.glyphs.size() == hello.glyphs.size());
+  for (std::size_t i=0; i<hello.glyphs.size(); ++i) CHECK(same_glyph(hello.glyphs[i], word.glyphs[i]));
+  layout.width = word.lines[0].advance + 1;
+  layout.line_spacing = 1.5;
+  const auto wrapped = chroma::prepare_text(font, "Hello Hello", 24, layout);
+  CHECK(wrapped.lines.size() == 2);
+  CHECK(wrapped.lines[1].baseline == 36);
+  CHECK(wrapped.glyphs.size() == 2 * hello.glyphs.size());
+  for (std::size_t i=0; i<hello.glyphs.size(); ++i) {
+    CHECK(same_glyph(hello.glyphs[i], wrapped.glyphs[i]));
+    CHECK(same_glyph(hello.glyphs[i], wrapped.glyphs[i+hello.glyphs.size()], 0, 36));
+  }
+  layout.width = 200;
+  for (auto alignment : {chroma::TextAlign::center, chroma::TextAlign::right}) {
+    layout.align = alignment;
+    const auto aligned = chroma::prepare_text(font, "Hello", 24, layout);
+    const auto offset = static_cast<int>(std::llround((200-word.lines[0].advance) /
+                                (alignment == chroma::TextAlign::center ? 2 : 1)));
+    CHECK(same_glyph(hello.glyphs[0], aligned.glyphs[0], offset));
+  }
+  layout.align = chroma::TextAlign::left;
+  const auto explicit_lines = chroma::prepare_text(font, "A\r\n\nB\n", 24, layout);
+  CHECK(explicit_lines.lines.size() == 4);
+  CHECK(explicit_lines.lines[2].baseline == 72);
+  layout.wrap = chroma::TextWrap::none;
+  layout.width = 1;
+  CHECK(chroma::prepare_text(font, "Hello Hello", 24, layout).lines.size() == 1);
+  layout.wrap = chroma::TextWrap::word;
+  CHECK(chroma::prepare_text(font, "a\xcc\x81" "b", 24, layout).lines.size() == 2);
+  const auto long_word = chroma::prepare_text(font, "abcdefgh", 24, layout);
+  CHECK(long_word.lines.size() == 8);
+  const auto blank = chroma::prepare_text(font, "   ", 24, layout);
+  CHECK(blank.lines.size() == 1);
+  CHECK(chroma::prepare_text(font, "\n", 24, layout).lines.size() == 2);
+}
+
+void overflow_clips_or_ellipsizes_and_validates(const std::filesystem::path& font) {
+  chroma::TextLayout layout;
+  layout.width = 20;
+  layout.height = 12;
+  layout.wrap = chroma::TextWrap::none;
+  layout.overflow = chroma::TextOverflow::clip;
+  const auto clipped = chroma::prepare_text(font, "Hello\nworld", 24, layout);
+  CHECK(clipped.truncated);
+  for (const auto& glyph : clipped.glyphs) {
+    CHECK(glyph.x >= 0 && glyph.x + glyph.width <= 20);
+    CHECK(glyph.height <= 12);
+  }
+  layout.height.reset();
+  layout.width = 200;
+  layout.max_lines = 1;
+  layout.overflow = chroma::TextOverflow::ellipsis;
+  const auto truncated = chroma::prepare_text(font, "Hello\nworld", 24, layout);
+  const auto expected = chroma::prepare_text(font, "Hello\xe2\x80\xa6", 24);
+  CHECK(truncated.truncated && truncated.lines.size() == 1);
+  CHECK(truncated.glyphs.size() == expected.glyphs.size());
+  for (std::size_t i=0; i<expected.glyphs.size(); ++i) CHECK(same_glyph(expected.glyphs[i], truncated.glyphs[i]));
+  layout.width = 1;
+  const auto tiny = chroma::prepare_text(font, "Hello", 24, layout);
+  CHECK(tiny.truncated && tiny.glyphs.empty());
+  layout.overflow = chroma::TextOverflow::visible;
+  layout.wrap = chroma::TextWrap::word;
+  const auto narrow = chroma::prepare_text(font, std::string(16384, 'x'), 12, layout);
+  CHECK(narrow.lines.size() == 1 && narrow.truncated);
+  for (double invalid : {0., -1., 65537., std::numeric_limits<double>::infinity()}) {
+    layout.width = invalid;
+    CHECK_THROWS_AS(chroma::prepare_text(font, "Hello", 24, layout), std::invalid_argument);
+  }
+  layout.width = 100;
+  layout.line_spacing = 0;
+  CHECK_THROWS_AS(chroma::prepare_text(font, "Hello", 24, layout), std::invalid_argument);
+  layout.line_spacing = 1.2;
+  layout.max_lines = 0;
+  CHECK_THROWS_AS(chroma::prepare_text(font, "Hello", 24, layout), std::invalid_argument);
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
   if (argc == 2) {
+    text_layout_shapes_lines_without_changing_legacy_pixels(argv[1]);
+    overflow_clips_or_ellipsizes_and_validates(argv[1]);
     shaped_text_is_prepared_cached_and_rendered(argv[1]);
     text_cache_budgets_preserve_pixels_and_bound_retention(argv[1]);
   } else if (chroma::text_support_available()) {
