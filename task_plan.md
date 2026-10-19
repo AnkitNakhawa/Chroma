@@ -218,3 +218,9 @@ remain separate milestones rather than unimplemented promises of the v1 ABI.
 1. [complete] Author and reproduce an 18-second editorial film with footage, animated text/cards, transitions and original music; preserve asset attribution and checksums.
 2. [complete] Validate all 540 presentation timestamps, exact audio/video durations, stereo audio content/fade, cache-equivalent native frames and encoded image quality; inspect scene and transition frames.
 3. [complete] Publish six sequential full-resolution CPU measurements with per-stage timings, peak RSS, raw results and limitations. The cached median is 85.91 seconds versus 89.37 seconds uncached (~4% observed throughput gain with overlapping ranges). Equivalent FFmpeg/Remotion comparisons and GPU acceleration remain pending.
+
+### Bounded-region graphics checkpoint
+
+1. [complete] Add canvas-coordinate shape/text regions and supported transform/crop/opacity execution, retaining conservative full-frame fallbacks and the original path as an oracle.
+2. [complete] Prove bitwise pixel equivalence on focused edge cases and all 540 unchanged showcase frames; expose same-binary graphics selection and runtime work counters.
+3. [complete] Measure three alternating full-encode pairs after separate warm-ups: 26.32 s bounded versus 88.88 s full-frame (3.38× throughput, 70.4% less wall time). Original and optimized MP4s are byte-identical. Peak RSS did not improve; GPU/competitor comparisons remain pending.

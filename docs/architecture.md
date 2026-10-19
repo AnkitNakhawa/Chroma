@@ -387,3 +387,7 @@ Render profiles and each benchmark iteration include `graphics` counters:
 slots rasterized/allocated, transformed and composited for text/shapes, including
 transparent padding inside their regions. They exclude media/solid layers and
 are work diagnostics, not total memory usage or literal byte-transfer counters.
+
+Physical planner full-canvas cost estimates remain conservative and do not model
+runtime region extents. Use the measured `graphics` counters for this optimization;
+see the [unchanged-showcase benchmark](benchmarks/2026-10-18-bounded-graphics.md).

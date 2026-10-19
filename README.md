@@ -233,3 +233,16 @@ are not part of this initial interface.
 film combining coastal footage, animated typography/cards, transitions, and an
 original electronic score. The example includes asset preparation, attribution,
 offline tests, and a full-resolution cache A/B benchmark runner.
+
+### Bounded-region graphics performance
+
+Eligible text/shape layers now rasterize, transform and composite their affected
+regions, with full-frame fallbacks for unsupported effects. On the unchanged
+18-second 1080p showcase, a controlled three-pair CPU benchmark measured a median
+**26.32 s versus 88.88 s** using the retained full-frame path: **3.38× throughput**
+with bitwise-equal native frames and a byte-identical MP4. This is a workload-specific
+result; peak process memory did not improve. See [raw evidence and methodology](docs/benchmarks/2026-10-18-bounded-graphics.md).
+
+Use `--graphics-mode bounded|full-frame` on `frame`, `render`, or `benchmark` for
+a same-binary comparison; the default is `bounded`. Both modes retain identical
+media fusion and cache settings.

@@ -1,0 +1,28 @@
+{
+  "bounded": {
+    "bounded_operations": 5170,
+    "composite_pixels": 252371462,
+    "full_frame_operations": 0,
+    "source_pixels": 250213698,
+    "transform_pixels": 39120011
+  },
+  "comparison": "bitwise float RGBA",
+  "frames": 540,
+  "full_frame": {
+    "bounded_operations": 0,
+    "composite_pixels": 10720512000,
+    "full_frame_operations": 5170,
+    "source_pixels": 10720512000,
+    "transform_pixels": 1654732800
+  },
+  "pixels_compared": 1119744000,
+  "verification_seconds": 92.911400209,
+  "composition_sha256": "a8faa46b091597b7952bc49799497872a2ef1ed09ff791bb8e8324e826182cb6",
+  "asset_sha256": {
+    "ocean": "327d638177e76da352a9a501dff57ff2f03b150f0a5e52d2f9dd1287dcac9942",
+    "bold": "8a0aace75d33794eece4b28187bfc1df0bbd2888b5d8a56e01788c8d65d16be1",
+    "regular": "d636e4683231f931eda222d588e944d082bfd3bdba02f928bee461c0f185b251",
+    "music": "6b638d0042c1f2f8b8c90d36c18e33162591e3b2c31fbf99319b288306a663f3"
+  },
+  "code_revision": "e46a959086e6255680d6811409e0e94f2e5702ad"
+}

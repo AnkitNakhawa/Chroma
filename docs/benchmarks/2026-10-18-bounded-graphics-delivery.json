@@ -1,0 +1,41 @@
+{
+  "mp4_byte_identical": true,
+  "original_mp4_sha256": "4928a7273aff19d07ad456625f47c26edeb9a1905a6d49907197137f492f95ca",
+  "bounded_mp4_sha256": "4928a7273aff19d07ad456625f47c26edeb9a1905a6d49907197137f492f95ca",
+  "decoded_video_framemd5_identical": true,
+  "delivery_validation": {
+    "video": {
+      "width": 1920,
+      "height": 1080,
+      "frames": 540,
+      "fps": 30,
+      "seconds": 18,
+      "codec": "h264",
+      "timestamp_check": "every frame"
+    },
+    "audio": {
+      "codec": "aac",
+      "rate": 48000,
+      "channels": 2,
+      "samples": 864000,
+      "peak": 0.348846435546875,
+      "body_rms": 0.057537902353779646,
+      "tail_rms": 0.0016631633565899434
+    },
+    "encoded_frame_rgb_mae": {
+      "72": 1.032645318930041,
+      "240": 0.487007137345679,
+      "390": 0.369325970936214,
+      "510": 0.9771818737139918
+    },
+    "decoded_video_framemd5_sha256": "b491cb3a73aae8468d7cbfb0acb9aa31ce939ccd6c4fdb9856d3ee3dd02cd786",
+    "cache_equivalent_frame_sha256": {
+      "72": "268cb429bb4997d6349c45cfa96fb1cb277cb621a5a8e0ccda1c902060b3f383",
+      "240": "c3aa8341b8f742e6778cb84d731c37f114e095c24057ef98e7eef7422e60ab5b",
+      "390": "748d8050ec8b711cc154501c65b577aa848ce9a3f6de3a5ffd6f093b25454d7f",
+      "510": "66b2515697dc1d14130de9a8cad75bfed5c7ca5e518da4a1ea001785590e9a8a"
+    },
+    "composition_sha256": "a8faa46b091597b7952bc49799497872a2ef1ed09ff791bb8e8324e826182cb6",
+    "video_sha256": "4928a7273aff19d07ad456625f47c26edeb9a1905a6d49907197137f492f95ca"
+  }
+}
