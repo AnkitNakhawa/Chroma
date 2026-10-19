@@ -212,3 +212,9 @@ and effect-output caching remain separate future milestones.
 
 Async job scheduling, cancellation/progress callbacks, and thin language bindings
 remain separate milestones rather than unimplemented promises of the v1 ABI.
+
+### 1080p showcase checkpoint
+
+1. [complete] Author and reproduce an 18-second editorial film with footage, animated text/cards, transitions and original music; preserve asset attribution and checksums.
+2. [complete] Validate all 540 presentation timestamps, exact audio/video durations, stereo audio content/fade, cache-equivalent native frames and encoded image quality; inspect scene and transition frames.
+3. [complete] Publish six sequential full-resolution CPU measurements with per-stage timings, peak RSS, raw results and limitations. The cached median is 85.91 seconds versus 89.37 seconds uncached (~4% observed throughput gain with overlapping ranges). Equivalent FFmpeg/Remotion comparisons and GPU acceleration remain pending.

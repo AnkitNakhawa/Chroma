@@ -1,0 +1,21 @@
+{
+  "sources": {
+    "ocean-source.mp4": "https://videos.pexels.com/video-files/4193133/4193133-uhd_2562_1440_24fps.mp4",
+    "Lato-Bold.ttf": "https://raw.githubusercontent.com/google/fonts/main/ofl/lato/Lato-Bold.ttf",
+    "Lato-Regular.ttf": "https://raw.githubusercontent.com/google/fonts/main/ofl/lato/Lato-Regular.ttf",
+    "OFL.txt": "https://raw.githubusercontent.com/google/fonts/main/ofl/lato/OFL.txt"
+  },
+  "music": {
+    "description": "Original deterministic 100 BPM synthesized cue",
+    "seed": 1984,
+    "peak": 0.4219794305246132
+  },
+  "sha256": {
+    "Lato-Bold.ttf": "8a0aace75d33794eece4b28187bfc1df0bbd2888b5d8a56e01788c8d65d16be1",
+    "Lato-Regular.ttf": "d636e4683231f931eda222d588e944d082bfd3bdba02f928bee461c0f185b251",
+    "OFL.txt": "74ba064d03f1f1c4a952da936c3eb71866c34404916734de3cae73b34357e59e",
+    "music.wav": "6b638d0042c1f2f8b8c90d36c18e33162591e3b2c31fbf99319b288306a663f3",
+    "ocean-source.mp4": "c98fda4bea3ba86b3e1c4cb25c77bc4f7c1d31cc4db31bf6825ce52f81728b29",
+    "ocean.mp4": "327d638177e76da352a9a501dff57ff2f03b150f0a5e52d2f9dd1287dcac9942"
+  }
+}

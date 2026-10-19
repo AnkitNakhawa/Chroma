@@ -71,3 +71,9 @@ checks exact 18-second stream durations and decoded stereo sample count, measure
 audio level and the fade tail, compares four cache-enabled/disabled native scene
 frames byte-for-byte, and compares those frames with the lossy encoded output
 (mean absolute RGB error under 3/255). It records hashes and measured results.
+
+The [measured 1080p result](../../docs/benchmarks/2026-10-18-showcase.md) includes
+all six samples, stage timings, peak memory and validation evidence. On the
+recorded Apple M5 host the cached median was 85.91 seconds (6.29 fps), versus
+89.37 seconds without retention. The observed ~4% throughput difference has
+overlapping timing ranges; it is not a general performance claim.
