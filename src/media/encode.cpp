@@ -340,6 +340,7 @@ VideoRenderResult render_video_cpu(const Composition& composition,
 
   report(VideoRenderPhase::preparing, 0, 0);
   auto inputs = preflight_inputs(composition, {.for_video=true, .cancelled=control.cancelled});
+  if (control.preflight) control.preflight(inputs);
   if (!inputs.ready()) throw PreflightError(std::move(inputs));
   AVFormatContext* raw_format = nullptr;
   const auto output_string = output_path.string();

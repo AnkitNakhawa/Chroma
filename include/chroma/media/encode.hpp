@@ -14,6 +14,8 @@
 
 namespace chroma {
 
+struct PreflightReport;
+
 enum class VideoRenderPhase : std::uint32_t { preparing = 0, rendering = 1, finalizing = 2, completed = 3 };
 struct VideoRenderProgress {
   VideoRenderPhase phase;
@@ -28,6 +30,8 @@ struct VideoRenderControl {
   std::function<bool(const VideoRenderProgress&)> progress;
   // Polled at safe boundaries; may read an atomic token or signal flag.
   std::function<bool()> cancelled;
+  // Borrowed report, observed once before output creation (including warnings).
+  std::function<void(const PreflightReport&)> preflight;
 };
 class RenderCancelled : public std::runtime_error {
  public:

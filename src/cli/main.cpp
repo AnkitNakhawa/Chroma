@@ -14,6 +14,7 @@
 #include <vector>
 
 #include "init.hpp"
+#include "chroma/media/render_report.hpp"
 #include "chroma/core/composition.hpp"
 #include "chroma/core/execution_plan.hpp"
 #include "chroma/core/render.hpp"
@@ -47,6 +48,7 @@ struct CacheOptions {
   chroma::CpuExecutionMode mode{chroma::CpuExecutionMode::fused};
   std::optional<std::filesystem::path> report;
   std::string progress{"none"};
+  std::optional<std::filesystem::path> render_report;
 };
 
 std::optional<CacheOptions> parse_cache_options(int start, int argc, char** argv, bool allow_report, bool allow_progress = false) {
@@ -59,6 +61,14 @@ std::optional<CacheOptions> parse_cache_options(int start, int argc, char** argv
       return std::nullopt;
     }
     const std::string_view value(argv[index + 1]);
+    if (flag == "--report" && allow_progress) {
+      if (options.render_report || value.empty() || value == "-") {
+        std::cerr << "report requires one file path (stdout is reserved for progress)\n";
+        return std::nullopt;
+      }
+      options.render_report = std::filesystem::path(value);
+      continue;
+    }
     if (flag == "--progress" && allow_progress) {
       if (progress_seen || (value != "none" && value != "text" && value != "json")) {
         std::cerr << "progress must be none, text, or json, without duplicates\n";
@@ -192,6 +202,35 @@ void write_cache_report(const CacheOptions& options, const chroma::CpuCacheUsage
   if (!output) throw std::runtime_error("unable to write cache report");
 }
 
+bool same_file(const std::filesystem::path& a, const std::filesystem::path& b) {
+  return std::filesystem::weakly_canonical(a)==std::filesystem::weakly_canonical(b) ||
+    (std::filesystem::exists(a) && std::filesystem::exists(b) && std::filesystem::equivalent(a,b));
+}
+
+// Reserve before rendering; publish complete JSON with a sibling rename.
+class ReportFile {
+ public:
+  explicit ReportFile(std::filesystem::path path) : path_(std::move(path)) {
+    if(std::filesystem::is_directory(path_)) throw std::runtime_error("report path is a directory");
+    const auto parent=path_.has_parent_path() ? path_.parent_path() : std::filesystem::path(".");
+    const auto nonce=std::chrono::steady_clock::now().time_since_epoch().count();
+    for(int i=0;i<64;++i) {
+      auto candidate=parent/(".chroma-report-"+std::to_string(nonce)+"-"+std::to_string(i));
+      if(std::filesystem::create_directory(candidate)) { staging_=candidate; return; }
+    }
+    throw std::runtime_error("cannot reserve report staging directory");
+  }
+  ~ReportFile() { std::error_code error; std::filesystem::remove_all(staging_,error); }
+  void publish(const std::string& json) {
+    std::ofstream stream(staging_/"report.json",std::ios::binary);
+    stream.exceptions(std::ios::failbit|std::ios::badbit);
+    stream << json << '\n'; stream.close();
+    std::filesystem::rename(staging_/"report.json",path_);
+  }
+ private:
+  std::filesystem::path path_,staging_;
+};
+
 void print_usage(std::ostream& output) {
   output << "Usage:\n"
          << "  chroma --version\n"
@@ -203,7 +242,7 @@ void print_usage(std::ostream& output) {
          << "  chroma inspect <composition.json>\n"
          << "  chroma probe <media-file>\n"
          << "  chroma decode <media-file> --frame <index> --output <frame.ppm>\n"
-         << "  chroma render <composition.json> --output <video.mp4> [--progress none|text|json]\n"
+         << "  chroma render <composition.json> --output <video.mp4> [--progress none|text|json] [--report <report.json>]\n"
          << "  chroma benchmark <composition.json> --iterations <count> --output <report.json>\n"
          << "  chroma inspect-plan <composition.json> --frame <index>\n"
          << "  chroma inspect-optimized-plan <composition.json> --frame <index>\n"
@@ -397,34 +436,71 @@ int main(int argc, char** argv) {
       std::string_view(argv[3]) == "--output") {
     const auto cache_options = parse_cache_options(5, argc, argv, true, true);
     if (!cache_options) return usage_error;
-    chroma::CompositionParseResult result;
-    if (const auto parse_status = parse_file(argv[2], result); parse_status != 0) {
-      return parse_status;
-    }
-    if (!result.valid()) {
-      print_diagnostics(result.diagnostics, false);
-      return invalid_composition;
-    }
+    std::unique_ptr<chroma::VideoRenderReport> report;
+    std::unique_ptr<ReportFile> report_file;
+    int status=0;
+    bool render_started=false, render_finished=false;
     try {
-      validate_cache_report_target(*cache_options, argv[4]);
-      RenderSignals signals;
-      RenderProgress progress(cache_options->progress);
-      chroma::VideoRenderControl control;
-      control.cancelled = [] { return render_signal.load(std::memory_order_relaxed) != 0; };
-      if (cache_options->progress != "none")
-        control.progress = [&](const auto& value) { return progress(value); };
-      const auto rendered = chroma::render_video_cpu(*result.composition, argv[4], cache_options->config, cache_options->mode, control);
-      write_cache_report(*cache_options, rendered.cache);
-      if (cache_options->progress != "json") std::cout << "rendered " << rendered.frames_encoded << " frames to " << argv[4] << '\n';
-      return 0;
-    } catch (const chroma::RenderCancelled&) {
-      if (cache_options->progress == "json" && std::cout.good()) std::cout << "{\"event\":\"cancelled\"}\n" << std::flush;
+      validate_cache_report_target(*cache_options,argv[4]);
+      if(cache_options->render_report) {
+        const auto& path=*cache_options->render_report;
+        if(same_file(path,argv[4]) || same_file(path,argv[2]) ||
+           (cache_options->report && (same_file(path,*cache_options->report) || same_file(*cache_options->report,argv[2])))) {
+          std::cerr << "report, composition, cache report, and media output require distinct paths\n";
+          return usage_error;
+        }
+        report=std::make_unique<chroma::VideoRenderReport>(argv[4],cache_options->config);
+        report_file=std::make_unique<ReportFile>(path);
+      }
+      chroma::CompositionParseResult result;
+      if(const auto parsed=parse_file(argv[2],result); parsed!=0) {
+        status=parsed;
+        if(report) report->diagnostic("composition.unreadable","Cannot read composition file", "/", "Check the composition file path and permissions.");
+      } else if(!result.valid()) {
+        print_diagnostics(result.diagnostics,false); status=invalid_composition;
+        if(report) for(const auto& d:result.diagnostics)
+          report->diagnostic(d.code,d.message,d.path,"Correct the composition and run validate again.");
+      } else {
+        if(report) {
+          const auto protect_assets=[&](const auto& assets) {
+            for(const auto& asset:assets)
+              if(same_file(*cache_options->render_report,asset.path))
+                throw std::invalid_argument("report must not overwrite an input asset");
+          };
+          protect_assets(result.composition->assets()); protect_assets(result.composition->image_assets());
+          protect_assets(result.composition->font_assets()); protect_assets(result.composition->audio_assets());
+        }
+        RenderSignals signals;
+        RenderProgress progress(cache_options->progress);
+        chroma::VideoRenderControl control;
+        control.cancelled=[] { return render_signal.load(std::memory_order_relaxed)!=0; };
+        if(cache_options->progress!="none") control.progress=[&](const auto& value) { return progress(value); };
+        render_started=true;
+        const auto rendered=report ? report->render(*result.composition,cache_options->mode,control) :
+          chroma::render_video_cpu(*result.composition,argv[4],cache_options->config,cache_options->mode,control);
+        render_finished=true;
+        write_cache_report(*cache_options,rendered.cache);
+        if(cache_options->progress!="json") std::cout << "rendered " << rendered.frames_encoded << " frames to " << argv[4] << '\n';
+      }
+    } catch(const chroma::RenderCancelled&) {
+      if(cache_options->progress=="json" && std::cout.good()) std::cout << "{\"event\":\"cancelled\"}\n" << std::flush;
       std::cerr << "render cancelled\n";
-      return render_signal.load(std::memory_order_relaxed) == SIGTERM ? 143 : 130;
-    } catch (const std::exception& error) {
-      std::cerr << "render failed: " << error.what() << '\n';
-      return input_error;
+      status=render_signal.load(std::memory_order_relaxed)==SIGTERM ? 143 : 130;
+    } catch(const std::invalid_argument& error) {
+      // Path alias validation happens before rendering; never publish over an asset.
+      if(report && report_file && std::string_view(error.what())=="report must not overwrite an input asset") {
+        std::cerr << error.what() << '\n'; return usage_error;
+      }
+      std::cerr << "render failed: " << error.what() << '\n'; status=input_error;
+    } catch(const std::exception& error) {
+      std::cerr << "render failed: " << error.what() << '\n'; status=input_error;
+      if(report && (!render_started || render_finished)) report->diagnostic("job.failed",error.what(),"/","Check report and cache-report paths and permissions; inspect output.published before retrying.");
     }
+    if(report && report_file) {
+      try { report_file->publish(report->json()); }
+      catch(const std::exception& error) { std::cerr << "unable to publish render report: " << error.what() << '\n'; return input_error; }
+    }
+    return status;
   }
 
   if (argc >= 7 && std::string_view(argv[1]) == "benchmark" &&

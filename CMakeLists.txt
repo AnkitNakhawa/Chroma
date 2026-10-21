@@ -78,6 +78,7 @@ add_library(chroma_core STATIC
   src/media/audio.cpp
   src/media/decode.cpp
   src/media/encode.cpp
+  src/media/render_report.cpp
   src/media/frame.cpp
   src/media/hardware.cpp
   src/media/media.cpp
@@ -335,6 +336,13 @@ if(CHROMA_BUILD_TESTS)
   endif()
   find_package(Python3 COMPONENTS Interpreter QUIET)
   if(Python3_FOUND)
+    set(CHROMA_REPORT_ARGS --chroma $<TARGET_FILE:chroma_cli>)
+    if(CHROMA_HAS_FFMPEG)
+      list(APPEND CHROMA_REPORT_ARGS --media)
+    endif()
+    add_test(NAME chroma_render_report_cli_tests
+      COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/render_report_cli_tests.py ${CHROMA_REPORT_ARGS})
+    set_tests_properties(chroma_render_report_cli_tests PROPERTIES TIMEOUT 120)
     set(CHROMA_INIT_ARGS --chroma $<TARGET_FILE:chroma_cli>)
     if(CHROMA_HAS_FFMPEG AND CHROMA_HAS_TEXT)
       list(APPEND CHROMA_INIT_ARGS --render --render-scale $<IF:$<CONFIG:Debug>,0.25,1>)
