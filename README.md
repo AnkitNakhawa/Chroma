@@ -53,6 +53,18 @@ are refused. See [project scaffolding](docs/projects.md).
 
 The C library exposes ABI v1. The Python `chroma-render` wheel is included in each native archive and imports as `chroma_render`; it requires Python 3.10+ and the matching native library. It is not currently published on PyPI.
 
+## Agent-readable render results (development main)
+
+```sh
+chroma render scene.json --output video.mp4 --report result.json --progress json
+```
+
+The report records publication status, output metadata, native stage timings,
+process peak RSS, cache counters, and actionable diagnostics. Python offers
+`engine.render_report(...)`; C ABI v1 adds `chroma_engine_render_video_report`.
+See the [report contract](docs/render-reports.md), including failure/cancellation
+and memory accounting. This feature is newer than the v0.1.0 release.
+
 ## Performance and quality
 
 Chroma reduces intermediate work by rendering supported text and shapes inside their affected regions and by caching prepared assets. In the recorded 18-second 1080p showcase benchmark, bounded rendering took **26.32 seconds versus 88.88 seconds** for Chroma's full-frame reference path: **3.38× faster on that workload**. This is a comparison between two Chroma paths, not a comparison with other engines. Results depend on content and hardware.
@@ -68,6 +80,7 @@ This release uses CPU rendering and 8-bit SDR H.264 output. GPU execution, produ
 - [Composition format and text layout](docs/composition-format.md)
 - [Input preflight](docs/preflight.md)
 - [Progress and cancellation](docs/render-control.md)
+- [Structured render reports (development main)](docs/render-reports.md)
 - [Python API](docs/python.md)
 - [C API and ownership](docs/c-api.md)
 - [Portable packaging, dependencies, and source archives](packaging/README.md)

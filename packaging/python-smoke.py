@@ -31,12 +31,18 @@ with tempfile.TemporaryDirectory(prefix='chroma python smoke ') as root:
     subprocess.run([package / 'bin/chroma', 'render', fixture / 'smoke.json', '--output', cli], check=True)
     events = []
     with Engine() as engine, engine.load_composition(fixture / 'smoke.json') as scene:
+        terminal = engine.render_report(scene,root/'terminal.mp4')
+        assert terminal['status']=='succeeded' and terminal['output']['published']
+        assert terminal['output']['metadata']['frame_count']==36
         before = engine.cache_usage
         report = engine.preflight(scene)
         assert report['ready'] and report['assets_checked'] > 0
         assert engine.cache_usage == before
         bad = json.loads((fixture / 'missing-preflight.json').read_text())
         with engine.parse_composition(bad, base_directory=fixture) as invalid:
+            terminal=engine.render_report(invalid,root/'terminal-failure.mp4')
+            assert terminal['status']=='failed' and not terminal['output']['published']
+            assert terminal['diagnostics'][0]['code']=='asset.missing'
             report = invalid.preflight()
             assert not report['ready'] and any(d['code'] == 'asset.missing' for d in report['diagnostics'])
             failed = root / 'preflight-failure.mp4'

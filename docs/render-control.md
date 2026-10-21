@@ -64,3 +64,8 @@ Full-video rendering now runs [input preflight](preflight.md) after the initial
 emits no rendering/completion events and preserves an existing destination.
 Cancellation is checked between asset/packet inspections. Probe time is included
 in setup time; the existing frame/audio progress counters remain unchanged.
+
+
+For terminal JSON output metadata, timings, memory/cache accounting and failure
+diagnostics, see [structured render reports](render-reports.md). This additive
+feature is available on development main and newer package builds.

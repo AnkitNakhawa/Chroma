@@ -21,6 +21,10 @@ int main(int argc,char** argv) {
   CHECK(chroma_engine_render_video_report(engine,scene,argv[1],&options,&report)==CHROMA_ERROR_UNSUPPORTED_ABI);
   CHECK(report==NULL);
   options.abi_version=CHROMA_ABI_VERSION;
+  options.struct_size=0;
+  CHECK(chroma_engine_render_video_report(engine,scene,argv[1],&options,&report)==CHROMA_ERROR_INVALID_ARGUMENT);
+  CHECK(report==NULL);
+  options.struct_size=(uint32_t)sizeof(options);
   if(!(chroma_capabilities() & CHROMA_CAP_FFMPEG)) {
     CHECK(chroma_engine_render_video_report(engine,scene,argv[1],NULL,&report)==CHROMA_ERROR_UNAVAILABLE);
     CHECK(report && strstr(chroma_string_data(report),"render.unavailable"));

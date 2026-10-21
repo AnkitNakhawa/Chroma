@@ -159,3 +159,8 @@ source ranges before launching a job. These return a dictionary with `ready`,
 exceptions. Pass `for_video=False` to omit output-encoder constraints. Full-video
 rendering performs preflight automatically and raises `ChromaError` with
 `Status.RENDER` on failure. See [preflight checks and limits](preflight.md).
+
+
+For terminal JSON output metadata, timings, memory/cache accounting and failure
+diagnostics, see [structured render reports](render-reports.md). This additive
+feature is available on development main and newer package builds.

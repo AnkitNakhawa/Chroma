@@ -17,14 +17,19 @@ test "$status" -eq 4
 grep -q 'asset.missing' "$result/preflight-missing.json"
 printf 'original\n' > "$result/preflight-failure.mp4"
 status=0
-clean "$package/bin/chroma" render "$fixture/missing-preflight.json" --output "$result/preflight-failure.mp4" --progress json > "$result/preflight-progress.ndjson" 2> "$result/preflight-error.txt" || status=$?
+clean "$package/bin/chroma" render "$fixture/missing-preflight.json" --output "$result/preflight-failure.mp4" --report "$result/preflight-failure-report.json" --progress json > "$result/preflight-progress.ndjson" 2> "$result/preflight-error.txt" || status=$?
 test "$status" -eq 4
 grep -qx original "$result/preflight-failure.mp4"
 grep -q 'asset.missing' "$result/preflight-error.txt"
+grep -q '"status": "failed"' "$result/preflight-failure-report.json"
+grep -q '"published": false' "$result/preflight-failure-report.json"
 test "$(wc -l < "$result/preflight-progress.ndjson" | tr -d ' ')" -eq 1
 
-clean "$package/bin/chroma" render "$fixture/smoke.json" --output "$result/cli.mp4" --progress json > "$result/progress.ndjson"
+clean "$package/bin/chroma" render "$fixture/smoke.json" --output "$result/cli.mp4" --report "$result/cli-report.json" --progress json > "$result/progress.ndjson"
 grep -q '"phase":"completed","frames_encoded":36' "$result/progress.ndjson"
+grep -q '"status": "succeeded"' "$result/cli-report.json"
+grep -q '"published": true' "$result/cli-report.json"
+grep -q '"process_peak_rss_bytes": [1-9]' "$result/cli-report.json"
 clean "$package/libexec/chroma/chroma_c_example" "$fixture/smoke.json" "$result/c-api.mp4" --progress
 # Exercise cancellation against the actual bundled C library and its new symbols.
 printf 'original\n' > "$result/cancelled.mp4"

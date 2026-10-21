@@ -58,6 +58,9 @@ with tempfile.TemporaryDirectory(prefix='chroma report ') as folder:
   assert d['output']['metadata']['width']==32 and d['output']['metadata']['duration']=={'numerator':1,'denominator':5}
   assert d['profile']['frames_encoded']==6 and d['cache']['usage'] is not None
   assert d['timings']['stages_complete'] and d['timings']['milliseconds']['total']>=0
+  unused=json.loads(scene.read_text()); unused['assets']=[dict(id='unused',type='image',path='absent.png')]
+  bad.write_text(json.dumps(unused)); render(bad)
+  assert load('succeeded')['diagnostics'][0]['severity']=='warning'
   marker=b'existing'; output.write_bytes(marker)
   missing=json.loads(scene.read_text()); missing['assets']=[dict(id='missing',type='image',path='missing.png')]
   missing['layers']=[dict(id='image',type='image',asset='missing',start_frame=0,end_frame=6)]
@@ -69,6 +72,10 @@ with tempfile.TemporaryDirectory(prefix='chroma report ') as folder:
   # Reports cannot overwrite an input asset, including an unused one.
   missing['assets'][0]['path']=str(report); bad.write_text(json.dumps(missing))
   previous=report.read_bytes(); render(bad,status=2); assert report.read_bytes()==previous
+  asset=root/'owned-image.ppm'; asset.write_bytes(b'owned input')
+  missing['assets'][0]['path']=str(asset); bad.write_text(json.dumps(missing))
+  run('render',bad,'--output',output,'--report',report,'--cache-report',asset,status=2)
+  assert asset.read_bytes()==b'owned input' and report.read_bytes()==previous
   # A side-report failure after video commit must disclose output publication.
   run('render',scene,'--output',output,'--report',report,'--cache-report',root/'absent/cache.json',status=4)
   d=load('failed'); assert d['output']['published'] and d['profile'] is not None
@@ -82,5 +89,12 @@ with tempfile.TemporaryDirectory(prefix='chroma report ') as folder:
    assert process.returncode==exit_code
    d=load('cancelled'); assert not d['output']['published'] and output.read_bytes()==marker
    assert d['progress']['frames_encoded']<100000
+  # A closed progress consumer is cancellation, but the terminal file still arrives.
+  output.write_bytes(marker)
+  process=subprocess.Popen([cli,'render',str(scene),'--output',str(output),'--report',str(report),'--progress','json'],stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
+  assert json.loads(process.stdout.readline())['phase']=='preparing'
+  process.stdout.close(); process.wait(timeout=20); process.stderr.close()
+  assert process.returncode==130 and load('cancelled')['status']=='cancelled'
+  assert output.read_bytes()==marker
  assert not list(root.glob('.chroma-render-*'))
 print('PASS: structured render reports and safe terminal outcomes')

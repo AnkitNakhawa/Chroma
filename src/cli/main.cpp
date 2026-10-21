@@ -464,7 +464,8 @@ int main(int argc, char** argv) {
         if(report) {
           const auto protect_assets=[&](const auto& assets) {
             for(const auto& asset:assets)
-              if(same_file(*cache_options->render_report,asset.path))
+              if(same_file(*cache_options->render_report,asset.path) ||
+                 (cache_options->report && same_file(*cache_options->report,asset.path)))
                 throw std::invalid_argument("report must not overwrite an input asset");
           };
           protect_assets(result.composition->assets()); protect_assets(result.composition->image_assets());

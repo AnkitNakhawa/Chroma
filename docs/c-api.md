@@ -201,3 +201,8 @@ source timelines; `CHROMA_PREFLIGHT_VIDEO_OUTPUT` adds output prerequisites.
 `CHROMA_OK` means inspection succeeded, including reports with `ready: false`.
 Video rendering also preflights automatically; failures keep
 `CHROMA_ERROR_RENDER` and preserve output. See [preflight semantics](preflight.md).
+
+
+For terminal JSON output metadata, timings, memory/cache accounting and failure
+diagnostics, see [structured render reports](render-reports.md). This additive
+feature is available on development main and newer package builds.
