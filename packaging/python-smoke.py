@@ -18,6 +18,16 @@ assert not importlib.metadata.requires('chroma-render')
 with tempfile.TemporaryDirectory(prefix='chroma python smoke ') as root:
     root = Path(root)
     cli, python = root / 'cli.mp4', root / 'python.mp4'
+    # The quickstart's installed example and Python calls need no input assets.
+    with Engine() as engine:
+        with engine.load_composition(package / 'share/chroma/examples/quickstart.json') as scene:
+            report = scene.preflight(for_video=True)
+            assert report['ready'] and report['assets_checked'] == 0
+            progress = []
+            profile = engine.render(scene, root / 'quickstart.mp4', progress=progress.append)
+            assert profile['frames_encoded'] == 90
+            assert progress[-1].phase == RenderPhase.COMPLETED
+
     subprocess.run([package / 'bin/chroma', 'render', fixture / 'smoke.json', '--output', cli], check=True)
     events = []
     with Engine() as engine, engine.load_composition(fixture / 'smoke.json') as scene:

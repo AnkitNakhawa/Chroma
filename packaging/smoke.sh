@@ -50,6 +50,17 @@ if clean "$package/bin/chroma" render "$fixture/tiny.json" --output "$result/tin
 fi
 grep -qx 'keep-existing-output' "$result/tiny.mp4"
 probe="$package/libexec/chroma/ffprobe"
+# Follow the installed quickstart from outside the SDK, without external assets.
+cp "$package/share/chroma/examples/quickstart.json" "$result/scene.json"
+clean "$package/bin/chroma" preflight "$result/scene.json"
+clean "$package/bin/chroma" render "$result/scene.json" --output "$result/first-video.mp4" --progress text
+clean "$probe" -v error -select_streams v:0 -count_frames \
+  -show_entries stream=codec_name,width,height,r_frame_rate,nb_read_frames \
+  -of default=noprint_wrappers=1 "$result/first-video.mp4" > "$result/quickstart.video.txt"
+for expected in codec_name=h264 width=1280 height=720 r_frame_rate=30/1 nb_read_frames=90; do
+  grep -qx "$expected" "$result/quickstart.video.txt"
+done
+
 ffmpeg="$package/libexec/chroma/ffmpeg"
 for mode in cli c-api; do
   clean "$probe" -v error -select_streams v:0 -count_frames \

@@ -13,14 +13,9 @@ The macOS archives are ad-hoc signed, not Developer ID signed or notarized.
 Downloaded archives may be subject to macOS Gatekeeper; these are developer SDK
 releases, not a signed macOS application installer.
 
-```sh
-sha256sum -c chroma-0.1.0-linux-x86_64.sha256 # macOS: shasum -a 256 -c ...
-tar xzf chroma-0.1.0-linux-x86_64.tar.gz
-cd chroma-0.1.0-linux-x86_64
-./bin/chroma validate share/chroma/examples/animated-transforms.json
-./bin/chroma render share/chroma/examples/solid.json --output sample.mp4
-./libexec/chroma/chroma_c_example share/chroma/examples/solid.json c-api.mp4
-```
+For download, binary-only checksum verification, and a first video, follow the
+[quickstart](../docs/quickstart.md). The checksum manifest lists both binary and
+corresponding-source archives; checking the entire manifest requires both files.
 
 C consumers need a C99 compiler only, not C++ or FFmpeg headers:
 
