@@ -20,6 +20,7 @@
 #include "chroma/core/preflight.hpp"
 #include "chroma/media/media.hpp"
 #include "chroma/media/encode.hpp"
+#include "chroma/media/render_report.hpp"
 #include "chroma/text/text.hpp"
 
 struct chroma_engine {
@@ -96,7 +97,7 @@ extern "C" {
 uint32_t CHROMA_CALL chroma_abi_version(void) noexcept { return CHROMA_ABI_VERSION; }
 const char* CHROMA_CALL chroma_version_string(void) noexcept { return CHROMA_VERSION; }
 uint64_t CHROMA_CALL chroma_capabilities(void) noexcept {
-  return CHROMA_CAP_CPU_RENDER | CHROMA_CAP_RENDER_CONTROL | CHROMA_CAP_PREFLIGHT | (chroma::media_available() ? CHROMA_CAP_FFMPEG : UINT64_C(0)) |
+  return CHROMA_CAP_CPU_RENDER | CHROMA_CAP_RENDER_CONTROL | CHROMA_CAP_PREFLIGHT | CHROMA_CAP_RENDER_REPORT | (chroma::media_available() ? CHROMA_CAP_FFMPEG : UINT64_C(0)) |
          (chroma::text_support_available() ? CHROMA_CAP_TEXT : UINT64_C(0));
 }
 const char* CHROMA_CALL chroma_last_error(void) noexcept { return error_message; }
@@ -307,6 +308,39 @@ chroma_status CHROMA_CALL chroma_engine_render_video_with_options(chroma_engine*
     if (out_profile) *out_profile = new chroma_string{chroma::video_render_profile_json(result)};
     return CHROMA_OK;
   }, CHROMA_ERROR_RENDER);
+}
+chroma_status CHROMA_CALL chroma_engine_render_video_report(chroma_engine* engine,
+    const chroma_composition* composition, const char* output_path,
+    const chroma_video_render_options* options, chroma_string** out_report) noexcept {
+  if(out_report) *out_report=nullptr;
+  return boundary([&]() -> chroma_status {
+    if(!engine || !composition || !output_path || !*output_path || !out_report)
+      return fail(CHROMA_ERROR_INVALID_ARGUMENT,"engine, composition, output path, and out_report are required");
+    chroma::VideoRenderControl control;
+    if(options) {
+      if(options->struct_size<sizeof(chroma_video_render_options))
+        return fail(CHROMA_ERROR_INVALID_ARGUMENT,"video render options struct is too small");
+      if(options->abi_version!=CHROMA_ABI_VERSION)
+        return fail(CHROMA_ERROR_UNSUPPORTED_ABI,"unsupported C ABI version");
+      const auto snapshot=*options;
+      if(snapshot.progress) control.progress=[snapshot](const chroma::VideoRenderProgress& p) {
+        const chroma_render_progress value{sizeof(chroma_render_progress),static_cast<uint32_t>(p.phase),
+          p.frames_encoded,p.total_frames,p.audio_samples_encoded,p.total_audio_samples,p.elapsed_nanoseconds};
+        return snapshot.progress(&value,snapshot.user_data)!=0;
+      };
+      if(snapshot.cancel_token) control.cancelled=[token=snapshot.cancel_token] { return token->requested.load(std::memory_order_relaxed); };
+    }
+    chroma::VideoRenderReport report(path_from_utf8(output_path),engine->config);
+    if(!chroma::media_available()) {
+      report.diagnostic("render.unavailable","FFmpeg encoding support is unavailable","/","Use a Chroma build with FFmpeg media support.","preparing");
+      *out_report=new chroma_string{report.json()};
+      return fail(CHROMA_ERROR_UNAVAILABLE,"FFmpeg encoding support is unavailable");
+    }
+    try { static_cast<void>(report.render(composition->value,chroma::CpuExecutionMode::fused,control)); }
+    catch(...) { *out_report=new chroma_string{report.json()}; throw; }
+    *out_report=new chroma_string{report.json()};
+    return CHROMA_OK;
+  },CHROMA_ERROR_RENDER);
 }
 const char* CHROMA_CALL chroma_string_data(const chroma_string* string) noexcept { return string ? string->value.c_str() : nullptr; }
 uint64_t CHROMA_CALL chroma_string_size(const chroma_string* string) noexcept { return string ? string->value.size() : 0; }

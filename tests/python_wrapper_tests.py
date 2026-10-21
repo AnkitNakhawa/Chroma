@@ -268,6 +268,43 @@ class WrapperTests(unittest.TestCase):
             with self.assertRaises(RenderCancelledError): engine.render(scene, output, cancel_token=token)
             engine.render(scene, output)
 
+    def test_terminal_reports(self):
+        engine = self.engine()
+        self.assertTrue(engine.capabilities & Capabilities.RENDER_REPORT)
+        with engine.parse_composition(document()) as scene, tempfile.TemporaryDirectory() as folder:
+            output = Path(folder)/'video.mp4'
+            report = engine.render_report(scene, output)
+            self.assertEqual(report['schema_version'],1)
+            if not engine.capabilities & Capabilities.FFMPEG:
+                self.assertEqual(report['status'],'failed')
+                self.assertEqual(report['diagnostics'][0]['code'],'render.unavailable')
+                return
+            self.assertEqual(report['status'],'succeeded')
+            self.assertTrue(report['output']['published'])
+            self.assertEqual(report['output']['metadata']['frame_count'],6)
+            self.assertEqual(report['output']['metadata']['duration'],{'numerator':1001,'denominator':5000})
+            self.assertIsNotNone(report['cache']['usage'])
+            output.write_bytes(b'keep')
+            report = engine.render_report(scene,output,progress=lambda p: True)
+            self.assertEqual(report['status'],'cancelled')
+            self.assertFalse(report['output']['published'])
+            self.assertEqual(output.read_bytes(),b'keep')
+            with engine.cancellation_token() as token:
+                token.cancel()
+                self.assertEqual(engine.render_report(scene,output,cancel_token=token)['status'],'cancelled')
+            bad = document()
+            bad['assets']=[dict(id='missing',type='image',path='missing.png')]
+            bad['layers']=[dict(id='img',type='image',asset='missing',start_frame=0,end_frame=6)]
+            with engine.parse_composition(bad,base_directory=folder) as invalid:
+                report=engine.render_report(invalid,output)
+                self.assertEqual(report['status'],'failed')
+                self.assertEqual(report['diagnostics'][0]['code'],'asset.missing')
+                self.assertIsNone(report['timings']['milliseconds'])
+            def broken(progress): raise ValueError('callback failed')
+            with self.assertRaisesRegex(ValueError,'callback failed'):
+                engine.render_report(scene,output,progress=broken)
+            self.assertEqual(output.read_bytes(),b'keep')
+
     def test_callback_reentrancy_fails_safely(self):
         engine = self.video_engine()
         with engine.parse_composition(document()) as scene, tempfile.TemporaryDirectory() as root:

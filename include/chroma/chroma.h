@@ -42,6 +42,7 @@ typedef int32_t chroma_status;
 #define CHROMA_CAP_TEXT UINT64_C(4)
 #define CHROMA_CAP_RENDER_CONTROL UINT64_C(8)
 #define CHROMA_CAP_PREFLIGHT UINT64_C(16)
+#define CHROMA_CAP_RENDER_REPORT UINT64_C(32)
 
 typedef struct chroma_engine chroma_engine;
 typedef struct chroma_composition chroma_composition;
@@ -166,6 +167,15 @@ CHROMA_API void CHROMA_CALL chroma_cancel_token_destroy(chroma_cancel_token* tok
 CHROMA_API chroma_status CHROMA_CALL chroma_engine_render_video_with_options(chroma_engine* engine,
     const chroma_composition* composition, const char* output_path,
     const chroma_video_render_options* options, chroma_string** out_profile) CHROMA_NOEXCEPT;
+
+/* Additive ABI-v1 terminal report. out_report is required. After argument
+ * validation it receives caller-owned schema-v1 JSON for success, render failure,
+ * unavailable media support, or cancellation. Destroy it even on non-OK status.
+ * Invalid API arguments/ABI and allocation failures may leave it NULL.
+ * Existing render entry points and their profile/error contracts are unchanged. */
+CHROMA_API chroma_status CHROMA_CALL chroma_engine_render_video_report(chroma_engine* engine,
+    const chroma_composition* composition, const char* output_path,
+    const chroma_video_render_options* options, chroma_string** out_report) CHROMA_NOEXCEPT;
 
 /* Synchronous video job using engine budgets and a fresh per-job cache context.
  * Optional profile JSON is caller-owned; engine frame-cache usage is unchanged.

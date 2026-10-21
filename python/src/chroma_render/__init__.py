@@ -39,6 +39,7 @@ class Capabilities(IntFlag):
     TEXT = 4
     RENDER_CONTROL = 8
     PREFLIGHT = 16
+    RENDER_REPORT = 32
 
 
 class ChromaError(RuntimeError):
@@ -335,6 +336,19 @@ class Engine(_Handle):
 
     def render(self, composition, output_path, *, progress=None, cancel_token=None):
         """Synchronously render; progress(snapshot) returns True to cancel."""
+        return self._render(composition, output_path, progress=progress, cancel_token=cancel_token, report=False)
+
+    def render_report(self, composition, output_path, *, progress=None, cancel_token=None):
+        """Return a terminal report, including failed/cancelled jobs; inspect status.
+
+        Invalid binding arguments and progress callback exceptions still raise.
+        Requires Capabilities.RENDER_REPORT in the loaded native library.
+        """
+        if not self._native.has_render_report:
+            raise LibraryLoadError('This library lacks terminal render report support')
+        return self._render(composition, output_path, progress=progress, cancel_token=cancel_token, report=True)
+
+    def _render(self, composition, output_path, *, progress, cancel_token, report):
         _matching(self._native, composition, Composition)
         if progress is not None and not callable(progress):
             raise TypeError('progress must be callable or None')
@@ -369,7 +383,11 @@ class Engine(_Handle):
             scene = stack.enter_context(composition._borrow())
             token = stack.enter_context(cancel_token._borrow()) if cancel_token is not None else None
             result = N.Handle()
-            if self._native.has_render_control:
+            if report:
+                options = N.RenderOptions(C.sizeof(N.RenderOptions), 1, callback, None, token)
+                status = self._native.api.chroma_engine_render_video_report(
+                    engine, scene, path, C.byref(options), C.byref(result))
+            elif self._native.has_render_control:
                 options = N.RenderOptions(C.sizeof(N.RenderOptions), 1, callback, None, token)
                 status = self._native.api.chroma_engine_render_video_with_options(
                     engine, scene, path, C.byref(options), C.byref(result))
@@ -380,6 +398,8 @@ class Engine(_Handle):
                 if result:
                     self._native.api.chroma_string_destroy(result)
                 raise callback_error
+            if report and result:
+                return _owned_json(self._native, result)
             _check(self._native, status, message)
             return _owned_json(self._native, result)
 

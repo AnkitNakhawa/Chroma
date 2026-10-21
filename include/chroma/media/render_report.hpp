@@ -14,7 +14,8 @@ class VideoRenderReport {
   VideoRenderResult render(const Composition& composition,
       CpuExecutionMode mode = CpuExecutionMode::fused, const VideoRenderControl& control = {});
   void diagnostic(const std::string& code, const std::string& message,
-                  const std::string& path, const std::string& suggested_action);
+                  const std::string& path, const std::string& suggested_action,
+                  const std::string& phase = {});
   [[nodiscard]] std::string json() const;
  private:
   struct Impl;

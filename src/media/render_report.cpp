@@ -57,7 +57,8 @@ VideoRenderReport::VideoRenderReport(std::filesystem::path output, CpuCacheConfi
   : impl_(std::make_unique<Impl>(std::move(output),config)) {}
 VideoRenderReport::~VideoRenderReport() = default;
 void VideoRenderReport::diagnostic(const std::string& code,const std::string& message,
-                                  const std::string& path,const std::string& action) {
+                                  const std::string& path,const std::string& action,const std::string& phase) {
+  if(!phase.empty()) impl_->value["phase"]=phase;
   impl_->value["status"]="failed";
   impl_->add(code,message,path,action); impl_->finish();
 }

@@ -86,6 +86,10 @@ class NativeLibrary:
                 self._bind('cancel_token_destroy', None, Handle)
                 self._bind('engine_render_video_with_options', I32, Handle, Handle,
                            C.c_char_p, C.POINTER(RenderOptions), C.POINTER(Handle))
+            self.has_render_report = bool(self.api.chroma_capabilities() & 32)
+            if self.has_render_report:
+                self._bind('engine_render_video_report', I32, Handle, Handle,
+                           C.c_char_p, C.POINTER(RenderOptions), C.POINTER(Handle))
             # Do not use c_char_p for an OWNED string handle: ctypes would turn
             # that address into bytes, losing the pointer needed by destroy().
             self._bind('string_data', Handle, Handle)
