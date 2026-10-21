@@ -1,0 +1,347 @@
+{
+  "schema_version": 1,
+  "canvas": {
+    "width": 1280,
+    "height": 720,
+    "frame_rate": {
+      "numerator": 30,
+      "denominator": 1
+    },
+    "duration_frames": 180
+  },
+  "layers": [
+    {
+      "id": "background",
+      "type": "solid",
+      "start_frame": 0,
+      "end_frame": 180,
+      "color": [
+        0.025,
+        0.065,
+        0.085,
+        1
+      ]
+    },
+    {
+      "id": "orb-0",
+      "type": "shape",
+      "shape": "ellipse",
+      "start_frame": 0,
+      "end_frame": 180,
+      "bounds": [
+        -160,
+        -180,
+        1000,
+        1000
+      ],
+      "fill": [
+        0.06,
+        0.2,
+        0.22,
+        1
+      ],
+      "effects": [
+        {
+          "type": "translation",
+          "keyframes": [
+            {
+              "frame": 0,
+              "value": [
+                -70,
+                20
+              ]
+            },
+            {
+              "frame": 179,
+              "value": [
+                80,
+                -30
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "orb-1",
+      "type": "shape",
+      "shape": "ellipse",
+      "start_frame": 0,
+      "end_frame": 180,
+      "bounds": [
+        780,
+        -220,
+        700,
+        700
+      ],
+      "fill": [
+        0.3,
+        0.46,
+        0.4,
+        1
+      ],
+      "effects": [
+        {
+          "type": "translation",
+          "keyframes": [
+            {
+              "frame": 0,
+              "value": [
+                -70,
+                20
+              ]
+            },
+            {
+              "frame": 179,
+              "value": [
+                80,
+                -30
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "orb-2",
+      "type": "shape",
+      "shape": "ellipse",
+      "start_frame": 0,
+      "end_frame": 180,
+      "bounds": [
+        200,
+        310,
+        560,
+        560
+      ],
+      "fill": [
+        0.1,
+        0.34,
+        0.35,
+        1
+      ],
+      "effects": [
+        {
+          "type": "translation",
+          "keyframes": [
+            {
+              "frame": 0,
+              "value": [
+                -70,
+                20
+              ]
+            },
+            {
+              "frame": 179,
+              "value": [
+                80,
+                -30
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "glass-0",
+      "type": "shape",
+      "shape": "rounded_rectangle",
+      "start_frame": 0,
+      "end_frame": 180,
+      "bounds": [
+        500,
+        30,
+        180,
+        440
+      ],
+      "corner_radius": 50,
+      "fill": [
+        0.45,
+        0.7,
+        0.65,
+        0.22
+      ],
+      "stroke": {
+        "color": [
+          0.7,
+          0.9,
+          0.8,
+          0.3
+        ],
+        "width": 2
+      },
+      "effects": [
+        {
+          "type": "rotation",
+          "origin": [
+            640,
+            360
+          ],
+          "keyframes": [
+            {
+              "frame": 0,
+              "value": -28
+            },
+            {
+              "frame": 179,
+              "value": -12
+            }
+          ]
+        },
+        {
+          "type": "translation",
+          "keyframes": [
+            {
+              "frame": 0,
+              "value": [
+                -40,
+                0
+              ]
+            },
+            {
+              "frame": 179,
+              "value": [
+                50,
+                -40
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "glass-1",
+      "type": "shape",
+      "shape": "rounded_rectangle",
+      "start_frame": 0,
+      "end_frame": 180,
+      "bounds": [
+        685,
+        80,
+        180,
+        440
+      ],
+      "corner_radius": 50,
+      "fill": [
+        0.55,
+        0.7,
+        0.65,
+        0.22
+      ],
+      "stroke": {
+        "color": [
+          0.7,
+          0.9,
+          0.8,
+          0.3
+        ],
+        "width": 2
+      },
+      "effects": [
+        {
+          "type": "rotation",
+          "origin": [
+            640,
+            360
+          ],
+          "keyframes": [
+            {
+              "frame": 0,
+              "value": -28
+            },
+            {
+              "frame": 179,
+              "value": -12
+            }
+          ]
+        },
+        {
+          "type": "translation",
+          "keyframes": [
+            {
+              "frame": 0,
+              "value": [
+                -40,
+                0
+              ]
+            },
+            {
+              "frame": 179,
+              "value": [
+                50,
+                -40
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "glass-2",
+      "type": "shape",
+      "shape": "rounded_rectangle",
+      "start_frame": 0,
+      "end_frame": 180,
+      "bounds": [
+        870,
+        130,
+        180,
+        440
+      ],
+      "corner_radius": 50,
+      "fill": [
+        0.65,
+        0.7,
+        0.65,
+        0.22
+      ],
+      "stroke": {
+        "color": [
+          0.7,
+          0.9,
+          0.8,
+          0.3
+        ],
+        "width": 2
+      },
+      "effects": [
+        {
+          "type": "rotation",
+          "origin": [
+            640,
+            360
+          ],
+          "keyframes": [
+            {
+              "frame": 0,
+              "value": -28
+            },
+            {
+              "frame": 179,
+              "value": -12
+            }
+          ]
+        },
+        {
+          "type": "translation",
+          "keyframes": [
+            {
+              "frame": 0,
+              "value": [
+                -40,
+                0
+              ]
+            },
+            {
+              "frame": 179,
+              "value": [
+                50,
+                -40
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

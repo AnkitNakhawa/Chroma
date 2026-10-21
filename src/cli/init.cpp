@@ -37,13 +37,14 @@ struct Options {
   std::string title{"Make an entrance."};
   std::string subtitle{"Your next story starts here."};
   std::array<double, 4> accent{0.35, 0.8, 0.72, 1};
-  fs::path font, music;
+  fs::path font, music, image, footage;
   bool no_music{false};
 };
 
 void usage() {
-  std::cout << "Usage: chroma init <directory> [--template title-sequence]\n"
+  std::cout << "Usage: chroma init <directory> [--template <name>]\n"
       "       [--title <text>] [--subtitle <text>] [--accent '#RRGGBB']\n"
+      "       [--image <file>] [--footage <file>]\n"
       "       [--font <file>] [--music <file> | --no-music]\n"
       "       chroma init --list-templates\n"
       "Creates a new project only; an existing destination is never overwritten.\n";
@@ -122,6 +123,7 @@ Json composition(const Options& options) {
     {"layers",Json::array({{{"id","background"},{"type","solid"},{"start_frame",0},{"end_frame",frames},
       {"color",{0.018,0.025,0.045,1}}}})}};
   auto& layers = doc["layers"];
+  if (options.preset == "title-sequence") {
   auto halo = shape("halo", 900, -240, 650, 650, {0.06,0.12,0.15,1}, 320);
   halo["effects"] = Json::array({{{"type","translation"},{"keyframes",Json::array({
     {{"frame",0},{"value",{100,0}}}, {{"frame",179},{"value",{-100,90}}}})}}});
@@ -133,6 +135,61 @@ Json composition(const Options& options) {
   layers.push_back(text("title", options.title, 84, 80, 330, 1120, {0.95,0.97,1,1}, 8, frames, "center"));
   layers.push_back(text("subtitle", options.subtitle, 28, 140, 510, 1000, {0.6,0.67,0.76,1}, 24, frames, "center"));
   layers.push_back(text("footer", "CREATED WITH CHROMA", 15, 80, 650, 1120, {0.42,0.5,0.61,1}, 0, frames, "center", 1));
+  } else if (options.preset == "product-promo") {
+    auto glow = shape("product-glow",740,80,460,560,{0.05,0.1,0.14,1},80);
+    glow["effects"] = motion(frames);
+    layers.push_back(glow);
+    layers.push_back(text("eyebrow","MEET YOUR NEXT FAVORITE",18,80,130,580,options.accent,0,frames,"left",1));
+    layers.push_back(text("title",options.title,68,80,250,580,{0.95,0.97,1,1},8,frames));
+    layers.push_back(text("subtitle",options.subtitle,27,80,445,560,{0.62,0.69,0.78,1},24,frames));
+    auto button = shape("cta-button",80,554,260,58,options.accent,29);
+    button["effects"] = motion(frames,20);
+    layers.push_back(button);
+    layers.push_back(text("cta","MAKE IT YOURS",17,96,591,228,{0.015,0.035,0.05,1},20,frames,"center",1));
+    if (!options.image.empty()) {
+      doc["assets"].push_back({{"id","product-image"},{"type","image"},{"path","assets/product" + options.image.extension().string()}});
+      layers.push_back({{"id","product-image"},{"type","image"},{"asset","product-image"},{"fit","contain"},
+        {"start_frame",0},{"end_frame",frames},{"effects",Json::array({
+          {{"type","scale"},{"origin",{0,0}},{"value",{0.3,0.3}}},
+          {{"type","translation"},{"value",{778,245}}},fade(frames)})}});
+    } else {
+      auto device = shape("device",840,145,260,420,{0.025,0.04,0.07,1},38);
+      device["stroke"] = {{"color",{0.35,0.44,0.55,1}},{"width",2}};
+      device["effects"] = motion(frames);
+      layers.push_back(device);
+      auto screen = shape("screen",860,170,220,370,{0.06,0.095,0.14,1},24);
+      screen["effects"] = motion(frames);
+      layers.push_back(screen);
+      layers.push_back(text("app-name","STUDIO",20,880,218,180,{0.94,0.97,1,1},0,frames,"left",1));
+      auto artwork = shape("artwork",880,250,180,140,options.accent,18);
+      artwork["effects"] = Json::array({fade(frames),{{"type","rotation"},{"origin",{970,320}},
+        {"keyframes",Json::array({{{"frame",0},{"value",-5}},{{"frame",179},{"value",5}}})}}});
+      layers.push_back(artwork);
+      for(int i=0;i<3;++i) {
+        auto line = shape("ui-line-"+std::to_string(i),880,425+i*25,180-i*35,7,{0.3,0.42,0.5,1},3);
+        line["effects"] = motion(frames,12);
+        layers.push_back(line);
+      }
+    }
+    layers.push_back(text("footer","YOUR PRODUCT. BEAUTIFULLY PRESENTED.",14,80,670,1120,{0.42,0.5,0.61,1},0,frames,"left",1));
+  } else {
+    doc["assets"].push_back({{"id","footage"},{"type","video"},{"path",options.footage.empty() ? "assets/footage.mp4" : "assets/footage" + options.footage.extension().string()}});
+    layers.push_back({{"id","footage"},{"type","video"},{"asset","footage"},{"fit","cover"},{"start_frame",0},{"end_frame",frames}});
+    layers.push_back(shape("header-shade",0,0,1280,205,{0.01,0.02,0.035,0.78},0));
+    layers.push_back(text("eyebrow","FIELD NOTES / 01",17,80,68,1120,options.accent,0,frames,"left",1));
+    layers.push_back(text("title",options.title,42,80,132,1100,{0.95,0.98,1,1},0,frames));
+    const std::array<std::string,3> captions{options.subtitle,"Make room for what matters.","Bring your story into focus."};
+    for(int i=0;i<3;++i) {
+      auto plate = shape("caption-plate-"+std::to_string(i+1),64,514,1152,142,{0.012,0.025,0.04,0.88},18);
+      plate["start_frame"]=i*60; plate["end_frame"]=(i+1)*60; plate["effects"]=motion(60);
+      layers.push_back(plate);
+      auto rail = shape("caption-accent-"+std::to_string(i+1),86,540,4,85,options.accent,2);
+      rail["start_frame"]=i*60; rail["end_frame"]=(i+1)*60; rail["effects"]=motion(60);
+      layers.push_back(rail);
+      layers.push_back(text("caption-"+std::to_string(i+1),captions[static_cast<std::size_t>(i)],36,112,575,1060,
+        {0.96,0.98,1,1},i*60,(i+1)*60));
+    }
+  }
   if (!options.no_music) {
     doc["assets"].push_back({{"id","music"},{"type","audio"},{"path", options.music.empty() ? "assets/music.wav" : "assets/music" + options.music.extension().string()}});
     doc["audio_tracks"] = Json::array({{{"id","score"},{"asset","music"},{"start_frame",0},{"end_frame",frames},{"gain",0.6}}});
@@ -175,11 +232,17 @@ std::string project_readme(const Options& options) {
     "Long titles wrap and ellipsize to fit their layout boxes. Ctrl-C cancels rendering safely.\n\n"
     "The included Lato font (when selected by default) retains its SIL Open Font License in assets/FONT-LICENSE.txt.\n"
     "The generated demo music is original Chroma material under assets/CHROMA-LICENSE.txt.\n"
-    "Custom assets retain their original licenses. Supplied music must contain at least six seconds of audio.\n";
+    "The default captioned-footage clip is original abstract Chroma demo media, also Apache-2.0.\n"
+    "Custom assets retain their original licenses. Supplied music and footage need at least six seconds.\n\n"
+    "For product-promo, the optional product-image layer fits the supplied image inside the hero card.\n"
+    "For captioned-footage, edit caption-1, caption-2 and caption-3 text and frame ranges.\n"
+    "These are manually authored captions, not automatic transcription. --subtitle sets the first cue.\n"
+    "Footage audio is not imported automatically; the score is a separate audio track.\n"
+    "init copies files without transcoding; run preflight to check custom asset compatibility.\n";
 }
 
 Options parse(int argc, char** argv) {
-  if (argc < 1 || std::string_view(argv[0]).starts_with("--")) throw std::invalid_argument("a destination directory is required");
+  if (argc < 1 || std::string_view(argv[0]).empty() || std::string_view(argv[0]).starts_with("--")) throw std::invalid_argument("a destination directory is required");
   Options options;
   options.destination = fs::absolute(argv[0]);
   std::map<std::string,bool> seen;
@@ -196,6 +259,8 @@ Options parse(int argc, char** argv) {
     else if (flag == "--subtitle") options.subtitle = value;
     else if (flag == "--font") options.font = fs::absolute(value);
     else if (flag == "--music") options.music = fs::absolute(value);
+    else if (flag == "--image") options.image = fs::absolute(value);
+    else if (flag == "--footage") options.footage = fs::absolute(value);
     else if (flag == "--accent") {
       if (value.size()!=7 || value[0]!='#') throw std::invalid_argument("accent must be #RRGGBB");
       const auto digit = [](char c) -> int {
@@ -207,7 +272,18 @@ Options parse(int argc, char** argv) {
       for (std::size_t j=0;j<3;++j) options.accent[j]=static_cast<double>(digit(value[j*2+1])*16+digit(value[j*2+2]))/255;
     } else throw std::invalid_argument("unknown option: " + flag);
   }
-  if (options.preset != "title-sequence") throw std::invalid_argument("unknown template: " + options.preset);
+  if (options.preset != "title-sequence" && options.preset != "product-promo" && options.preset != "captioned-footage")
+    throw std::invalid_argument("unknown template: " + options.preset);
+  if (!options.image.empty() && options.preset != "product-promo") throw std::invalid_argument("--image requires product-promo");
+  if (!options.footage.empty() && options.preset != "captioned-footage") throw std::invalid_argument("--footage requires captioned-footage");
+  if (!seen.contains("--title")) {
+    if(options.preset == "product-promo") options.title = "A little everyday magic.";
+    if(options.preset == "captioned-footage") options.title = "Find your next perspective.";
+  }
+  if (!seen.contains("--subtitle")) {
+    if(options.preset == "product-promo") options.subtitle = "Designed for the way you move.";
+    if(options.preset == "captioned-footage") options.subtitle = "Small details. A different perspective.";
+  }
   if (options.no_music && !options.music.empty()) throw std::invalid_argument("--music and --no-music cannot be combined");
   return options;
 }
@@ -216,7 +292,9 @@ Options parse(int argc, char** argv) {
 int init_project(int argc, char** argv) {
   if (argc == 1 && std::string_view(argv[0]) == "--help") { usage(); return 0; }
   if (argc == 1 && std::string_view(argv[0]) == "--list-templates") {
-    std::cout << "title-sequence  Animated editorial title, subtitle, and an original music cue\n"; return 0;
+    std::cout << "title-sequence    Animated editorial title and subtitle\n"
+              << "product-promo     Product card, image or native device mockup, and call to action\n"
+              << "captioned-footage Footage with three editable, timed caption cards\n"; return 0;
   }
   fs::path created;
   try {
@@ -228,6 +306,9 @@ int init_project(int argc, char** argv) {
     const auto font = options.font.empty() ? source/"Lato-Regular.ttf" : options.font;
     readable_file(font);
     if (!options.music.empty()) readable_file(options.music);
+    if (!options.image.empty()) readable_file(options.image);
+    if (!options.footage.empty()) readable_file(options.footage);
+    if (options.preset == "captioned-footage" && options.footage.empty()) readable_file(source/"demo-footage.mp4");
     const auto doc = composition(options).dump(2) + '\n';
     if (!fs::create_directory(options.destination)) throw std::runtime_error("destination already exists");
     created = options.destination;
@@ -238,6 +319,11 @@ int init_project(int argc, char** argv) {
     if (!options.no_music) {
       if (options.music.empty()) score(created/"assets/music.wav");
       else fs::copy_file(options.music,created/("assets/music" + options.music.extension().string()));
+    }
+    if (!options.image.empty()) fs::copy_file(options.image,created/("assets/product" + options.image.extension().string()));
+    if (options.preset == "captioned-footage") {
+      const auto footage = options.footage.empty() ? source/"demo-footage.mp4" : options.footage;
+      fs::copy_file(footage,created/("assets/footage" + footage.extension().string()));
     }
     write(created/"scene.json",doc);
     write(created/"README.md",project_readme(options));

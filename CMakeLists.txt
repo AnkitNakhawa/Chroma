@@ -167,7 +167,7 @@ target_link_libraries(chroma_c_example PRIVATE chroma::c)
 
 add_executable(chroma_cli src/cli/main.cpp src/cli/init.cpp)
 target_link_libraries(chroma_cli PRIVATE nlohmann_json::nlohmann_json)
-foreach(resource Lato-Regular.ttf OFL.txt)
+foreach(resource Lato-Regular.ttf OFL.txt demo-footage.mp4 demo-footage.json README.md)
   configure_file(assets/templates/${resource} share/chroma/templates/${resource} COPYONLY)
 endforeach()
 configure_file(LICENSE share/chroma/templates/CHROMA-LICENSE.txt COPYONLY)
