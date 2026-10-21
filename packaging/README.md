@@ -109,6 +109,6 @@ from `docs/releases/v<version>.md`. The version must match CMake.
 
 The workflow token creates a manual release's tag without triggering another
 workflow run; that same run has already built and tested its exact commit.
-Check the regular CI workflow before requesting publication. For subsequent
+Publication also requires a successful regular push CI run for the exact commit. For subsequent
 versions, update CMake, the Python package version, documentation, and release
 notes together before starting a release.

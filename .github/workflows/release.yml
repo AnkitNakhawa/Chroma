@@ -185,6 +185,9 @@ jobs:
         shell: bash
         run: |
           version=$(sed -n 's/^  VERSION \([0-9.]*\)$/\1/p' CMakeLists.txt)
+          # Require the regular push CI for this exact commit as well as this
+          # workflow's package/quality/clean-runtime jobs.
+          test "$(gh api "repos/$GITHUB_REPOSITORY/actions/runs?head_sha=$GITHUB_SHA&event=push&per_page=100" --jq '[.workflow_runs[] | select(.path == ".github/workflows/ci.yml")][0].conclusion')" = success
           notes="docs/releases/v$version.md"
           test -s "$notes"
           if [[ "$GITHUB_REF" == refs/tags/* ]]; then

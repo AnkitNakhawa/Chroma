@@ -15,7 +15,7 @@ shell = textwrap.dedent(workflow.split('      - name: Validate tag and publish a
 if not shutil.which('sha256sum'):
     shell = 'sha256sum() { shasum -a 256 "$@"; }\n' + shell
 
-for case in ('manual', 'tag', 'existing-tag', 'wrong-version', 'missing-asset', 'bad-checksum', 'missing-notes', 'api-failure'):
+for case in ('manual', 'tag', 'existing-tag', 'wrong-version', 'missing-asset', 'bad-checksum', 'missing-notes', 'api-failure', 'ci-failure'):
     with tempfile.TemporaryDirectory(prefix='chroma publication ') as name:
         root = Path(name)
         (root / 'bin').mkdir()
@@ -23,7 +23,11 @@ for case in ('manual', 'tag', 'existing-tag', 'wrong-version', 'missing-asset', 
 set -eu
 if [ "$1" = api ]; then
   test "$CASE" != api-failure
-  if [ "$CASE" = existing-tag ]; then echo 1; else echo 0; fi
+  case "$2" in
+    *actions/runs*)
+      if [ "$CASE" = ci-failure ]; then echo failure; else echo success; fi ;;
+    *) if [ "$CASE" = existing-tag ]; then echo 1; else echo 0; fi ;;
+  esac
 else
   printf '%s\\n' "$@" > "$PWD/published-arguments"
 fi
