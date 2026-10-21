@@ -13,6 +13,7 @@
 #include <string_view>
 #include <vector>
 
+#include "init.hpp"
 #include "chroma/core/composition.hpp"
 #include "chroma/core/execution_plan.hpp"
 #include "chroma/core/render.hpp"
@@ -194,6 +195,8 @@ void write_cache_report(const CacheOptions& options, const chroma::CpuCacheUsage
 void print_usage(std::ostream& output) {
   output << "Usage:\n"
          << "  chroma --version\n"
+         << "  chroma init <directory> [--template <name>] [options]\n"
+         << "  chroma init --help | --list-templates\n"
          << "  chroma hardware\n"
          << "  chroma validate <composition.json> [--json]\n"
          << "  chroma preflight <composition.json> [--json] [--inputs-only]\n"
@@ -249,6 +252,8 @@ std::optional<chroma::FrameIndex> parse_frame_index(const char* value) {
 
 int main(int argc, char** argv) {
   chroma::configure_media_logging(chroma::MediaLogLevel::error);
+
+  if (argc >= 2 && std::string_view(argv[1]) == "init") return chroma::cli::init_project(argc-2,argv+2);
 
   if (argc == 2 && std::string_view(argv[1]) == "--version") {
     std::cout << "chroma 0.1.0\n";
