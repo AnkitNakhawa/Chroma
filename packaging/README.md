@@ -96,3 +96,19 @@ dependencies and compares decoded Python/CLI video and audio output.
 Release smoke checks run explicit input preflight, exercise early missing-input
 failures without output replacement, and call the new C preflight entry point
 through the installed Python wheel. See `share/chroma/docs/preflight.md`.
+
+## Publishing a release
+
+The `Release packages` workflow builds and tests all three targets on every main
+push. It publishes only for a matching `v<version>` tag or a manual run on `main`
+with **publish_release** enabled (disabled by default). Manual publication creates
+the version tag at the tested workflow commit after all package and clean-runtime
+jobs pass. It refuses to reuse an existing tag. Publication requires the nine
+binary/source/checksum assets, rechecks every checksum, and uses curated notes
+from `docs/releases/v<version>.md`. The version must match CMake.
+
+The workflow token creates a manual release's tag without triggering another
+workflow run; that same run has already built and tested its exact commit.
+Check the regular CI workflow before requesting publication. For subsequent
+versions, update CMake, the Python package version, documentation, and release
+notes together before starting a release.

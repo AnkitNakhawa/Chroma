@@ -6,6 +6,12 @@ on:
     tags: ['v*']
   pull_request:
   workflow_dispatch:
+    inputs:
+      publish_release:
+        description: Publish the CMake version as a GitHub release after all package checks pass (main only)
+        type: boolean
+        required: true
+        default: false
 
 permissions:
   contents: read
@@ -156,9 +162,12 @@ jobs:
         run: /bin/sh downloaded/artifacts/smoke/smoke.sh "$PWD/relocated package/$(ls 'relocated package')" "$PWD/downloaded/artifacts/smoke" "$PWD/smoke-results"
 
   publish:
-    name: Publish tagged release
+    name: Publish tested release
+    concurrency:
+      group: chroma-release-publication
+      cancel-in-progress: false
     needs: [package, smoke]
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.publish_release)
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -168,13 +177,34 @@ jobs:
         with:
           pattern: release-*
           path: downloaded
+      - name: Test publication guards without publishing
+        run: python3 packaging/test-release-publication.py
       - name: Validate tag and publish all tested archives
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           version=$(sed -n 's/^  VERSION \([0-9.]*\)$/\1/p' CMakeLists.txt)
-          test "$GITHUB_REF_NAME" = "v$version"
-          mapfile -t files < <(find downloaded -type f \( -name '*.tar.gz' -o -name '*.sha256' \))
+          notes="docs/releases/v$version.md"
+          test -s "$notes"
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            test "$GITHUB_REF_NAME" = "v$version"
+          else
+            # A manual publication creates its tag only after all tests pass.
+            # Refuse to reuse a tag, including one without a published release.
+            test "$(gh api "repos/$GITHUB_REPOSITORY/git/matching-refs/tags/v$version" --jq "[.[] | select(.ref == \"refs/tags/v$version\")] | length")" -eq 0
+          fi
+          files=()
+          while IFS= read -r -d '' file; do
+            files+=("$file")
+          done < <(find downloaded -type f \( -name '*.tar.gz' -o -name '*.sha256' \) -print0)
           test "${#files[@]}" -eq 9
-          gh release create "$GITHUB_REF_NAME" "${files[@]}" --verify-tag --title "Chroma $version" --generate-notes
+          for target in linux-x86_64 darwin-arm64 darwin-x86_64; do
+            folder=$(dirname "$(find downloaded -name "chroma-$version-$target.sha256")")
+            (cd "$folder" && sha256sum -c "chroma-$version-$target.sha256")
+          done
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            gh release create "v$version" "${files[@]}" --verify-tag --title "Chroma $version" --notes-file "$notes"
+          else
+            gh release create "v$version" "${files[@]}" --target "$GITHUB_SHA" --title "Chroma $version" --notes-file "$notes"
+          fi
