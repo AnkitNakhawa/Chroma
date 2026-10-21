@@ -61,6 +61,31 @@ for expected in codec_name=h264 width=1280 height=720 r_frame_rate=30/1 nb_read_
   grep -qx "$expected" "$result/quickstart.video.txt"
 done
 
+# Create projects outside the relocated SDK with only its bundled resources.
+project_root=$(mktemp -d "$result/projects.XXXXXX")
+for template in title-sequence product-promo captioned-footage; do
+  project="$project_root/$template project"
+  clean "$package/bin/chroma" init "$project" --template "$template"
+  test -s "$project/assets/font.ttf"
+  test -s "$project/assets/FONT-LICENSE.txt"
+  clean "$package/bin/chroma" preflight "$project/scene.json"
+  clean "$package/bin/chroma" render "$project/scene.json" --output "$project/video.mp4"
+  clean "$probe" -v error -select_streams v:0 -count_frames \
+    -show_entries stream=codec_name,width,height,r_frame_rate,nb_read_frames \
+    -of default=noprint_wrappers=1 "$project/video.mp4" > "$project/video.txt"
+  for expected in codec_name=h264 width=1280 height=720 r_frame_rate=30/1 nb_read_frames=180; do
+    grep -qx "$expected" "$project/video.txt"
+  done
+  clean "$probe" -v error -select_streams a:0 -show_entries stream=codec_name,sample_rate,channels \
+    -of default=noprint_wrappers=1 "$project/video.mp4" > "$project/audio.txt"
+  for expected in codec_name=aac sample_rate=48000 channels=2; do
+    grep -qx "$expected" "$project/audio.txt"
+  done
+  status=0
+  clean "$package/bin/chroma" init "$project" --template "$template" > /dev/null 2>&1 || status=$?
+  test "$status" -eq 4
+  test -s "$project/video.mp4"
+done
 ffmpeg="$package/libexec/chroma/ffmpeg"
 for mode in cli c-api; do
   clean "$probe" -v error -select_streams v:0 -count_frames \
@@ -82,4 +107,4 @@ cmp "$result/cli.rgba" "$result/c-api.rgba"
 cmp "$result/cli.pcm" "$result/c-api.pcm"
 test -s "$result/cli.rgba"
 test -s "$result/cli.pcm"
-printf '%s\n' 'PASS: relocated CLI, C SDK, H.264/AAC, text/image/footage/transforms/audio, identical decoded CLI/C output'
+printf '%s\n' 'PASS: relocated CLI, C SDK, H.264/AAC, text/image/footage/transforms/audio, identical decoded CLI/C output, offline template projects'

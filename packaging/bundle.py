@@ -195,6 +195,8 @@ def main():
         dest.mkdir()
         for file in files:
             shutil.copy2(work / 'src' / dependency / file, dest / Path(file).name)
+    (licenses / 'lato').mkdir()
+    shutil.copy2(ROOT / 'assets/templates/OFL.txt', licenses / 'lato/OFL.txt')
     shutil.copy2(ROOT / 'packaging/README.md', share / 'RELEASE.md')
     shutil.copy2(ROOT / 'packaging/sources.lock.json', share)
     revision = output(['git', '-C', ROOT, 'rev-parse', 'HEAD']).strip()

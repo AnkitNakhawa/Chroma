@@ -4,7 +4,11 @@ Release archives contain the CLI (`bin/chroma`), shared C ABI v1 library and hea
 relocatable CMake config (`find_package(Chroma 0.1 CONFIG REQUIRED)` / `chroma::c`),
 a prebuilt plain-C render example, and private FFmpeg/ffprobe tools.
 Extract the entire archive together; no Homebrew or FFmpeg installation is needed.
-Fonts and input media remain application assets: reference their paths in your composition.
+Input media and custom fonts remain application assets. Development main also
+ships offline `chroma init` templates with an unmodified Lato Regular font (SIL
+OFL 1.1), original Apache-2.0 demo footage, and locally synthesized demo music.
+The font license and media provenance are in `share/chroma/templates/`; generated
+projects retain those license notices. v0.1.0 predates project scaffolding.
 
 Targets: Linux x86_64 (glibc 2.35+, Ubuntu 22.04/24.04), macOS 14+ arm64 and x86_64.
 Linux retains the OS C/C++ runtimes (glibc, libstdc++6, libgcc_s); these are part of

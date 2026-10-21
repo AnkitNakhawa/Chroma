@@ -50,7 +50,7 @@ with tempfile.TemporaryDirectory(prefix='chroma init ') as folder:
     assert not (root/'missing-parent').exists()
     project = root/'Café project with spaces'
     title = 'A "quoted" title\nwith café & a backslash \\.'
-    run('init',project,'--title',title,'--subtitle','Your idea, in motion.','--accent','#Ae39fF')
+    run('init',project,'--title',title,'--subtitle','Your idea, in motion.','--accent','#Ae39fF',cwd=root)
     doc = json.loads((project/'scene.json').read_text())
     assert doc['canvas']['duration_frames']==180
     assert next(l for l in doc['layers'] if l['id']=='title')['text']==title

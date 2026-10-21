@@ -114,3 +114,8 @@ in the archive; see the [C API guide](c-api.md).
 
 [Release notes](releases/v0.1.0.md) describe the supported scope.
 [The packaging guide](../packaging/README.md) covers source archives and licenses.
+
+
+For reusable starter layouts, see [project scaffolding](projects.md). The
+`chroma init` command is newer than v0.1.0 and requires development main or a
+newer package; the installation instructions above target v0.1.0.

@@ -24,6 +24,23 @@ This renders a three-second, 1280×720 animated card composition. It requires no
 
 Keep the archive's `bin`, `lib`, `libexec`, and `share` directories together. macOS packages are ad-hoc signed developer SDKs, without Developer ID signing or notarization. Windows and Linux ARM packages are not included in this release.
 
+## Create a project (development main)
+
+The current `main` branch adds three offline project templates. This command is
+newer than the published v0.1.0 archives; build main or use a newer package.
+
+```sh
+chroma init my-video --template product-promo --title "Meet your next favorite."
+chroma preflight my-video/scene.json
+chroma render my-video/scene.json --output my-video/video.mp4 --progress text
+```
+
+Choose `title-sequence`, `product-promo`, or `captioned-footage`. Each creates an
+editable six-second 720p composition with a licensed font and original demo
+music; captioned footage includes an original sample clip. Supply your own text,
+colors, image, footage, or music through creation options. Existing destinations
+are refused. See [project scaffolding](docs/projects.md).
+
 ## What it does
 
 - Compose shapes, text, images, and video on an exact frame timeline; animate translation, scale, rotation, and opacity with easing.
@@ -47,6 +64,7 @@ This release uses CPU rendering and 8-bit SDR H.264 output. GPU execution, produ
 ## Documentation
 
 - [Quickstart: install and render](docs/quickstart.md)
+- [Project scaffolding and templates (development main)](docs/projects.md)
 - [Composition format and text layout](docs/composition-format.md)
 - [Input preflight](docs/preflight.md)
 - [Progress and cancellation](docs/render-control.md)
