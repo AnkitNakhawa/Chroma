@@ -7,9 +7,12 @@ import subprocess
 import tempfile
 import wave
 
+from quality_fixtures import scale_scene
+
 p = argparse.ArgumentParser()
 p.add_argument('--chroma', required=True)
 p.add_argument('--render', action='store_true')
+p.add_argument('--render-scale', type=float, choices=[0.25,1.0], default=1.0)
 a = p.parse_args()
 cli = str(Path(a.chroma).resolve())
 
@@ -18,6 +21,17 @@ def run(*args, status=0, cwd=None):
     result = subprocess.run([cli, *map(str,args)], capture_output=True, text=True, cwd=cwd, timeout=90)
     assert result.returncode == status, (args,result.returncode,result.stdout,result.stderr)
     return result
+
+
+def rendering_scene(project):
+    scene = project/'scene.json'
+    if a.render_scale == 1:
+        return scene
+    # Debug CI exercises the same timelines, assets and operations at draft size.
+    # Release CTest and relocated package smoke retain all 180 frames at 720p.
+    preview = project/'preview-scene.json'
+    preview.write_text(json.dumps(scale_scene(json.loads(scene.read_text()),a.render_scale)))
+    return preview
 
 
 with tempfile.TemporaryDirectory(prefix='chroma init ') as folder:
@@ -75,7 +89,7 @@ with tempfile.TemporaryDirectory(prefix='chroma init ') as folder:
     run('validate',custom/'scene.json')
     if a.render:
         assert json.loads(run('preflight',moved/'scene.json','--json').stdout)['ready']
-        run('render',moved/'scene.json','--output',moved/'video.mp4','--progress','json')
+        run('render',rendering_scene(moved),'--output',moved/'video.mp4','--progress','json')
         assert (moved/'video.mp4').stat().st_size>1000
     # Every preset is render-ready, with relative assets and editable text.
     product, captioned = root/'product', root/'captioned'
@@ -101,18 +115,18 @@ with tempfile.TemporaryDirectory(prefix='chroma init ') as folder:
             assert (project/asset['path']).is_file()
         if a.render:
             assert json.loads(run('preflight',project/'scene.json','--json').stdout)['ready']
-            result = run('render',project/'scene.json','--output',project/'video.mp4','--progress','json')
+            result = run('render',rendering_scene(project),'--output',project/'video.mp4','--progress','json')
             events = [json.loads(line) for line in result.stdout.splitlines()]
             assert events[-1]['phase']=='completed' and events[-1]['frames_encoded']==180
             assert events[-1]['audio_samples_encoded']==288000
             info = json.loads(run('probe',project/'video.mp4').stdout)
-            assert (info['width'],info['height'],info['frame_count'],info['duration'])==(1280,720,180,{'numerator':6,'denominator':1})
+            assert (info['width'],info['height'],info['frame_count'],info['duration'])==(round(1280*a.render_scale),round(720*a.render_scale),180,{'numerator':6,'denominator':1})
     if a.render:
         # Inspect all three caption cues and the animated title/product layouts.
         for project in [moved,product,captioned]:
             for frame in [35,95,155]:
                 for mode in ['bounded','full-frame']:
-                    run('frame',project/'scene.json','--frame',frame,'--output',project/(mode+'.ppm'),'--graphics-mode',mode)
+                    run('frame',rendering_scene(project),'--frame',frame,'--output',project/(mode+'.ppm'),'--graphics-mode',mode)
                 assert (project/'bounded.ppm').read_bytes()==(project/'full-frame.ppm').read_bytes(), (project,frame)
     # Two competing initializations must never remove or merge the winner's project.
     race = root/'race'

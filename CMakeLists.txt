@@ -337,7 +337,7 @@ if(CHROMA_BUILD_TESTS)
   if(Python3_FOUND)
     set(CHROMA_INIT_ARGS --chroma $<TARGET_FILE:chroma_cli>)
     if(CHROMA_HAS_FFMPEG AND CHROMA_HAS_TEXT)
-      list(APPEND CHROMA_INIT_ARGS --render)
+      list(APPEND CHROMA_INIT_ARGS --render --render-scale $<IF:$<CONFIG:Debug>,0.25,1>)
     endif()
     add_test(NAME chroma_init_cli_tests
       COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/init_cli_tests.py ${CHROMA_INIT_ARGS})
