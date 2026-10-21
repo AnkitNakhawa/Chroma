@@ -46,16 +46,16 @@ failure cannot roll back a committed video. Inspect publication before retrying.
 | `phase` | Last observed phase; may also be `parsing` or `preflight` |
 | `output.path` | Requested output path |
 | `output.published` | Whether this job committed a new output; not whether an old file exists |
-| `output.metadata` | On success: dimensions, frame count/rate, rational duration, codec and audio configuration; otherwise null |
+| `output.metadata` | After publication: dimensions, frame count/rate, rational duration, codec and audio configuration; otherwise null |
 | `output.size_bytes` | Published file size when stat succeeds; otherwise null |
 | `progress` | Last observed frame/audio counters and elapsed nanoseconds; null if no event occurred |
-| `profile` | Complete existing native render profile on success; otherwise null |
+| `profile` | Complete native profile after a committed render, including later ancillary failures; null when rendering itself failed or was cancelled |
 | `timings.wall_nanoseconds` | Time from report construction through terminal render/recorded failure, excluding final JSON publication |
 | `timings.stages_complete` | Whether complete stage measurements are available |
 | `timings.milliseconds` | Existing native stage timings, or null on failure/cancellation |
 | `memory.process_peak_rss_bytes` | OS process lifetime high-water resident memory, or null on unsupported platforms |
 | `memory.scope` | `process_lifetime`; this is not an isolated per-render peak |
-| `cache` | Configured image/text budgets and complete usage on success; usage is null after failure/cancellation |
+| `cache` | Configured image/text budgets and complete usage after a committed render; usage is null when rendering itself failed or was cancelled |
 | `diagnostics` | Errors and preflight warnings, with severity, code, path, message, and suggested action |
 
 Metadata is labeled `source: render_configuration`: it records the successful
