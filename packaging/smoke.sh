@@ -8,6 +8,9 @@ result=$(cd "$3" && pwd)
 clean() {
   env -i PATH=/usr/bin:/bin HOME="$result" LC_ALL=C "$@"
 }
+# Schema discovery works with no Python, external validator or resource lookup.
+clean "$package/bin/chroma" schema > "$result/composition-v1.schema.json"
+cmp "$result/composition-v1.schema.json" "$package/share/chroma/schemas/composition-v1.schema.json"
 clean "$package/bin/chroma" validate "$fixture/smoke.json"
 clean "$package/bin/chroma" preflight "$fixture/smoke.json" --json > "$result/preflight.json"
 grep -q '"ready": true' "$result/preflight.json"

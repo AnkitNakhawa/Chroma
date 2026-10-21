@@ -346,6 +346,14 @@ if(CHROMA_BUILD_TESTS)
   endif()
   find_package(Python3 COMPONENTS Interpreter QUIET)
   if(Python3_FOUND)
+    execute_process(COMMAND ${Python3_EXECUTABLE} -c "import jsonschema"
+      RESULT_VARIABLE CHROMA_JSONSCHEMA_STATUS OUTPUT_QUIET ERROR_QUIET)
+    if(CHROMA_JSONSCHEMA_STATUS EQUAL 0)
+      add_test(NAME chroma_schema_tests
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/schema_tests.py $<TARGET_FILE:chroma_cli>)
+    else()
+      message(STATUS "Schema conformance tests require tests/requirements-schema.txt (mandatory in CI)")
+    endif()
     set(CHROMA_REPORT_ARGS --chroma $<TARGET_FILE:chroma_cli>)
     if(CHROMA_HAS_FFMPEG)
       list(APPEND CHROMA_REPORT_ARGS --media)
@@ -653,7 +661,7 @@ install(TARGETS chroma_c_example RUNTIME DESTINATION ${CMAKE_INSTALL_LIBEXECDIR}
 install(DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/share/chroma/templates/
   DESTINATION ${CMAKE_INSTALL_DATADIR}/chroma/templates COMPONENT CLI)
 install(FILES LICENSE README.md DESTINATION ${CMAKE_INSTALL_DATADIR}/chroma COMPONENT Documentation)
-install(FILES docs/c-api.md docs/render-control.md docs/python.md docs/composition-format.md docs/preflight.md docs/quickstart.md docs/projects.md docs/render-reports.md
+install(FILES docs/c-api.md docs/render-control.md docs/python.md docs/composition-format.md docs/preflight.md docs/quickstart.md docs/projects.md docs/render-reports.md docs/composition-schema.md
   DESTINATION ${CMAKE_INSTALL_DATADIR}/chroma/docs COMPONENT Documentation)
 install(FILES docs/releases/v0.1.0.md
   DESTINATION ${CMAKE_INSTALL_DATADIR}/chroma/docs/releases COMPONENT Documentation)

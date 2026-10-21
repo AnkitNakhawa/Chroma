@@ -1,0 +1,2 @@
+# Test-only dependency; Chroma and its Python wrapper remain dependency-free.
+jsonschema>=4.18,<5

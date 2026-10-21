@@ -78,6 +78,7 @@ This release uses CPU rendering and 8-bit SDR H.264 output. GPU execution, produ
 - [Quickstart: install and render](docs/quickstart.md)
 - [Project scaffolding and templates (development main)](docs/projects.md)
 - [Composition format and text layout](docs/composition-format.md)
+- [Machine-readable composition schema (development main)](docs/composition-schema.md)
 - [Input preflight](docs/preflight.md)
 - [Progress and cancellation](docs/render-control.md)
 - [Structured render reports (development main)](docs/render-reports.md)

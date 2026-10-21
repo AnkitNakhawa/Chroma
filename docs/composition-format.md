@@ -1,4 +1,4 @@
-# Experimental Composition Format
+# Composition Format
 
 The current schema exists to exercise Chroma's validation and rendering boundaries. It is not yet a compatibility promise.
 
@@ -73,6 +73,8 @@ Static images use `"type": "image"` and may use any still-image format supported
   ]
 }
 ```
+
+The [machine-readable schema](../schemas/composition-v1.schema.json) covers structural validation. See the [agent validation guide](composition-schema.md) for offline discovery and semantic checks.
 
 ## Current semantics
 

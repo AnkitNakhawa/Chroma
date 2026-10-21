@@ -31,11 +31,20 @@ jobs:
         if: runner.os == 'macOS'
         run: brew install harfbuzz freetype
 
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.14'
+      - name: Install schema test validator
+        run: python3 -m pip install -r tests/requirements-schema.txt
+
       - name: Configure
         run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -DCHROMA_ENABLE_FFMPEG=${{ matrix.ffmpeg }}
 
       - name: Build
         run: cmake --build build --parallel
+
+      - name: Require schema conformance coverage
+        run: python3 tests/schema_tests.py build/chroma
 
       - name: Test
         run: ctest --test-dir build --output-on-failure -LE quality

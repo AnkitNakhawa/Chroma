@@ -35,6 +35,11 @@ with tempfile.TemporaryDirectory() as temp:
         if isinstance(document, dict) and 'schema_version' in document:
             check(document)
 
+    for template in ('title-sequence', 'product-promo', 'captioned-footage'):
+        project = Path(temp) / template
+        subprocess.run([CLI, 'init', project, '--template', template], check=True, capture_output=True)
+        check(json.loads((project / 'scene.json').read_text()))
+
     base = {'schema_version': 1, 'canvas': {'width': 1280, 'height': 720,
             'frame_rate': {'numerator': 30, 'denominator': 1}, 'duration_frames': 60},
             'layers': [{'id': 'bg', 'type': 'solid', 'start_frame': 0, 'end_frame': 60,
