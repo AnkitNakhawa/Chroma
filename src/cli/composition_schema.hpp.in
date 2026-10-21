@@ -1,0 +1,2 @@
+#pragma once
+inline constexpr char composition_schema_json[] = R"CHROMA_SCHEMA(@CHROMA_COMPOSITION_SCHEMA@)CHROMA_SCHEMA";

@@ -166,7 +166,12 @@ target_compile_features(chroma_c_example PRIVATE c_std_99)
 set_target_properties(chroma_c_example PROPERTIES LINKER_LANGUAGE C)
 target_link_libraries(chroma_c_example PRIVATE chroma::c)
 
+# Embed the canonical schema so CLI discovery works without external resources.
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/schemas/composition-v1.schema.json")
+file(READ "${CMAKE_CURRENT_SOURCE_DIR}/schemas/composition-v1.schema.json" CHROMA_COMPOSITION_SCHEMA)
+configure_file(src/cli/composition_schema.hpp.in generated/composition_schema.hpp @ONLY)
 add_executable(chroma_cli src/cli/main.cpp src/cli/init.cpp)
+target_include_directories(chroma_cli PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated")
 target_link_libraries(chroma_cli PRIVATE nlohmann_json::nlohmann_json)
 foreach(resource Lato-Regular.ttf OFL.txt demo-footage.mp4 demo-footage.json README.md)
   configure_file(assets/templates/${resource} share/chroma/templates/${resource} COPYONLY)
@@ -682,3 +687,5 @@ endif()
 install(DIRECTORY python/src/chroma_render DESTINATION ${CMAKE_INSTALL_DATADIR}/chroma/python
   COMPONENT Python FILES_MATCHING PATTERN "*.py" PATTERN "__pycache__" EXCLUDE)
 install(FILES examples/python-render.py DESTINATION ${CMAKE_INSTALL_DATADIR}/chroma/examples COMPONENT Python)
+
+install(FILES schemas/composition-v1.schema.json DESTINATION ${CMAKE_INSTALL_DATADIR}/chroma/schemas COMPONENT CLI)

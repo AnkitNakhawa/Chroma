@@ -14,6 +14,7 @@
 #include <vector>
 
 #include "init.hpp"
+#include "composition_schema.hpp"
 #include "chroma/media/render_report.hpp"
 #include "chroma/core/composition.hpp"
 #include "chroma/core/execution_plan.hpp"
@@ -234,6 +235,7 @@ class ReportFile {
 void print_usage(std::ostream& output) {
   output << "Usage:\n"
          << "  chroma --version\n"
+         << "  chroma schema\n"
          << "  chroma init <directory> [--template <name>] [options]\n"
          << "  chroma init --help | --list-templates\n"
          << "  chroma hardware\n"
@@ -292,6 +294,10 @@ std::optional<chroma::FrameIndex> parse_frame_index(const char* value) {
 int main(int argc, char** argv) {
   chroma::configure_media_logging(chroma::MediaLogLevel::error);
 
+  if (argc == 2 && std::string_view(argv[1]) == "schema") {
+    std::cout << composition_schema_json;
+    return std::cout ? 0 : input_error;
+  }
   if (argc >= 2 && std::string_view(argv[1]) == "init") return chroma::cli::init_project(argc-2,argv+2);
 
   if (argc == 2 && std::string_view(argv[1]) == "--version") {
