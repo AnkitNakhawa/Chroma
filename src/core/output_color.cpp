@@ -55,10 +55,15 @@ std::uint8_t linear_to_srgb8(float value) noexcept {
 void convert_output_rgb8(const Pixel* pixels, std::size_t count, std::uint8_t* rgb) noexcept {
   const auto* table = output_table().data();
   detail::parallel_for(count, 131072, [&](std::size_t begin, std::size_t end) {
+  // Copy captured pointers before byte stores: RGB8 writes can alias the closure
+  // itself in the optimizer's analysis, otherwise forcing pointer reloads.
+  const auto* source = pixels;
+  auto* destination = rgb;
+  const auto* lookup = table;
   for (std::size_t index = begin; index < end; ++index) {
-    rgb[index * 3] = convert(pixels[index].red, table);
-    rgb[index * 3 + 1] = convert(pixels[index].green, table);
-    rgb[index * 3 + 2] = convert(pixels[index].blue, table);
+    destination[index * 3] = convert(source[index].red, lookup);
+    destination[index * 3 + 1] = convert(source[index].green, lookup);
+    destination[index * 3 + 2] = convert(source[index].blue, lookup);
   }
   });
 }

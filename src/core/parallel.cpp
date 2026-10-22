@@ -114,6 +114,8 @@ Pool* pool() noexcept {
 }
 }
 
+bool serial_requested() noexcept { return force_serial || executing_job; }
+
 void parallel_ranges(std::size_t count, std::size_t grain, void* context, RangeTask task) {
   if (count==0) return;
   if (executing_job || force_serial) { task(context,0,count); return; }

@@ -17,11 +17,11 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     for name in ('reference', 'optimized', 'composition', 'ffmpeg', 'ffprobe', 'output'):
         parser.add_argument('--' + name, type=Path, required=True)
-    parser.add_argument('--experiment', choices=['output-color', 'composition-passes', 'cpu-parallel'], default='output-color')
+    parser.add_argument('--experiment', choices=['output-color', 'composition-passes', 'cpu-parallel', 'cpu-before-after'], default='output-color')
     args = parser.parse_args()
     reference_name, optimized_name = ('scalar', 'lookup') if args.experiment == 'output-color' else ('materialized', 'optimized')
-    if args.experiment == 'cpu-parallel':
-        reference_name, optimized_name = 'serial', 'parallel'
+    if args.experiment in ('cpu-parallel', 'cpu-before-after'):
+        reference_name, optimized_name = 'serial' if args.experiment == 'cpu-parallel' else 'previous', 'parallel'
     args.output.mkdir(parents=True, exist_ok=True)
     (args.output / 'equivalence.json').write_text(json.dumps({'passed': False}) + '\n')
     scene = args.composition.resolve()
@@ -30,7 +30,7 @@ def main():
     for name, executable in [(reference_name, args.reference), (optimized_name, args.optimized)]:
         video = (args.output / (name + '.mp4')).resolve()
         environment = os.environ.copy()
-        if args.experiment == 'cpu-parallel':
+        if args.experiment in ('cpu-parallel', 'cpu-before-after'):
             environment['CHROMA_CPU_THREADS'] = '1' if name == reference_name else '4'
         subprocess.run([str(executable.resolve()), 'render', str(scene), '--output', str(video)], check=True, env=environment)
         info = probe(str(args.ffprobe), str(video))
