@@ -47,9 +47,14 @@ enum class CpuExecutionMode {
   reference,
   // Preserve video/image fusion, but use the original full-canvas graphics path.
   unbounded_graphics,
+  // Retain bounded graphics/media fusion, but materialize composition passes.
+  unoptimized_composition,
 };
 
 struct CpuGraphicsStats {
+  std::uint64_t solid_surface_pixels_avoided{0};
+  std::uint64_t initialization_pixels_avoided{0};
+  std::uint64_t constant_composite_pixels_avoided{0};
   std::uint64_t bounded_operations{0};
   std::uint64_t full_frame_operations{0};
   std::uint64_t source_pixels{0};
@@ -57,6 +62,9 @@ struct CpuGraphicsStats {
   std::uint64_t composite_pixels{0};
 
   CpuGraphicsStats& operator+=(const CpuGraphicsStats& other) noexcept {
+    solid_surface_pixels_avoided += other.solid_surface_pixels_avoided;
+    initialization_pixels_avoided += other.initialization_pixels_avoided;
+    constant_composite_pixels_avoided += other.constant_composite_pixels_avoided;
     bounded_operations += other.bounded_operations;
     full_frame_operations += other.full_frame_operations;
     source_pixels += other.source_pixels;

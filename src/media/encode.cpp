@@ -59,7 +59,10 @@ double frames_per_second(std::int64_t frames, std::int64_t nanoseconds) {
 
 nlohmann::json profile_json(const VideoRenderResult& result) {
   return {{"frames_encoded", result.frames_encoded},
-          {"graphics", {{"bounded_operations", result.graphics.bounded_operations},
+          {"graphics", {{"solid_surface_pixels_avoided", result.graphics.solid_surface_pixels_avoided},
+                        {"initialization_pixels_avoided", result.graphics.initialization_pixels_avoided},
+                        {"constant_composite_pixels_avoided", result.graphics.constant_composite_pixels_avoided},
+                        {"bounded_operations", result.graphics.bounded_operations},
                         {"full_frame_operations", result.graphics.full_frame_operations},
                         {"source_pixels", result.graphics.source_pixels},
                         {"transform_pixels", result.graphics.transform_pixels},

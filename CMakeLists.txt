@@ -89,6 +89,10 @@ option(CHROMA_REFERENCE_OUTPUT_CONVERSION "Use scalar output conversion for corr
 if(CHROMA_REFERENCE_OUTPUT_CONVERSION)
   set_source_files_properties(src/media/encode.cpp PROPERTIES COMPILE_DEFINITIONS CHROMA_REFERENCE_OUTPUT_CONVERSION=1)
 endif()
+option(CHROMA_REFERENCE_COMPOSITION_PASSES "Retain full-canvas composition passes for controls" OFF)
+if(CHROMA_REFERENCE_COMPOSITION_PASSES)
+  set_source_files_properties(src/core/render.cpp PROPERTIES COMPILE_DEFINITIONS CHROMA_REFERENCE_COMPOSITION_PASSES=1)
+endif()
 add_library(chroma::core ALIAS chroma_core)
 set_target_properties(chroma_core PROPERTIES POSITION_INDEPENDENT_CODE ON
   CXX_VISIBILITY_PRESET hidden VISIBILITY_INLINES_HIDDEN ON)
@@ -299,6 +303,10 @@ if(CHROMA_BUILD_TESTS)
   add_executable(chroma_timeline_tests tests/timeline_tests.cpp)
   target_link_libraries(chroma_timeline_tests PRIVATE chroma::core)
   add_test(NAME chroma_timeline_tests COMMAND chroma_timeline_tests)
+
+  add_executable(chroma_composition_pass_tests tests/composition_pass_tests.cpp)
+  target_link_libraries(chroma_composition_pass_tests PRIVATE chroma::core)
+  add_test(NAME chroma_composition_pass_tests COMMAND chroma_composition_pass_tests)
 
   add_executable(chroma_output_color_tests tests/output_color_tests.cpp)
   target_link_libraries(chroma_output_color_tests PRIVATE chroma::core)

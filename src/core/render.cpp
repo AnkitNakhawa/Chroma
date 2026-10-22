@@ -892,19 +892,56 @@ CpuRenderContext::~CpuRenderContext() = default;
 CpuRenderContext::CpuRenderContext(CpuRenderContext&&) noexcept = default;
 CpuRenderContext& CpuRenderContext::operator=(CpuRenderContext&&) noexcept = default;
 
+namespace {
+bool uniform_solid(const CompositeSolidOperation& solid) {
+  return std::all_of(solid.effects.effects().begin(), solid.effects.effects().end(),
+      [](const Effect& effect) { return std::holds_alternative<OpacityEffect>(effect); });
+}
+Pixel uniform_solid_pixel(const CompositeSolidOperation& solid) {
+  // Reuse the original effect arithmetic and ordering, including float rounding.
+  return apply_effect_program_cpu(Surface(1, 1, premultiply(solid.color)), solid.effects).pixels()[0];
+}
+}
+
 Surface CpuRenderContext::execute(const ExecutionPlan& plan, CpuExecutionMode mode) {
   last_execution_stats_ = {};
-  Surface result(plan.width(), plan.height());
-  for (const auto& operation : plan.operations()) {
+  bool optimize = mode == CpuExecutionMode::fused;
+#ifdef CHROMA_REFERENCE_COMPOSITION_PASSES
+  optimize = false;
+#endif
+  std::size_t first_operation = 0;
+  Pixel initial{};
+  if (optimize) {
+    // ExecutionPlan guarantees an initial clear. Collapse only a constant prefix;
+    // evaluate every blend rather than replacing opaque layers arithmetically.
+    initial = premultiply(std::get<ClearOperation>(plan.operations().front()).color);
+    first_operation = 1;
+    const auto pixels = static_cast<std::uint64_t>(plan.width()) * static_cast<std::uint64_t>(plan.height());
+    last_execution_stats_.graphics.initialization_pixels_avoided += pixels;
+    while (first_operation < plan.operations().size()) {
+      const auto* solid = std::get_if<CompositeSolidOperation>(&plan.operations()[first_operation]);
+      if (!solid || !uniform_solid(*solid)) break;
+      initial = composite(uniform_solid_pixel(*solid), initial, solid->blend_mode);
+      last_execution_stats_.graphics.constant_composite_pixels_avoided += pixels;
+      if (!solid->effects.effects().empty()) last_execution_stats_.graphics.solid_surface_pixels_avoided += pixels;
+      ++first_operation;
+    }
+  }
+  Surface result(plan.width(), plan.height(), initial);
+  for (std::size_t operation_index = first_operation; operation_index < plan.operations().size(); ++operation_index) {
+    const auto& operation = plan.operations()[operation_index];
     if (const auto* clear = std::get_if<ClearOperation>(&operation)) {
       std::fill(result.pixels().begin(), result.pixels().end(), premultiply(clear->color));
       continue;
     }
     if (const auto* solid = std::get_if<CompositeSolidOperation>(&operation)) {
       const auto source = premultiply(solid->color);
-      if (solid->effects.effects().empty()) {
+      if (solid->effects.effects().empty() || (optimize && uniform_solid(*solid))) {
+        const auto uniform = solid->effects.effects().empty() ? source : uniform_solid_pixel(*solid);
+        if (optimize && !solid->effects.effects().empty())
+          last_execution_stats_.graphics.solid_surface_pixels_avoided += result.size();
         for (auto& destination : result.pixels()) {
-          destination = composite(source, destination, solid->blend_mode);
+          destination = composite(uniform, destination, solid->blend_mode);
         }
       } else {
         auto effected = apply_effect_program_cpu(
@@ -917,7 +954,7 @@ Surface CpuRenderContext::execute(const ExecutionPlan& plan, CpuExecutionMode mo
       continue;
     }
     if (const auto* shape = std::get_if<CompositeShapeOperation>(&operation)) {
-      if (mode == CpuExecutionMode::fused && region_program_supported(shape->effects)) {
+      if ((mode == CpuExecutionMode::fused || mode == CpuExecutionMode::unoptimized_composition) && region_program_supported(shape->effects)) {
         RegionSurface region(clipped_bounds(shape->geometry.x, shape->geometry.y,
             shape->geometry.x + shape->geometry.width, shape->geometry.y + shape->geometry.height,
             result.width(), result.height()), false);
@@ -953,7 +990,7 @@ Surface CpuRenderContext::execute(const ExecutionPlan& plan, CpuExecutionMode mo
               bytes = detail::add_cache_bytes(bytes, glyph.coverage.capacity());
             return bytes;
           });
-      if (mode == CpuExecutionMode::fused && region_program_supported(text->effects)) {
+      if ((mode == CpuExecutionMode::fused || mode == CpuExecutionMode::unoptimized_composition) && region_program_supported(text->effects)) {
         RegionSurface region(text_bounds(*prepared, text->x, text->y, result.width(), result.height()), false);
         if (!region.bounds.empty())
           region.surface.emplace(render_prepared_text(*prepared, text->x, text->y, text->color,
