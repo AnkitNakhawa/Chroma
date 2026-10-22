@@ -1,0 +1,1037 @@
+{
+  "revision": "49583d42a7fcfc6aed0d2e0535ebca356f87850e",
+  "previous_renderer_revision": "02436d4d7038c4d484bd50c4c75482185f515deb",
+  "cpu": "Apple M5",
+  "memory_bytes": 17179869184,
+  "configured_thread_limits": {
+    "serial": 1,
+    "parallel": 4
+  },
+  "before_after": {
+    "platform": "macOS-26.6-arm64-arm-64bit-Mach-O",
+    "processor": "arm",
+    "composition_sha256": "a8faa46b091597b7952bc49799497872a2ef1ed09ff791bb8e8324e826182cb6",
+    "asset_sha256": {
+      "ocean": "327d638177e76da352a9a501dff57ff2f03b150f0a5e52d2f9dd1287dcac9942",
+      "bold": "8a0aace75d33794eece4b28187bfc1df0bbd2888b5d8a56e01788c8d65d16be1",
+      "regular": "d636e4683231f931eda222d588e944d082bfd3bdba02f928bee461c0f185b251",
+      "music": "6b638d0042c1f2f8b8c90d36c18e33162591e3b2c31fbf99319b288306a663f3"
+    },
+    "executable_sha256": {
+      "previous": "02cf1bed5ea96f2b62915d07b577161b5ee6817f86c369497adb35f1db3df214",
+      "parallel": "fca8d5351f152bfc574fab662e76b3a3c507584ad1824d0d3a3d9dc432395252"
+    },
+    "experiment": "cpu-before-after",
+    "method": "Two discarded full-encode warmups; fresh-process alternating samples; identical bounded graphics/caches/media fusion; CPU only; only the selected experiment control differs (cpu-parallel uses one executable with CHROMA_CPU_THREADS=1/4; cpu-before-after compares saved previous/current executables).",
+    "samples": [
+      {
+        "mode": "parallel",
+        "run": 1,
+        "wall_seconds": 16.306482500047423,
+        "peak_rss_bytes": 836042752,
+        "profile": {
+          "audio_samples_encoded": 864000,
+          "bytes": {
+            "decode_linear_rgba_written": 14399078400,
+            "decode_rgba8_written": 3599769600,
+            "decoded_native_estimate": 2174169600,
+            "encode_linear_rgba_read": 17915904000,
+            "encode_rgb24_written": 3359232000,
+            "encode_yuv420_written": 1679616000
+          },
+          "cache": {
+            "accounting": "retained_resource_bytes",
+            "images": {
+              "budget_bytes": 67108864,
+              "bypasses": 0,
+              "entries": 0,
+              "evictions": 0,
+              "hits": 0,
+              "insertions": 0,
+              "load_failures": 0,
+              "misses": 0,
+              "peak_resident_bytes": 0,
+              "resident_bytes": 0
+            },
+            "policy": "lru",
+            "text": {
+              "budget_bytes": 16777216,
+              "bypasses": 0,
+              "entries": 30,
+              "evictions": 0,
+              "hits": 3985,
+              "insertions": 30,
+              "load_failures": 0,
+              "misses": 30,
+              "peak_resident_bytes": 398716,
+              "resident_bytes": 398716
+            }
+          },
+          "counts": {
+            "decode_conversions": 434,
+            "decode_requests": 434,
+            "encode_conversions": 540,
+            "frames_decoded": 699
+          },
+          "frames_encoded": 540,
+          "frames_per_second": 33.219189021476346,
+          "graphics": {
+            "bounded_operations": 5170,
+            "composite_pixels": 252371462,
+            "constant_composite_pixels_avoided": 617932800,
+            "full_frame_operations": 0,
+            "initialization_pixels_avoided": 1119744000,
+            "solid_surface_pixels_avoided": 80870400,
+            "source_pixels": 250213698,
+            "transform_pixels": 39120011
+          },
+          "milliseconds": {
+            "audio": 323.238353,
+            "codec_mux": 683.152052,
+            "compile": 4.193002,
+            "composition": 6921.402681,
+            "decode": 2958.236885,
+            "decode_conversion": 3093.411158,
+            "encode": 2632.4072,
+            "encode_conversion": 1949.255148,
+            "execute": 12973.050724,
+            "linear_to_rgb": 965.073118,
+            "rgb_to_yuv": 984.18203,
+            "setup": 46.707,
+            "total": 16255.66475
+          }
+        }
+      },
+      {
+        "mode": "previous",
+        "run": 1,
+        "wall_seconds": 20.20277554099448,
+        "peak_rss_bytes": 868827136,
+        "profile": {
+          "audio_samples_encoded": 864000,
+          "bytes": {
+            "decode_linear_rgba_written": 14399078400,
+            "decode_rgba8_written": 3599769600,
+            "decoded_native_estimate": 2174169600,
+            "encode_linear_rgba_read": 17915904000,
+            "encode_rgb24_written": 3359232000,
+            "encode_yuv420_written": 1679616000
+          },
+          "cache": {
+            "accounting": "retained_resource_bytes",
+            "images": {
+              "budget_bytes": 67108864,
+              "bypasses": 0,
+              "entries": 0,
+              "evictions": 0,
+              "hits": 0,
+              "insertions": 0,
+              "load_failures": 0,
+              "misses": 0,
+              "peak_resident_bytes": 0,
+              "resident_bytes": 0
+            },
+            "policy": "lru",
+            "text": {
+              "budget_bytes": 16777216,
+              "bypasses": 0,
+              "entries": 30,
+              "evictions": 0,
+              "hits": 3985,
+              "insertions": 30,
+              "load_failures": 0,
+              "misses": 30,
+              "peak_resident_bytes": 398716,
+              "resident_bytes": 398716
+            }
+          },
+          "counts": {
+            "decode_conversions": 434,
+            "decode_requests": 434,
+            "encode_conversions": 540,
+            "frames_decoded": 699
+          },
+          "frames_encoded": 540,
+          "frames_per_second": 26.780286109022583,
+          "graphics": {
+            "bounded_operations": 5170,
+            "composite_pixels": 252371462,
+            "constant_composite_pixels_avoided": 617932800,
+            "full_frame_operations": 0,
+            "initialization_pixels_avoided": 1119744000,
+            "solid_surface_pixels_avoided": 80870400,
+            "source_pixels": 250213698,
+            "transform_pixels": 39120011
+          },
+          "milliseconds": {
+            "audio": 341.257404,
+            "codec_mux": 666.351035,
+            "compile": 3.955787,
+            "composition": 8824.206812,
+            "decode": 2986.220112,
+            "decode_conversion": 3185.379584,
+            "encode": 4476.256466,
+            "encode_conversion": 3809.905431,
+            "execute": 14995.806508,
+            "linear_to_rgb": 2830.433452,
+            "rgb_to_yuv": 979.471979,
+            "setup": 48.503291,
+            "total": 20164.086291
+          }
+        }
+      },
+      {
+        "mode": "previous",
+        "run": 2,
+        "wall_seconds": 21.923872541985475,
+        "peak_rss_bytes": 820625408,
+        "profile": {
+          "audio_samples_encoded": 864000,
+          "bytes": {
+            "decode_linear_rgba_written": 14399078400,
+            "decode_rgba8_written": 3599769600,
+            "decoded_native_estimate": 2174169600,
+            "encode_linear_rgba_read": 17915904000,
+            "encode_rgb24_written": 3359232000,
+            "encode_yuv420_written": 1679616000
+          },
+          "cache": {
+            "accounting": "retained_resource_bytes",
+            "images": {
+              "budget_bytes": 67108864,
+              "bypasses": 0,
+              "entries": 0,
+              "evictions": 0,
+              "hits": 0,
+              "insertions": 0,
+              "load_failures": 0,
+              "misses": 0,
+              "peak_resident_bytes": 0,
+              "resident_bytes": 0
+            },
+            "policy": "lru",
+            "text": {
+              "budget_bytes": 16777216,
+              "bypasses": 0,
+              "entries": 30,
+              "evictions": 0,
+              "hits": 3985,
+              "insertions": 30,
+              "load_failures": 0,
+              "misses": 30,
+              "peak_resident_bytes": 398716,
+              "resident_bytes": 398716
+            }
+          },
+          "counts": {
+            "decode_conversions": 434,
+            "decode_requests": 434,
+            "encode_conversions": 540,
+            "frames_decoded": 699
+          },
+          "frames_encoded": 540,
+          "frames_per_second": 24.675922973106058,
+          "graphics": {
+            "bounded_operations": 5170,
+            "composite_pixels": 252371462,
+            "constant_composite_pixels_avoided": 617932800,
+            "full_frame_operations": 0,
+            "initialization_pixels_avoided": 1119744000,
+            "solid_surface_pixels_avoided": 80870400,
+            "source_pixels": 250213698,
+            "transform_pixels": 39120011
+          },
+          "milliseconds": {
+            "audio": 340.826653,
+            "codec_mux": 875.389584,
+            "compile": 4.465742,
+            "composition": 9623.798047,
+            "decode": 3131.795459,
+            "decode_conversion": 3509.214793,
+            "encode": 4902.026702,
+            "encode_conversion": 4026.637118,
+            "execute": 16264.808299,
+            "linear_to_rgb": 2979.842108,
+            "rgb_to_yuv": 1046.79501,
+            "setup": 47.269375,
+            "total": 21883.679917
+          }
+        }
+      },
+      {
+        "mode": "parallel",
+        "run": 2,
+        "wall_seconds": 18.44672529195668,
+        "peak_rss_bytes": 826966016,
+        "profile": {
+          "audio_samples_encoded": 864000,
+          "bytes": {
+            "decode_linear_rgba_written": 14399078400,
+            "decode_rgba8_written": 3599769600,
+            "decoded_native_estimate": 2174169600,
+            "encode_linear_rgba_read": 17915904000,
+            "encode_rgb24_written": 3359232000,
+            "encode_yuv420_written": 1679616000
+          },
+          "cache": {
+            "accounting": "retained_resource_bytes",
+            "images": {
+              "budget_bytes": 67108864,
+              "bypasses": 0,
+              "entries": 0,
+              "evictions": 0,
+              "hits": 0,
+              "insertions": 0,
+              "load_failures": 0,
+              "misses": 0,
+              "peak_resident_bytes": 0,
+              "resident_bytes": 0
+            },
+            "policy": "lru",
+            "text": {
+              "budget_bytes": 16777216,
+              "bypasses": 0,
+              "entries": 30,
+              "evictions": 0,
+              "hits": 3985,
+              "insertions": 30,
+              "load_failures": 0,
+              "misses": 30,
+              "peak_resident_bytes": 398716,
+              "resident_bytes": 398716
+            }
+          },
+          "counts": {
+            "decode_conversions": 434,
+            "decode_requests": 434,
+            "encode_conversions": 540,
+            "frames_decoded": 699
+          },
+          "frames_encoded": 540,
+          "frames_per_second": 29.38618837280988,
+          "graphics": {
+            "bounded_operations": 5170,
+            "composite_pixels": 252371462,
+            "constant_composite_pixels_avoided": 617932800,
+            "full_frame_operations": 0,
+            "initialization_pixels_avoided": 1119744000,
+            "solid_surface_pixels_avoided": 80870400,
+            "source_pixels": 250213698,
+            "transform_pixels": 39120011
+          },
+          "milliseconds": {
+            "audio": 401.528959,
+            "codec_mux": 1119.84758,
+            "compile": 4.230802,
+            "composition": 7685.928072,
+            "decode": 3186.572714,
+            "decode_conversion": 3477.780703,
+            "encode": 3249.583711,
+            "encode_conversion": 2129.736131,
+            "execute": 14350.281489,
+            "linear_to_rgb": 1062.185457,
+            "rgb_to_yuv": 1067.550674,
+            "setup": 47.844208,
+            "total": 18375.979666
+          }
+        }
+      },
+      {
+        "mode": "parallel",
+        "run": 3,
+        "wall_seconds": 18.32844783301698,
+        "peak_rss_bytes": 771473408,
+        "profile": {
+          "audio_samples_encoded": 864000,
+          "bytes": {
+            "decode_linear_rgba_written": 14399078400,
+            "decode_rgba8_written": 3599769600,
+            "decoded_native_estimate": 2174169600,
+            "encode_linear_rgba_read": 17915904000,
+            "encode_rgb24_written": 3359232000,
+            "encode_yuv420_written": 1679616000
+          },
+          "cache": {
+            "accounting": "retained_resource_bytes",
+            "images": {
+              "budget_bytes": 67108864,
+              "bypasses": 0,
+              "entries": 0,
+              "evictions": 0,
+              "hits": 0,
+              "insertions": 0,
+              "load_failures": 0,
+              "misses": 0,
+              "peak_resident_bytes": 0,
+              "resident_bytes": 0
+            },
+            "policy": "lru",
+            "text": {
+              "budget_bytes": 16777216,
+              "bypasses": 0,
+              "entries": 30,
+              "evictions": 0,
+              "hits": 3985,
+              "insertions": 30,
+              "load_failures": 0,
+              "misses": 30,
+              "peak_resident_bytes": 398716,
+              "resident_bytes": 398716
+            }
+          },
+          "counts": {
+            "decode_conversions": 434,
+            "decode_requests": 434,
+            "encode_conversions": 540,
+            "frames_decoded": 699
+          },
+          "frames_encoded": 540,
+          "frames_per_second": 29.53374590009627,
+          "graphics": {
+            "bounded_operations": 5170,
+            "composite_pixels": 252371462,
+            "constant_composite_pixels_avoided": 617932800,
+            "full_frame_operations": 0,
+            "initialization_pixels_avoided": 1119744000,
+            "solid_surface_pixels_avoided": 80870400,
+            "source_pixels": 250213698,
+            "transform_pixels": 39120011
+          },
+          "milliseconds": {
+            "audio": 356.304546,
+            "codec_mux": 824.697828,
+            "compile": 5.342752,
+            "composition": 7538.733442,
+            "decode": 3306.446539,
+            "decode_conversion": 3780.368048,
+            "encode": 2922.360152,
+            "encode_conversion": 2097.662324,
+            "execute": 14625.548029,
+            "linear_to_rgb": 1047.986149,
+            "rgb_to_yuv": 1049.676175,
+            "setup": 52.154375,
+            "total": 18284.168958
+          }
+        }
+      },
+      {
+        "mode": "previous",
+        "run": 3,
+        "wall_seconds": 20.596709582954645,
+        "peak_rss_bytes": 828424192,
+        "profile": {
+          "audio_samples_encoded": 864000,
+          "bytes": {
+            "decode_linear_rgba_written": 14399078400,
+            "decode_rgba8_written": 3599769600,
+            "decoded_native_estimate": 2174169600,
+            "encode_linear_rgba_read": 17915904000,
+            "encode_rgb24_written": 3359232000,
+            "encode_yuv420_written": 1679616000
+          },
+          "cache": {
+            "accounting": "retained_resource_bytes",
+            "images": {
+              "budget_bytes": 67108864,
+              "bypasses": 0,
+              "entries": 0,
+              "evictions": 0,
+              "hits": 0,
+              "insertions": 0,
+              "load_failures": 0,
+              "misses": 0,
+              "peak_resident_bytes": 0,
+              "resident_bytes": 0
+            },
+            "policy": "lru",
+            "text": {
+              "budget_bytes": 16777216,
+              "bypasses": 0,
+              "entries": 30,
+              "evictions": 0,
+              "hits": 3985,
+              "insertions": 30,
+              "load_failures": 0,
+              "misses": 30,
+              "peak_resident_bytes": 398716,
+              "resident_bytes": 398716
+            }
+          },
+          "counts": {
+            "decode_conversions": 434,
+            "decode_requests": 434,
+            "encode_conversions": 540,
+            "frames_decoded": 699
+          },
+          "frames_encoded": 540,
+          "frames_per_second": 26.267526254438096,
+          "graphics": {
+            "bounded_operations": 5170,
+            "composite_pixels": 252371462,
+            "constant_composite_pixels_avoided": 617932800,
+            "full_frame_operations": 0,
+            "initialization_pixels_avoided": 1119744000,
+            "solid_surface_pixels_avoided": 80870400,
+            "source_pixels": 250213698,
+            "transform_pixels": 39120011
+          },
+          "milliseconds": {
+            "audio": 338.933492,
+            "codec_mux": 716.679047,
+            "compile": 4.127572,
+            "composition": 9015.41071,
+            "decode": 3032.585336,
+            "decode_conversion": 3219.508159,
+            "encode": 4601.258966,
+            "encode_conversion": 3884.579919,
+            "execute": 15267.504205,
+            "linear_to_rgb": 2890.284209,
+            "rgb_to_yuv": 994.29571,
+            "setup": 50.091584,
+            "total": 20557.702875
+          }
+        }
+      }
+    ]
+  },
+  "same_executable_control": {
+    "platform": "macOS-26.6-arm64-arm-64bit-Mach-O",
+    "processor": "arm",
+    "composition_sha256": "a8faa46b091597b7952bc49799497872a2ef1ed09ff791bb8e8324e826182cb6",
+    "asset_sha256": {
+      "ocean": "327d638177e76da352a9a501dff57ff2f03b150f0a5e52d2f9dd1287dcac9942",
+      "bold": "8a0aace75d33794eece4b28187bfc1df0bbd2888b5d8a56e01788c8d65d16be1",
+      "regular": "d636e4683231f931eda222d588e944d082bfd3bdba02f928bee461c0f185b251",
+      "music": "6b638d0042c1f2f8b8c90d36c18e33162591e3b2c31fbf99319b288306a663f3"
+    },
+    "executable_sha256": {
+      "serial": "fca8d5351f152bfc574fab662e76b3a3c507584ad1824d0d3a3d9dc432395252",
+      "parallel": "fca8d5351f152bfc574fab662e76b3a3c507584ad1824d0d3a3d9dc432395252"
+    },
+    "experiment": "cpu-parallel",
+    "method": "Two discarded full-encode warmups; fresh-process alternating samples; identical bounded graphics/caches/media fusion; CPU only; only the selected experiment control differs (cpu-parallel uses one executable with CHROMA_CPU_THREADS=1/4; cpu-before-after compares saved previous/current executables).",
+    "samples": [
+      {
+        "mode": "parallel",
+        "run": 1,
+        "wall_seconds": 16.486068750033155,
+        "peak_rss_bytes": 828473344,
+        "profile": {
+          "audio_samples_encoded": 864000,
+          "bytes": {
+            "decode_linear_rgba_written": 14399078400,
+            "decode_rgba8_written": 3599769600,
+            "decoded_native_estimate": 2174169600,
+            "encode_linear_rgba_read": 17915904000,
+            "encode_rgb24_written": 3359232000,
+            "encode_yuv420_written": 1679616000
+          },
+          "cache": {
+            "accounting": "retained_resource_bytes",
+            "images": {
+              "budget_bytes": 67108864,
+              "bypasses": 0,
+              "entries": 0,
+              "evictions": 0,
+              "hits": 0,
+              "insertions": 0,
+              "load_failures": 0,
+              "misses": 0,
+              "peak_resident_bytes": 0,
+              "resident_bytes": 0
+            },
+            "policy": "lru",
+            "text": {
+              "budget_bytes": 16777216,
+              "bypasses": 0,
+              "entries": 30,
+              "evictions": 0,
+              "hits": 3985,
+              "insertions": 30,
+              "load_failures": 0,
+              "misses": 30,
+              "peak_resident_bytes": 398716,
+              "resident_bytes": 398716
+            }
+          },
+          "counts": {
+            "decode_conversions": 434,
+            "decode_requests": 434,
+            "encode_conversions": 540,
+            "frames_decoded": 699
+          },
+          "frames_encoded": 540,
+          "frames_per_second": 32.834236636888974,
+          "graphics": {
+            "bounded_operations": 5170,
+            "composite_pixels": 252371462,
+            "constant_composite_pixels_avoided": 617932800,
+            "full_frame_operations": 0,
+            "initialization_pixels_avoided": 1119744000,
+            "solid_surface_pixels_avoided": 80870400,
+            "source_pixels": 250213698,
+            "transform_pixels": 39120011
+          },
+          "milliseconds": {
+            "audio": 322.679009,
+            "codec_mux": 923.943307,
+            "compile": 3.182325,
+            "composition": 6825.777951,
+            "decode": 2995.091513,
+            "decode_conversion": 3102.823171,
+            "encode": 2853.515571,
+            "encode_conversion": 1929.572264,
+            "execute": 12923.692635,
+            "linear_to_rgb": 953.749913,
+            "rgb_to_yuv": 975.822351,
+            "setup": 46.620584,
+            "total": 16446.248042
+          }
+        }
+      },
+      {
+        "mode": "serial",
+        "run": 1,
+        "wall_seconds": 23.677102332992945,
+        "peak_rss_bytes": 786563072,
+        "profile": {
+          "audio_samples_encoded": 864000,
+          "bytes": {
+            "decode_linear_rgba_written": 14399078400,
+            "decode_rgba8_written": 3599769600,
+            "decoded_native_estimate": 2174169600,
+            "encode_linear_rgba_read": 17915904000,
+            "encode_rgb24_written": 3359232000,
+            "encode_yuv420_written": 1679616000
+          },
+          "cache": {
+            "accounting": "retained_resource_bytes",
+            "images": {
+              "budget_bytes": 67108864,
+              "bypasses": 0,
+              "entries": 0,
+              "evictions": 0,
+              "hits": 0,
+              "insertions": 0,
+              "load_failures": 0,
+              "misses": 0,
+              "peak_resident_bytes": 0,
+              "resident_bytes": 0
+            },
+            "policy": "lru",
+            "text": {
+              "budget_bytes": 16777216,
+              "bypasses": 0,
+              "entries": 30,
+              "evictions": 0,
+              "hits": 3985,
+              "insertions": 30,
+              "load_failures": 0,
+              "misses": 30,
+              "peak_resident_bytes": 398716,
+              "resident_bytes": 398716
+            }
+          },
+          "counts": {
+            "decode_conversions": 434,
+            "decode_requests": 434,
+            "encode_conversions": 540,
+            "frames_decoded": 699
+          },
+          "frames_encoded": 540,
+          "frames_per_second": 22.842747897908435,
+          "graphics": {
+            "bounded_operations": 5170,
+            "composite_pixels": 252371462,
+            "constant_composite_pixels_avoided": 617932800,
+            "full_frame_operations": 0,
+            "initialization_pixels_avoided": 1119744000,
+            "solid_surface_pixels_avoided": 80870400,
+            "source_pixels": 250213698,
+            "transform_pixels": 39120011
+          },
+          "milliseconds": {
+            "audio": 353.005049,
+            "codec_mux": 800.405813,
+            "compile": 4.231636,
+            "composition": 11372.330808,
+            "decode": 3163.512751,
+            "decode_conversion": 3601.627352,
+            "encode": 4758.028986,
+            "encode_conversion": 3957.623173,
+            "execute": 18137.470911,
+            "linear_to_rgb": 2941.287242,
+            "rgb_to_yuv": 1016.335931,
+            "setup": 45.374708,
+            "total": 23639.887916
+          }
+        }
+      },
+      {
+        "mode": "serial",
+        "run": 2,
+        "wall_seconds": 22.18950641702395,
+        "peak_rss_bytes": 829833216,
+        "profile": {
+          "audio_samples_encoded": 864000,
+          "bytes": {
+            "decode_linear_rgba_written": 14399078400,
+            "decode_rgba8_written": 3599769600,
+            "decoded_native_estimate": 2174169600,
+            "encode_linear_rgba_read": 17915904000,
+            "encode_rgb24_written": 3359232000,
+            "encode_yuv420_written": 1679616000
+          },
+          "cache": {
+            "accounting": "retained_resource_bytes",
+            "images": {
+              "budget_bytes": 67108864,
+              "bypasses": 0,
+              "entries": 0,
+              "evictions": 0,
+              "hits": 0,
+              "insertions": 0,
+              "load_failures": 0,
+              "misses": 0,
+              "peak_resident_bytes": 0,
+              "resident_bytes": 0
+            },
+            "policy": "lru",
+            "text": {
+              "budget_bytes": 16777216,
+              "bypasses": 0,
+              "entries": 30,
+              "evictions": 0,
+              "hits": 3985,
+              "insertions": 30,
+              "load_failures": 0,
+              "misses": 30,
+              "peak_resident_bytes": 398716,
+              "resident_bytes": 398716
+            }
+          },
+          "counts": {
+            "decode_conversions": 434,
+            "decode_requests": 434,
+            "encode_conversions": 540,
+            "frames_decoded": 699
+          },
+          "frames_encoded": 540,
+          "frames_per_second": 24.388014805941207,
+          "graphics": {
+            "bounded_operations": 5170,
+            "composite_pixels": 252371462,
+            "constant_composite_pixels_avoided": 617932800,
+            "full_frame_operations": 0,
+            "initialization_pixels_avoided": 1119744000,
+            "solid_surface_pixels_avoided": 80870400,
+            "source_pixels": 250213698,
+            "transform_pixels": 39120011
+          },
+          "milliseconds": {
+            "audio": 327.482549,
+            "codec_mux": 673.972175,
+            "compile": 4.316761,
+            "composition": 10564.12887,
+            "decode": 3055.826463,
+            "decode_conversion": 3306.556535,
+            "encode": 4545.098885,
+            "encode_conversion": 3871.12671,
+            "execute": 16926.511868,
+            "linear_to_rgb": 2873.677418,
+            "rgb_to_yuv": 997.449292,
+            "setup": 47.52475,
+            "total": 22142.023625
+          }
+        }
+      },
+      {
+        "mode": "parallel",
+        "run": 2,
+        "wall_seconds": 16.26590020902222,
+        "peak_rss_bytes": 866107392,
+        "profile": {
+          "audio_samples_encoded": 864000,
+          "bytes": {
+            "decode_linear_rgba_written": 14399078400,
+            "decode_rgba8_written": 3599769600,
+            "decoded_native_estimate": 2174169600,
+            "encode_linear_rgba_read": 17915904000,
+            "encode_rgb24_written": 3359232000,
+            "encode_yuv420_written": 1679616000
+          },
+          "cache": {
+            "accounting": "retained_resource_bytes",
+            "images": {
+              "budget_bytes": 67108864,
+              "bypasses": 0,
+              "entries": 0,
+              "evictions": 0,
+              "hits": 0,
+              "insertions": 0,
+              "load_failures": 0,
+              "misses": 0,
+              "peak_resident_bytes": 0,
+              "resident_bytes": 0
+            },
+            "policy": "lru",
+            "text": {
+              "budget_bytes": 16777216,
+              "bypasses": 0,
+              "entries": 30,
+              "evictions": 0,
+              "hits": 3985,
+              "insertions": 30,
+              "load_failures": 0,
+              "misses": 30,
+              "peak_resident_bytes": 398716,
+              "resident_bytes": 398716
+            }
+          },
+          "counts": {
+            "decode_conversions": 434,
+            "decode_requests": 434,
+            "encode_conversions": 540,
+            "frames_decoded": 699
+          },
+          "frames_encoded": 540,
+          "frames_per_second": 33.27686220648285,
+          "graphics": {
+            "bounded_operations": 5170,
+            "composite_pixels": 252371462,
+            "constant_composite_pixels_avoided": 617932800,
+            "full_frame_operations": 0,
+            "initialization_pixels_avoided": 1119744000,
+            "solid_surface_pixels_avoided": 80870400,
+            "source_pixels": 250213698,
+            "transform_pixels": 39120011
+          },
+          "milliseconds": {
+            "audio": 322.084603,
+            "codec_mux": 792.958888,
+            "compile": 3.026634,
+            "composition": 6803.554442,
+            "decode": 3039.780128,
+            "decode_conversion": 3010.469258,
+            "encode": 2744.886812,
+            "encode_conversion": 1951.927924,
+            "execute": 12853.803828,
+            "linear_to_rgb": 957.99555,
+            "rgb_to_yuv": 993.932374,
+            "setup": 47.670084,
+            "total": 16227.491542
+          }
+        }
+      },
+      {
+        "mode": "parallel",
+        "run": 3,
+        "wall_seconds": 16.963876332971267,
+        "peak_rss_bytes": 827211776,
+        "profile": {
+          "audio_samples_encoded": 864000,
+          "bytes": {
+            "decode_linear_rgba_written": 14399078400,
+            "decode_rgba8_written": 3599769600,
+            "decoded_native_estimate": 2174169600,
+            "encode_linear_rgba_read": 17915904000,
+            "encode_rgb24_written": 3359232000,
+            "encode_yuv420_written": 1679616000
+          },
+          "cache": {
+            "accounting": "retained_resource_bytes",
+            "images": {
+              "budget_bytes": 67108864,
+              "bypasses": 0,
+              "entries": 0,
+              "evictions": 0,
+              "hits": 0,
+              "insertions": 0,
+              "load_failures": 0,
+              "misses": 0,
+              "peak_resident_bytes": 0,
+              "resident_bytes": 0
+            },
+            "policy": "lru",
+            "text": {
+              "budget_bytes": 16777216,
+              "bypasses": 0,
+              "entries": 30,
+              "evictions": 0,
+              "hits": 3985,
+              "insertions": 30,
+              "load_failures": 0,
+              "misses": 30,
+              "peak_resident_bytes": 398716,
+              "resident_bytes": 398716
+            }
+          },
+          "counts": {
+            "decode_conversions": 434,
+            "decode_requests": 434,
+            "encode_conversions": 540,
+            "frames_decoded": 699
+          },
+          "frames_encoded": 540,
+          "frames_per_second": 31.9045940767781,
+          "graphics": {
+            "bounded_operations": 5170,
+            "composite_pixels": 252371462,
+            "constant_composite_pixels_avoided": 617932800,
+            "full_frame_operations": 0,
+            "initialization_pixels_avoided": 1119744000,
+            "solid_surface_pixels_avoided": 80870400,
+            "source_pixels": 250213698,
+            "transform_pixels": 39120011
+          },
+          "milliseconds": {
+            "audio": 334.014844,
+            "codec_mux": 764.601993,
+            "compile": 4.420644,
+            "composition": 7140.633488,
+            "decode": 3100.972577,
+            "decode_conversion": 3211.651508,
+            "encode": 2774.098209,
+            "encode_conversion": 2009.496216,
+            "execute": 13453.257573,
+            "linear_to_rgb": 1000.273925,
+            "rgb_to_yuv": 1009.222291,
+            "setup": 48.627875,
+            "total": 16925.462167
+          }
+        }
+      },
+      {
+        "mode": "serial",
+        "run": 3,
+        "wall_seconds": 21.711973208992276,
+        "peak_rss_bytes": 846856192,
+        "profile": {
+          "audio_samples_encoded": 864000,
+          "bytes": {
+            "decode_linear_rgba_written": 14399078400,
+            "decode_rgba8_written": 3599769600,
+            "decoded_native_estimate": 2174169600,
+            "encode_linear_rgba_read": 17915904000,
+            "encode_rgb24_written": 3359232000,
+            "encode_yuv420_written": 1679616000
+          },
+          "cache": {
+            "accounting": "retained_resource_bytes",
+            "images": {
+              "budget_bytes": 67108864,
+              "bypasses": 0,
+              "entries": 0,
+              "evictions": 0,
+              "hits": 0,
+              "insertions": 0,
+              "load_failures": 0,
+              "misses": 0,
+              "peak_resident_bytes": 0,
+              "resident_bytes": 0
+            },
+            "policy": "lru",
+            "text": {
+              "budget_bytes": 16777216,
+              "bypasses": 0,
+              "entries": 30,
+              "evictions": 0,
+              "hits": 3985,
+              "insertions": 30,
+              "load_failures": 0,
+              "misses": 30,
+              "peak_resident_bytes": 398716,
+              "resident_bytes": 398716
+            }
+          },
+          "counts": {
+            "decode_conversions": 434,
+            "decode_requests": 434,
+            "encode_conversions": 540,
+            "frames_decoded": 699
+          },
+          "frames_encoded": 540,
+          "frames_per_second": 24.926796480856826,
+          "graphics": {
+            "bounded_operations": 5170,
+            "composite_pixels": 252371462,
+            "constant_composite_pixels_avoided": 617932800,
+            "full_frame_operations": 0,
+            "initialization_pixels_avoided": 1119744000,
+            "solid_surface_pixels_avoided": 80870400,
+            "source_pixels": 250213698,
+            "transform_pixels": 39120011
+          },
+          "milliseconds": {
+            "audio": 324.286453,
+            "codec_mux": 679.42612,
+            "compile": 4.474246,
+            "composition": 10401.668454,
+            "decode": 2999.087585,
+            "decode_conversion": 3120.313504,
+            "encode": 4486.575924,
+            "encode_conversion": 3807.149804,
+            "execute": 16521.069543,
+            "linear_to_rgb": 2831.796003,
+            "rgb_to_yuv": 975.353801,
+            "setup": 47.835,
+            "total": 21663.433583
+          }
+        }
+      }
+    ]
+  },
+  "native_equivalence": {
+    "bounded": {
+      "bounded_operations": 5170,
+      "composite_pixels": 252371462,
+      "constant_composite_pixels_avoided": 617932800,
+      "full_frame_operations": 0,
+      "initialization_pixels_avoided": 1119744000,
+      "solid_surface_pixels_avoided": 80870400,
+      "source_pixels": 250213698,
+      "transform_pixels": 39120011
+    },
+    "comparison": "bitwise float RGBA",
+    "frames": 540,
+    "full_frame": {
+      "bounded_operations": 5170,
+      "composite_pixels": 252371462,
+      "constant_composite_pixels_avoided": 617932800,
+      "full_frame_operations": 0,
+      "initialization_pixels_avoided": 1119744000,
+      "solid_surface_pixels_avoided": 80870400,
+      "source_pixels": 250213698,
+      "transform_pixels": 39120011
+    },
+    "pixels_compared": 1119744000,
+    "reference_mode": "serial",
+    "verification_seconds": 30.090870542
+  },
+  "media_equivalence": {
+    "passed": true,
+    "comparison": "exact decoded video frames/timestamps and audio PCM",
+    "composition_sha256": "a8faa46b091597b7952bc49799497872a2ef1ed09ff791bb8e8324e826182cb6",
+    "results": {
+      "previous": {
+        "video_digest": "e4558483596fb7efd9deae7bf360afa6d257a2dcfa21395c6031bb0c6e9a3bf5",
+        "audio_digest": "460a6a99ed8313643d1244efa75e8ab36f1aec279a5d192d5fa7cb94d2a29fe3",
+        "frames": 540,
+        "audio_samples": 864000
+      },
+      "parallel": {
+        "video_digest": "e4558483596fb7efd9deae7bf360afa6d257a2dcfa21395c6031bb0c6e9a3bf5",
+        "audio_digest": "460a6a99ed8313643d1244efa75e8ab36f1aec279a5d192d5fa7cb94d2a29fe3",
+        "frames": 540,
+        "audio_samples": 864000
+      }
+    }
+  },
+  "checks": {
+    "media_ctests_passed": 74,
+    "core_only_targeted_ctests_passed": 3,
+    "thread_sanitizer_concurrency_test_passed": true,
+    "implementation_ci": "https://github.com/AnkitNakhawa/Chroma/actions/runs/39748963080",
+    "relocated_sdk_clean_runtime_passed": true
+  }
+}

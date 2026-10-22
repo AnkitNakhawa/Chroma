@@ -22,6 +22,9 @@ int main() {
   try { chroma::detail::parallel_for(10000,1,[](auto,auto) { throw std::runtime_error("task"); }); }
   catch (const std::runtime_error&) { threw=true; }
   if (!threw) return 1;
+  std::atomic<unsigned> partitions{0};
+  chroma::detail::parallel_for(10000,1,[&](auto,auto) { ++partitions; });
+  if (partitions!=chroma::detail::cpu_thread_limit()) return 1;
   std::atomic<unsigned> calls{0};
   chroma::detail::parallel_for(10000,1,[&](auto begin,auto end) { calls+=static_cast<unsigned>(end-begin); });
   if (calls!=10000) return 1; // Exception recovery and completion barrier.

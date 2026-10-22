@@ -690,7 +690,7 @@ install(TARGETS chroma_c_example RUNTIME DESTINATION ${CMAKE_INSTALL_LIBEXECDIR}
 install(DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/share/chroma/templates/
   DESTINATION ${CMAKE_INSTALL_DATADIR}/chroma/templates COMPONENT CLI)
 install(FILES LICENSE README.md DESTINATION ${CMAKE_INSTALL_DATADIR}/chroma COMPONENT Documentation)
-install(FILES docs/c-api.md docs/render-control.md docs/python.md docs/composition-format.md docs/preflight.md docs/quickstart.md docs/projects.md docs/render-reports.md docs/composition-schema.md
+install(FILES docs/c-api.md docs/render-control.md docs/python.md docs/composition-format.md docs/preflight.md docs/quickstart.md docs/projects.md docs/render-reports.md docs/composition-schema.md docs/cpu-parallelism.md
   DESTINATION ${CMAKE_INSTALL_DATADIR}/chroma/docs COMPONENT Documentation)
 install(FILES docs/releases/v0.1.0.md
   DESTINATION ${CMAKE_INSTALL_DATADIR}/chroma/docs/releases COMPONENT Documentation)
