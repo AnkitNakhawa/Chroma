@@ -23,8 +23,10 @@ int main() {
           .color={value(), value(), value(), layer % 2 ? value() : 1.0},
           .effects=chroma::EffectProgram(std::move(effects)), .blend_mode=modes[(trial+layer)%4]});
     }
-    const chroma::ExecutionPlan plan(13, 9, chroma::FrameIndex(trial), std::move(operations));
+    const chroma::ExecutionPlan plan(trial < 6 ? 701 : 13, trial < 6 ? 509 : 9, chroma::FrameIndex(trial), std::move(operations));
     const auto actual = optimized.execute(plan);
+    const auto serial = reference.execute(plan, chroma::CpuExecutionMode::serial);
+    if (std::memcmp(actual.pixels().data(),serial.pixels().data(),actual.size()*sizeof(chroma::Pixel))) return 1;
     const auto expected = reference.execute(plan, chroma::CpuExecutionMode::unoptimized_composition);
     if (std::memcmp(actual.pixels().data(), expected.pixels().data(), actual.size()*sizeof(chroma::Pixel))) {
       std::cerr << "composition mismatch in trial " << trial << '\n'; return 1;

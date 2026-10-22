@@ -13,6 +13,7 @@
 
 #include "chroma/core/prepared_resource.hpp"
 #include "resource_cache.hpp"
+#include "parallel.hpp"
 #include "chroma/media/decode.hpp"
 #include "chroma/text/text.hpp"
 
@@ -120,7 +121,10 @@ Surface apply_transform(Surface source, const Transform2DEffect& transform) {
   const auto inverse01 = -transform.m01 / determinant;
   const auto inverse10 = -transform.m10 / determinant;
   const auto inverse11 = transform.m00 / determinant;
-  for (std::int32_t y = 0; y < output.height(); ++y) {
+  detail::parallel_for(static_cast<std::size_t>(output.height()),
+      std::max(std::size_t{1}, std::size_t{131072} / static_cast<std::size_t>(output.width())),
+      [&](std::size_t begin, std::size_t end) {
+  for (std::int32_t y = static_cast<std::int32_t>(begin); y < static_cast<std::int32_t>(end); ++y) {
     for (std::int32_t x = 0; x < output.width(); ++x) {
       const auto destination_x = static_cast<double>(x) + 0.5;
       const auto destination_y = static_cast<double>(y) + 0.5;
@@ -131,6 +135,7 @@ Surface apply_transform(Surface source, const Transform2DEffect& transform) {
       output.pixel(x, y) = sample_bilinear(source, source_x, source_y);
     }
   }
+  });
   return output;
 }
 
@@ -429,11 +434,15 @@ Surface place_surface_cpu(Surface source, std::int32_t width, std::int32_t heigh
   }
 
   Surface output(width, height);
-  for (std::int32_t y = 0; y < height; ++y) {
+  detail::parallel_for(static_cast<std::size_t>(output.height()),
+      std::max(std::size_t{1}, std::size_t{131072} / static_cast<std::size_t>(output.width())),
+      [&](std::size_t begin, std::size_t end) {
+  for (std::int32_t y = static_cast<std::int32_t>(begin); y < static_cast<std::int32_t>(end); ++y) {
     for (std::int32_t x = 0; x < width; ++x) {
       output.pixel(x, y) = sample_placed_surface(source, mapping, x, y);
     }
   }
+  });
   return output;
 }
 
@@ -570,7 +579,10 @@ bool composite_fused_source(const Surface& source, Surface& destination,
   const auto width = static_cast<std::size_t>(destination.width());
   const auto& source_pixels = source.pixels();
   auto& destination_pixels = destination.pixels();
-  for (std::int32_t y = 0; y < destination.height(); ++y) {
+  detail::parallel_for(static_cast<std::size_t>(destination.height()),
+      std::max(std::size_t{1}, std::size_t{131072} / static_cast<std::size_t>(destination.width())),
+      [&](std::size_t begin, std::size_t end) {
+  for (std::int32_t y = static_cast<std::int32_t>(begin); y < static_cast<std::int32_t>(end); ++y) {
     for (std::int32_t x = 0; x < destination.width(); ++x) {
       const auto pixel_index = static_cast<std::size_t>(y) * width +
                                static_cast<std::size_t>(x);
@@ -603,6 +615,7 @@ bool composite_fused_source(const Surface& source, Surface& destination,
       output = composite(pixel, output, blend_mode);
     }
   }
+  });
   return true;
 }
 
@@ -780,7 +793,10 @@ Surface render_shape(const ShapeGeometry& geometry, const Color& fill,
   const auto fill_pixel = premultiply(fill);
   const auto stroke_pixel = stroke ? premultiply(stroke->color) : Pixel{};
   Surface output(width, height);
-  for (std::int32_t y = 0; y < height; ++y) {
+  detail::parallel_for(static_cast<std::size_t>(output.height()),
+      std::max(std::size_t{1}, std::size_t{131072} / static_cast<std::size_t>(output.width())),
+      [&](std::size_t begin, std::size_t end) {
+  for (std::int32_t y = static_cast<std::int32_t>(begin); y < static_cast<std::int32_t>(end); ++y) {
     for (std::int32_t x = 0; x < width; ++x) {
       Pixel pixel{};
       for (int sample_y = 0; sample_y < samples_per_axis; ++sample_y) {
@@ -807,6 +823,7 @@ Surface render_shape(const ShapeGeometry& geometry, const Color& fill,
       output.pixel(x, y) = pixel;
     }
   }
+  });
   return output;
 }
 
@@ -904,8 +921,9 @@ Pixel uniform_solid_pixel(const CompositeSolidOperation& solid) {
 }
 
 Surface CpuRenderContext::execute(const ExecutionPlan& plan, CpuExecutionMode mode) {
+  detail::SerialScope serial(mode == CpuExecutionMode::serial);
   last_execution_stats_ = {};
-  bool optimize = mode == CpuExecutionMode::fused;
+  bool optimize = mode == CpuExecutionMode::fused || mode == CpuExecutionMode::serial;
 #ifdef CHROMA_REFERENCE_COMPOSITION_PASSES
   optimize = false;
 #endif
@@ -940,9 +958,10 @@ Surface CpuRenderContext::execute(const ExecutionPlan& plan, CpuExecutionMode mo
         const auto uniform = solid->effects.effects().empty() ? source : uniform_solid_pixel(*solid);
         if (optimize && !solid->effects.effects().empty())
           last_execution_stats_.graphics.solid_surface_pixels_avoided += result.size();
-        for (auto& destination : result.pixels()) {
-          destination = composite(uniform, destination, solid->blend_mode);
-        }
+        detail::parallel_for(result.size(), 131072, [&](std::size_t begin, std::size_t end) {
+          for (auto i=begin; i<end; ++i)
+            result.pixels()[i] = composite(uniform, result.pixels()[i], solid->blend_mode);
+        });
       } else {
         auto effected = apply_effect_program_cpu(
             Surface(result.width(), result.height(), source), solid->effects);
@@ -954,7 +973,7 @@ Surface CpuRenderContext::execute(const ExecutionPlan& plan, CpuExecutionMode mo
       continue;
     }
     if (const auto* shape = std::get_if<CompositeShapeOperation>(&operation)) {
-      if ((mode == CpuExecutionMode::fused || mode == CpuExecutionMode::unoptimized_composition) && region_program_supported(shape->effects)) {
+      if ((mode == CpuExecutionMode::fused || mode == CpuExecutionMode::serial || mode == CpuExecutionMode::unoptimized_composition) && region_program_supported(shape->effects)) {
         RegionSurface region(clipped_bounds(shape->geometry.x, shape->geometry.y,
             shape->geometry.x + shape->geometry.width, shape->geometry.y + shape->geometry.height,
             result.width(), result.height()), false);
@@ -990,7 +1009,7 @@ Surface CpuRenderContext::execute(const ExecutionPlan& plan, CpuExecutionMode mo
               bytes = detail::add_cache_bytes(bytes, glyph.coverage.capacity());
             return bytes;
           });
-      if ((mode == CpuExecutionMode::fused || mode == CpuExecutionMode::unoptimized_composition) && region_program_supported(text->effects)) {
+      if ((mode == CpuExecutionMode::fused || mode == CpuExecutionMode::serial || mode == CpuExecutionMode::unoptimized_composition) && region_program_supported(text->effects)) {
         RegionSurface region(text_bounds(*prepared, text->x, text->y, result.width(), result.height()), false);
         if (!region.bounds.empty())
           region.surface.emplace(render_prepared_text(*prepared, text->x, text->y, text->color,
@@ -1056,10 +1075,10 @@ Surface CpuRenderContext::execute(const ExecutionPlan& plan, CpuExecutionMode mo
     source_surface = place_surface_cpu(std::move(source_surface), result.width(),
                                        result.height(), placement);
     source_surface = apply_effect_program_cpu(std::move(source_surface), *effects);
-    for (std::size_t index = 0; index < result.size(); ++index) {
-      result.pixels()[index] =
-          composite(source_surface.pixels()[index], result.pixels()[index], blend_mode);
-    }
+    detail::parallel_for(result.size(), 131072, [&](std::size_t begin, std::size_t end) {
+      for (std::size_t index = begin; index < end; ++index)
+        result.pixels()[index] = composite(source_surface.pixels()[index], result.pixels()[index], blend_mode);
+    });
   }
   return result;
 }

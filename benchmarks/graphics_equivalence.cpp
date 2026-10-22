@@ -18,14 +18,15 @@ nlohmann::json counters(const chroma::CpuGraphicsStats& s) {
 int main(int argc,char** argv) {
   try {
     if (argc!=3 && argc!=5)
-      throw std::invalid_argument("usage: chroma_graphics_equivalence composition.json report.json [--reference-mode full-frame|reference|composition]");
+      throw std::invalid_argument("usage: chroma_graphics_equivalence composition.json report.json [--reference-mode full-frame|reference|composition|serial]");
     auto reference_mode = chroma::CpuExecutionMode::unbounded_graphics;
     if (argc==5) {
       if (std::string(argv[3])!="--reference-mode") throw std::invalid_argument("unknown verifier option");
       const std::string mode(argv[4]);
-      if (mode!="full-frame" && mode!="reference" && mode!="composition") throw std::invalid_argument("invalid reference mode");
+      if (mode!="full-frame" && mode!="reference" && mode!="composition" && mode!="serial") throw std::invalid_argument("invalid reference mode");
       if (mode=="reference") reference_mode=chroma::CpuExecutionMode::reference;
       if (mode=="composition") reference_mode=chroma::CpuExecutionMode::unoptimized_composition;
+      if (mode=="serial") reference_mode=chroma::CpuExecutionMode::serial;
     }
     std::ifstream input(argv[1]);
     if (!input) throw std::runtime_error("unable to open composition");
@@ -48,7 +49,7 @@ int main(int argc,char** argv) {
       if(frames%90==0) std::cerr<<"verified "<<frames<<" frames\n";
     }
     nlohmann::json report{{"frames",frames},{"pixels_compared",pixels},{"comparison","bitwise float RGBA"},
-        {"reference_mode",reference_mode==chroma::CpuExecutionMode::unoptimized_composition ? "composition" : reference_mode==chroma::CpuExecutionMode::reference ? "reference" : "full-frame"},
+        {"reference_mode",reference_mode==chroma::CpuExecutionMode::serial ? "serial" : reference_mode==chroma::CpuExecutionMode::unoptimized_composition ? "composition" : reference_mode==chroma::CpuExecutionMode::reference ? "reference" : "full-frame"},
         {"bounded",counters(bounded_stats)},{"full_frame",counters(full_stats)},
         {"verification_seconds",std::chrono::duration<double>(std::chrono::steady_clock::now()-started).count()}};
     std::ofstream output(argv[2]); output<<report.dump(2)<<'\n';

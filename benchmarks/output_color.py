@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Compare scalar and lookup output conversion on the frozen showcase."""
 import argparse
+import os
 import hashlib
 import json
 from pathlib import Path
@@ -20,9 +21,11 @@ def main():
     parser.add_argument('--composition', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--runs', type=int, default=3)
-    parser.add_argument('--experiment', choices=['output-color', 'composition-passes'], default='output-color')
+    parser.add_argument('--experiment', choices=['output-color', 'composition-passes', 'cpu-parallel'], default='output-color')
     args = parser.parse_args()
     optimized_name, reference_name = ('lookup', 'scalar') if args.experiment == 'output-color' else ('optimized', 'materialized')
+    if args.experiment == 'cpu-parallel':
+        optimized_name, reference_name = 'parallel', 'serial'
     if args.runs < 3:
         parser.error('at least three measured runs per variant are required')
     digest = hashlib.sha256(args.composition.read_bytes()).hexdigest()
@@ -47,10 +50,13 @@ def main():
         profile = args.output / f'{name}.json'
         command = [str((args.optimized if mode == optimized_name else args.reference).resolve()), 'benchmark', str(args.composition.resolve()),
                    '--iterations', '1', '--output', str(profile.resolve())]
+        environment = os.environ.copy()
+        if args.experiment == 'cpu-parallel':
+            environment['CHROMA_CPU_THREADS'] = '4' if mode == optimized_name else '1'
         start = time.perf_counter()
         with (args.output / f'{name}.log').open('w') as log:
             subprocess.run(['/usr/bin/time', '-l' if platform.system() == 'Darwin' else '-v', *command],
-                           stdout=log, stderr=log, check=True)
+                           stdout=log, stderr=log, check=True, env=environment)
         wall = time.perf_counter() - start
         log = (args.output / f'{name}.log').read_text()
         pattern = (r'(\d+)\s+maximum resident set size' if platform.system() == 'Darwin'
@@ -73,7 +79,7 @@ def main():
                       composition_sha256=digest, asset_sha256=asset_hashes,
                       executable_sha256={name: hashlib.sha256(path.read_bytes()).hexdigest() for name, path in [(reference_name, args.reference), (optimized_name, args.optimized)]},
                       experiment=args.experiment,
-                      method='Two discarded full-encode warmups; fresh-process alternating samples; identical bounded graphics/caches/media fusion; CPU only; binaries differ only by the selected experiment control.',
+                      method='Two discarded full-encode warmups; fresh-process alternating samples; identical bounded graphics/caches/media fusion; CPU only; only the selected experiment control differs (CPU parallelism uses the same executable with CHROMA_CPU_THREADS=1/4).',
                       samples=samples)
         (args.output / 'results.json').write_text(json.dumps(report, indent=2) + '\n')
     for mode in (optimized_name, reference_name):

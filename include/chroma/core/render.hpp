@@ -44,6 +44,8 @@ class Surface {
 
 enum class CpuExecutionMode {
   fused,
+  // Exact same optimized kernels, executed on the calling thread.
+  serial,
   reference,
   // Preserve video/image fusion, but use the original full-canvas graphics path.
   unbounded_graphics,

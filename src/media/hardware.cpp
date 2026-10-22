@@ -1,4 +1,5 @@
 #include "chroma/media/hardware.hpp"
+#include "../core/parallel.hpp"
 
 #include <string>
 
@@ -80,6 +81,7 @@ HardwarePipelineCapabilities query_hardware_pipeline_capabilities() {
 std::string hardware_pipeline_capabilities_json(
     const HardwarePipelineCapabilities& capabilities) {
   return nlohmann::json{
+      {"configured_cpu_thread_limit", detail::cpu_thread_limit()},
       {"ffmpeg_available", capabilities.ffmpeg_available},
       {"cuda_device_type_available", capabilities.cuda_device_type_available},
       {"cuda_device_creatable", capabilities.cuda_device_creatable},

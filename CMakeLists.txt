@@ -66,6 +66,7 @@ if(CHROMA_HAS_FFMPEG)
 endif()
 
 add_library(chroma_core STATIC
+  src/core/parallel.cpp
   src/core/output_color.cpp
   src/core/cache.cpp
   src/core/composition.cpp
@@ -93,6 +94,8 @@ option(CHROMA_REFERENCE_COMPOSITION_PASSES "Retain full-canvas composition passe
 if(CHROMA_REFERENCE_COMPOSITION_PASSES)
   set_source_files_properties(src/core/render.cpp PROPERTIES COMPILE_DEFINITIONS CHROMA_REFERENCE_COMPOSITION_PASSES=1)
 endif()
+find_package(Threads REQUIRED)
+target_link_libraries(chroma_core PRIVATE Threads::Threads)
 add_library(chroma::core ALIAS chroma_core)
 set_target_properties(chroma_core PROPERTIES POSITION_INDEPENDENT_CODE ON
   CXX_VISIBILITY_PRESET hidden VISIBILITY_INLINES_HIDDEN ON)
@@ -303,6 +306,14 @@ if(CHROMA_BUILD_TESTS)
   add_executable(chroma_timeline_tests tests/timeline_tests.cpp)
   target_link_libraries(chroma_timeline_tests PRIVATE chroma::core)
   add_test(NAME chroma_timeline_tests COMMAND chroma_timeline_tests)
+
+  add_executable(chroma_parallel_tests tests/parallel_tests.cpp)
+  target_include_directories(chroma_parallel_tests PRIVATE src/core)
+  target_link_libraries(chroma_parallel_tests PRIVATE chroma::core Threads::Threads)
+  add_test(NAME chroma_parallel_tests COMMAND chroma_parallel_tests)
+  set_tests_properties(chroma_parallel_tests PROPERTIES TIMEOUT 30 ENVIRONMENT "CHROMA_CPU_THREADS=4")
+  add_test(NAME chroma_parallel_serial_tests COMMAND chroma_parallel_tests)
+  set_tests_properties(chroma_parallel_serial_tests PROPERTIES TIMEOUT 30 ENVIRONMENT "CHROMA_CPU_THREADS=1")
 
   add_executable(chroma_composition_pass_tests tests/composition_pass_tests.cpp)
   target_link_libraries(chroma_composition_pass_tests PRIVATE chroma::core)
