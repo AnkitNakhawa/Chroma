@@ -66,6 +66,7 @@ if(CHROMA_HAS_FFMPEG)
 endif()
 
 add_library(chroma_core STATIC
+  src/core/output_color.cpp
   src/core/cache.cpp
   src/core/composition.cpp
   src/core/effect.cpp
@@ -84,6 +85,10 @@ add_library(chroma_core STATIC
   src/media/media.cpp
   src/text/text.cpp
 )
+option(CHROMA_REFERENCE_OUTPUT_CONVERSION "Use scalar output conversion for correctness/performance controls" OFF)
+if(CHROMA_REFERENCE_OUTPUT_CONVERSION)
+  set_source_files_properties(src/media/encode.cpp PROPERTIES COMPILE_DEFINITIONS CHROMA_REFERENCE_OUTPUT_CONVERSION=1)
+endif()
 add_library(chroma::core ALIAS chroma_core)
 set_target_properties(chroma_core PROPERTIES POSITION_INDEPENDENT_CODE ON
   CXX_VISIBILITY_PRESET hidden VISIBILITY_INLINES_HIDDEN ON)
@@ -294,6 +299,11 @@ if(CHROMA_BUILD_TESTS)
   add_executable(chroma_timeline_tests tests/timeline_tests.cpp)
   target_link_libraries(chroma_timeline_tests PRIVATE chroma::core)
   add_test(NAME chroma_timeline_tests COMMAND chroma_timeline_tests)
+
+  add_executable(chroma_output_color_tests tests/output_color_tests.cpp)
+  target_link_libraries(chroma_output_color_tests PRIVATE chroma::core)
+  add_test(NAME chroma_output_color_tests COMMAND chroma_output_color_tests)
+  set_tests_properties(chroma_output_color_tests PROPERTIES TIMEOUT 180)
 
   add_executable(chroma_composition_tests tests/composition_tests.cpp)
   target_link_libraries(chroma_composition_tests PRIVATE chroma::core)

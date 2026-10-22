@@ -12,6 +12,7 @@
 #include <string>
 #include <string_view>
 #include <vector>
+#include "chroma/core/output_color.hpp"
 
 #include "chroma/core/render.hpp"
 #include "chroma/core/preflight.hpp"
@@ -168,6 +169,7 @@ using FramePointer = std::unique_ptr<AVFrame, FrameDeleter>;
 using PacketPointer = std::unique_ptr<AVPacket, PacketDeleter>;
 using ScalePointer = std::unique_ptr<SwsContext, ScaleDeleter>;
 
+#ifdef CHROMA_REFERENCE_OUTPUT_CONVERSION
 std::uint8_t linear_to_byte(float value) noexcept {
   value = std::clamp(value, 0.0F, 1.0F);
   const auto srgb = value <= 0.0031308F
@@ -175,6 +177,7 @@ std::uint8_t linear_to_byte(float value) noexcept {
                         : 1.055F * std::pow(value, 1.0F / 2.4F) - 0.055F;
   return static_cast<std::uint8_t>(std::lround(std::clamp(srgb, 0.0F, 1.0F) * 255.0F));
 }
+#endif
 
 void write_available_packets(AVCodecContext* codec, AVFormatContext* format, AVStream* stream,
                              AVPacket* packet, std::int64_t sample_limit = -1) {
@@ -470,12 +473,16 @@ VideoRenderResult render_video_cpu(const Composition& composition,
 
     check_cancelled(control);
     const auto encode_start = Clock::now();
+#ifdef CHROMA_REFERENCE_OUTPUT_CONVERSION
     for (std::size_t pixel_index = 0; pixel_index < surface.size(); ++pixel_index) {
       const auto& pixel = surface.pixels()[pixel_index];
       rgb[pixel_index * 3U] = linear_to_byte(pixel.red);
       rgb[pixel_index * 3U + 1U] = linear_to_byte(pixel.green);
       rgb[pixel_index * 3U + 2U] = linear_to_byte(pixel.blue);
     }
+#else
+    convert_output_rgb8(surface.pixels().data(), surface.size(), rgb.data());
+#endif
     const auto linear_to_rgb_end = Clock::now();
     encode_telemetry.linear_to_rgb_nanoseconds +=
         elapsed_nanoseconds(encode_start, linear_to_rgb_end);
